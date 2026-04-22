@@ -1555,7 +1555,7 @@ wheels = [
 
 [[package]]
 name = "openstacksdk"
-version = "4.10.0"
+version = "4.11.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
@@ -1570,12 +1570,11 @@ dependencies = [
     { name = "platformdirs" },
     { name = "psutil" },
     { name = "pyyaml" },
-    { name = "requestsexceptions" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/97/32/5f614212ccc23323755dd83fc0c23600666161a4d3e81dce9bdcf8048aab/openstacksdk-4.10.0.tar.gz", hash = "sha256:5dde9ae3f1e2411a87ff57b2d78da53fac8eae9e5bac8e5870927cb62ddfc033", size = 1319494, upload-time = "2026-02-17T14:51:51.669Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/54/04/7a86e27f0430147ab7931ac58b25a690d083a09033425835a9809c9ace81/openstacksdk-4.11.0.tar.gz", hash = "sha256:0822b2182a1983f077776b9fa7586dd1f311e67dd82262c06f46d75244e3ef19", size = 1328665, upload-time = "2026-04-13T11:44:06.891Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/77/e4/8cb9f24ed26169249de8552184de7524a4788cce5616475ab38734bcb6d4/openstacksdk-4.10.0-py3-none-any.whl", hash = "sha256:c75927fb29a9c82d8dd116f16c72093a623d507f9a4aca63f3c26ad8ddf99855", size = 1859111, upload-time = "2026-02-17T14:51:49.704Z" },
+    { url = "https://files.pythonhosted.org/packages/1f/e9/d56318bb426a0a50897450cf4b0a11de3a7bd1d3ee7a6a9de6c04c79919e/openstacksdk-4.11.0-py3-none-any.whl", hash = "sha256:6314b183b237cc8c7ebce81d5354fdc37bbdb64612ade1d20f2d7090a80a8b4c", size = 1869780, upload-time = "2026-04-13T11:44:05.056Z" },
 ]
 
 [[package]]
@@ -2346,15 +2345,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/42/f2/05f29bc3913aea15eb670be136045bf5c5bbf4b99ecb839da9b422bb2c85/requests-oauthlib-2.0.0.tar.gz", hash = "sha256:b3dffaebd884d8cd778494369603a9e7b58d29111bf6b41bdc2dcd87203af4e9", size = 55650, upload-time = "2024-03-22T20:32:29.939Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/3b/5d/63d4ae3b9daea098d5d6f5da83984853c1bbacd5dc826764b249fe119d24/requests_oauthlib-2.0.0-py2.py3-none-any.whl", hash = "sha256:7dd8a5c40426b779b0868c404bdef9768deccf22749cde15852df527e6269b36", size = 24179, upload-time = "2024-03-22T20:32:28.055Z" },
-]
-
-[[package]]
-name = "requestsexceptions"
-version = "1.4.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/82/ed/61b9652d3256503c99b0b8f145d9c8aa24c514caff6efc229989505937c1/requestsexceptions-1.4.0.tar.gz", hash = "sha256:b095cbc77618f066d459a02b137b020c37da9f46d9b057704019c9f77dba3065", size = 6880, upload-time = "2018-02-01T17:04:45.294Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/01/8c/49ca60ea8c907260da4662582c434bec98716177674e88df3fd340acf06d/requestsexceptions-1.4.0-py2.py3-none-any.whl", hash = "sha256:3083d872b6e07dc5c323563ef37671d992214ad9a32b0ca4a3d7f5500bf38ce3", size = 3802, upload-time = "2018-02-01T17:04:39.07Z" },
 ]
 
 [[package]]
