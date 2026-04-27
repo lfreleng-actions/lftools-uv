@@ -5,17 +5,17 @@ SPDX-FileCopyrightText: 2025 The Linux Foundation
 
 # LF Tools UV
 
-[![Source Code](https://img.shields.io/badge/GitHub-100000?logo=github&logoColor=white&color=blue)](https://github.com/modeseven-lfit/lftools-uv)
-[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/modeseven-lfit/lftools-uv/badge)](https://scorecard.dev/viewer/?uri=github.com/modeseven-lfit/lftools-uv)
+[![Source Code](https://img.shields.io/badge/GitHub-100000?logo=github&logoColor=white&color=blue)](https://github.com/lfreleng-actions/lftools-uv)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/lfreleng-actions/lftools-uv/badge)](https://scorecard.dev/viewer/?uri=github.com/lfreleng-actions/lftools-uv)
 [![License: EPL-1.0](https://img.shields.io/badge/License-EPL--1.0-blue.svg)](https://www.eclipse.org/legal/epl-v10.html)
 [![PyPI](https://img.shields.io/pypi/v/lftools-uv.svg?label=PyPi)](https://pypi.org/project/lftools-uv/)
 [![TestPyPI](https://img.shields.io/pypi/v/lftools-uv.svg?label=TestPyPi&pypiBaseUrl=https://test.pypi.org)](https://test.pypi.org/project/lftools-uv/)
-[![CodeQL](https://github.com/modeseven-lfit/lftools-uv/actions/workflows/codeql.yml/badge.svg)](https://github.com/modeseven-lfit/lftools-uv/actions/workflows/codeql.yml)
+[![CodeQL](https://github.com/lfreleng-actions/lftools-uv/actions/workflows/codeql.yml/badge.svg)](https://github.com/lfreleng-actions/lftools-uv/actions/workflows/codeql.yml)
 
 This project's documentation is available on ReadTheDocs (RTD) and GitHub Pages:
 
 - **Official Documentation**: <https://lftools-uv.readthedocs.io>
-- **GitHub Pages**: <https://modeseven-lfit.github.io/lftools-uv/>
+- **GitHub Pages**: <https://lfreleng-actions.github.io/lftools-uv/>
 
 LF Tools UV is a collection of scripts and utilities that are useful to Linux
 Foundation projects' CI and Releng related activities. We try to create
@@ -68,7 +68,7 @@ Use the setup helper to create example configuration files:
 
 ```bash
 # Clone the repository first (if not already done)
-git clone https://github.com/lfit/lftools-uv.git
+git clone https://github.com/lfreleng-actions/lftools-uv.git
 cd lftools-uv
 
 # Run the configuration setup helper
@@ -347,7 +347,7 @@ pipeline {
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/lfit/lftools-uv.git
+   git clone https://github.com/lfreleng-actions/lftools-uv.git
    cd lftools-uv
    ```
 
@@ -399,24 +399,16 @@ For development on Ubuntu, you may need:
 
 ## Repository Information
 
-### Development Repository
+The canonical repository for this project is:
 
-For development and testing, we maintain this project at:
-
-- **Development**: `https://github.com/modeseven-lfit/lftools-uv.git`
-
-### Production Repository
-
-Once tested and approved, we publish releases from:
-
-- **Production**: `https://github.com/lfit/lftools-uv.git`
+- **Repository**: `https://github.com/lfreleng-actions/lftools-uv.git`
 
 ### Local Git Setup
 
-Configure your local git remote for the development repository:
+Configure your local git remote:
 
 ```bash
 git remote -v
-# origin  https://github.com/modeseven-lfit/lftools-uv.git (fetch)
-# origin  https://github.com/modeseven-lfit/lftools-uv.git (push)
+# origin  https://github.com/lfreleng-actions/lftools-uv.git (fetch)
+# origin  https://github.com/lfreleng-actions/lftools-uv.git (push)
 ```

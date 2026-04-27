@@ -29,11 +29,11 @@ For a fully automated installation, use the provided script:
 ```bash
 # Download and run the installation script
 curl -LsSf \
-  https://raw.githubusercontent.com/modeseven-lfit/lftools-uv/main/scripts/\
+  https://raw.githubusercontent.com/lfreleng-actions/lftools-uv/main/scripts/\
 install_uv_centos7.sh | sudo bash
 
 # Or download first, inspect, then run
-wget https://raw.githubusercontent.com/modeseven-lfit/lftools-uv/main/scripts/\
+wget https://raw.githubusercontent.com/lfreleng-actions/lftools-uv/main/scripts/\
 install_uv_centos7.sh
 sudo bash install_uv_centos7.sh
 ```
@@ -250,7 +250,7 @@ The provided `install_uv_centos7.sh` script supports production use:
   tasks:
     - name: Download UV installation script
       get_url:
-        url: https://raw.githubusercontent.com/lfit/lftools-uv/main/scripts/install_uv_centos7.sh
+        url: https://raw.githubusercontent.com/lfreleng-actions/lftools-uv/main/scripts/install_uv_centos7.sh
         dest: /tmp/install_uv_centos7.sh
         mode: '0755'
 
