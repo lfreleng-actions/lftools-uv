@@ -129,9 +129,9 @@ all = [
 ]
 
 [project.urls]
-"Homepage" = "https://lfreleng-actions.github.io/lftools-uv/"
+"Homepage" = "https://lftools-uv.readthedocs.io/"
 "Bug Tracker" = "https://github.com/lfreleng-actions/lftools-uv/issues"
-"Documentation" = "https://lfreleng-actions.github.io/lftools-uv/"
+"Documentation" = "https://lftools-uv.readthedocs.io/"
 "GitHub Pages" = "https://lfreleng-actions.github.io/lftools-uv/"
 "Source Code" = "https://github.com/lfreleng-actions/lftools-uv"
 "Repository" = "https://github.com/lfreleng-actions/lftools-uv"

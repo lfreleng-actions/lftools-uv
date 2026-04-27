@@ -212,7 +212,32 @@ jobs:
       - name: "Checkout"
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: "Skip credential-dependent matrix entry"
+        id: skip-check
+        if: >-
+          matrix.requires_secrets
+          && needs.check-actor.outputs.skip-credential-tests == 'true'
+        run: |
+          # Mark this matrix entry as skipped without failing the job.
+          # Secrets are unavailable on Dependabot/fork PRs; the same
+          # filter will run on the post-merge `push` trigger where
+          # secrets are present.
+          # Run this *before* any expensive setup steps so that
+          # checkout-only is the floor cost for skipped entries.
+          {
+            echo "## Skipped: ${{ matrix.description }}"
+            echo ""
+            echo "Reason: ${{ needs.check-actor.outputs.skip-reason }}"
+            echo ""
+            echo "These tests will run on the \`push\` event once the"
+            echo "change merges to the base branch."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice::Skipping ${{ matrix.test_filter }} (secrets not available on this trigger)"
+
       - name: "Generate lftools.ini, clouds.yaml, and public-clouds.yaml"
+        if: >-
+          !(matrix.requires_secrets
+            && needs.check-actor.outputs.skip-credential-tests == 'true')
         shell: bash
         env:
           RTD_TOKEN: "${{ secrets.RTD_TOKEN }}"
@@ -339,12 +364,18 @@ jobs:
           grep '^[[]' "${INI_FILE}" || true
 
       - name: "Install uv"
+        if: >-
+          !(matrix.requires_secrets
+            && needs.check-actor.outputs.skip-credential-tests == 'true')
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b  # v8.1.0
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
 
       - name: "Install system packages for python-ldap"
+        if: >-
+          !(matrix.requires_secrets
+            && needs.check-actor.outputs.skip-credential-tests == 'true')
         shell: bash
         run: |
           sudo apt-get update
@@ -355,30 +386,16 @@ jobs:
 
 
       - name: "Set up Python"
+        if: >-
+          !(matrix.requires_secrets
+            && needs.check-actor.outputs.skip-credential-tests == 'true')
         run: uv python install 3.12
 
       - name: "Sync dependencies"
-        run: uv sync --all-extras
-
-      - name: "Skip credential-dependent matrix entry"
-        id: skip-check
         if: >-
-          matrix.requires_secrets
-          && needs.check-actor.outputs.skip-credential-tests == 'true'
-        run: |
-          # Mark this matrix entry as skipped without failing the job.
-          # Secrets are unavailable on Dependabot/fork PRs; the same
-          # filter will run on the post-merge `push` trigger where
-          # secrets are present.
-          {
-            echo "## Skipped: ${{ matrix.description }}"
-            echo ""
-            echo "Reason: ${{ needs.check-actor.outputs.skip-reason }}"
-            echo ""
-            echo "These tests will run on the \`push\` event once the"
-            echo "change merges to the base branch."
-          } >> "$GITHUB_STEP_SUMMARY"
-          echo "::notice::Skipping ${{ matrix.test_filter }} (secrets not available on this trigger)"
+          !(matrix.requires_secrets
+            && needs.check-actor.outputs.skip-credential-tests == 'true')
+        run: uv sync --all-extras
 
       - name: "Run functional tests: ${{ matrix.description }}"
         id: functional-tests
