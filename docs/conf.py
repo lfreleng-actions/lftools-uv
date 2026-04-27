@@ -69,7 +69,7 @@ pygments_style = 'sphinx'
 
 # HTML theme options
 html_theme_options = {
-    "source_repository": "https://github.com/lfit/lftools-uv/",
+    "source_repository": "https://github.com/lfreleng-actions/lftools-uv/",
     "source_branch": "main",
     "source_directory": "docs/",
     "sidebar_hide_name": False,

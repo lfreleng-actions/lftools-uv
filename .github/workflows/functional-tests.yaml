@@ -58,6 +58,20 @@ name: "Functional Tests"
       - 'uv.lock'
       - 'scripts/run_functional_tests.sh'
       - '.github/workflows/functional-tests.yaml'
+  push:
+    # Run on merge to main/master; secrets ARE available on push events
+    # to branches in the upstream repository, so the full credential-
+    # dependent test suite executes here even though it was skipped on
+    # the corresponding fork PR (where secrets are not exposed).
+    branches:
+      - main
+      - master
+    paths:
+      - 'lftools_uv/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'scripts/run_functional_tests.sh'
+      - '.github/workflows/functional-tests.yaml'
   schedule:
     # Daily at 06:00 UTC (after dependency updates)
     - cron: '0 6 * * *'
@@ -66,69 +80,115 @@ permissions:
   contents: read
 
 jobs:
-  # Check if this is a Dependabot PR (they don't have access to secrets)
+  # Determine whether the credential-dependent tests can run.
+  #
+  # GitHub Actions does not expose repository secrets to workflows
+  # triggered by `pull_request` from a forked repository, nor to
+  # Dependabot PRs (these run with a restricted token). Without
+  # secrets the OpenStack/Jenkins/Nexus/GitHub matrix entries cannot
+  # succeed, so the matrix skips them in those cases. When the same
+  # code later merges to main, the workflow re-runs via the `push`
+  # trigger with secrets available, and the full suite executes.
   check-actor:
     name: "Check PR Actor"
     runs-on: ubuntu-latest
     outputs:
-      is-dependabot: ${{ steps.check.outputs.is-dependabot }}
+      skip-credential-tests: >-
+        ${{ steps.check.outputs.skip-credential-tests }}
+      skip-reason: ${{ steps.check.outputs.skip-reason }}
     timeout-minutes: 10
     steps:
-      - name: "Check if PR is from Dependabot"
+      - name: "Determine if credential-dependent tests should skip"
         id: check
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
+          HEAD_REPO: >-
+            ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: >-
+            ${{ github.event.pull_request.base.repo.full_name }}
         run: |
-          if [[ "${{ github.actor }}" == "dependabot[bot]" ]]; then
-            echo "is-dependabot=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::This is a Dependabot PR - functional tests will be skipped (no secret access)"
+          set -euo pipefail
+          skip="false"
+          reason=""
+
+          # 1. Dependabot PRs run with a token that cannot access
+          #    repository secrets.
+          if [[ "${ACTOR}" == "dependabot[bot]" ]]; then
+            skip="true"
+            reason="Dependabot PR (no secret access)"
+
+          # 2. PRs from forks: GitHub deliberately does not pass
+          #    secrets to workflows triggered by a fork's
+          #    pull_request event.
+          elif [[ "${EVENT_NAME}" == "pull_request" \
+              && -n "${HEAD_REPO}" \
+              && -n "${BASE_REPO}" \
+              && "${HEAD_REPO}" != "${BASE_REPO}" ]]; then
+            skip="true"
+            reason="Fork PR ${HEAD_REPO} -> ${BASE_REPO} (no secret access)"
+          fi
+
+          echo "skip-credential-tests=${skip}" >> "$GITHUB_OUTPUT"
+          echo "skip-reason=${reason}" >> "$GITHUB_OUTPUT"
+
+          if [[ "${skip}" == "true" ]]; then
+            echo "::notice::Credential-dependent functional tests will be skipped: ${reason}"
+            echo "Tests requiring credentials will run on push to the base branch after merge."
           else
-            echo "is-dependabot=false" >> "$GITHUB_OUTPUT"
+            echo "Credential-dependent functional tests will run normally."
           fi
 
   functional-test-matrix:
     name: "Functional Tests"
     runs-on: ubuntu-latest
     needs: check-actor
-    # Skip on Dependabot PRs - they don't have access to required secrets
-    if: needs.check-actor.outputs.is-dependabot != 'true'
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Core functionality (fast)
+          # Core functionality (fast); no secrets required.
           - test_filter: "core"
             description: "Core CLI functionality"
             category: "1"
+            requires_secrets: false
 
-          # Help screens (fast)
+          # Help screens (fast); no secrets required.
           - test_filter: "help"
             description: "CLI help screens"
             category: "1"
+            requires_secrets: false
 
-          # Jenkins integration (requires external services)
+          # Jenkins integration (requires external services + secrets).
           - test_filter: "jenkins"
             description: "Jenkins integration"
             category: "1"
+            requires_secrets: true
 
-          # Python-LDAP modernization validation
+          # Python-LDAP modernization validation; no secrets required.
           - test_filter: "ldap"
             description: "LDAP modernization"
             category: "1"
+            requires_secrets: false
 
-          # Nexus integration (external services)
+          # Nexus integration (external services + secrets).
           - test_filter: "nexus"
             description: "Nexus repository integration"
             category: "1"
+            requires_secrets: true
 
-          # OpenStack integration (external services)
+          # OpenStack integration (external services + secrets).
           - test_filter: "openstack"
             description: "OpenStack integration"
             category: "1"
+            requires_secrets: true
 
-          # GitHub integration (external services)
+          # GitHub integration (external services + secrets).
           - test_filter: "github"
             description: "GitHub integration"
             category: "1"
+            requires_secrets: true
 
     env:
       TEST_CATEGORY: ${{ inputs.test_category || matrix.category }}
@@ -152,7 +212,32 @@ jobs:
       - name: "Checkout"
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: "Skip credential-dependent matrix entry"
+        id: skip-check
+        if: >-
+          matrix.requires_secrets
+          && needs.check-actor.outputs.skip-credential-tests == 'true'
+        run: |
+          # Mark this matrix entry as skipped without failing the job.
+          # Secrets are unavailable on Dependabot/fork PRs; the same
+          # filter will run on the post-merge `push` trigger where
+          # secrets are present.
+          # Run this *before* any expensive setup steps so that
+          # checkout-only is the floor cost for skipped entries.
+          {
+            echo "## Skipped: ${{ matrix.description }}"
+            echo ""
+            echo "Reason: ${{ needs.check-actor.outputs.skip-reason }}"
+            echo ""
+            echo "These tests will run on the \`push\` event once the"
+            echo "change merges to the base branch."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice::Skipping ${{ matrix.test_filter }} (secrets not available on this trigger)"
+
       - name: "Generate lftools.ini, clouds.yaml, and public-clouds.yaml"
+        if: >-
+          !(matrix.requires_secrets
+            && needs.check-actor.outputs.skip-credential-tests == 'true')
         shell: bash
         env:
           RTD_TOKEN: "${{ secrets.RTD_TOKEN }}"
@@ -279,12 +364,18 @@ jobs:
           grep '^[[]' "${INI_FILE}" || true
 
       - name: "Install uv"
+        if: >-
+          !(matrix.requires_secrets
+            && needs.check-actor.outputs.skip-credential-tests == 'true')
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b  # v8.1.0
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
 
       - name: "Install system packages for python-ldap"
+        if: >-
+          !(matrix.requires_secrets
+            && needs.check-actor.outputs.skip-credential-tests == 'true')
         shell: bash
         run: |
           sudo apt-get update
@@ -295,13 +386,22 @@ jobs:
 
 
       - name: "Set up Python"
+        if: >-
+          !(matrix.requires_secrets
+            && needs.check-actor.outputs.skip-credential-tests == 'true')
         run: uv python install 3.12
 
       - name: "Sync dependencies"
+        if: >-
+          !(matrix.requires_secrets
+            && needs.check-actor.outputs.skip-credential-tests == 'true')
         run: uv sync --all-extras
 
       - name: "Run functional tests: ${{ matrix.description }}"
         id: functional-tests
+        if: >-
+          !(matrix.requires_secrets
+            && needs.check-actor.outputs.skip-credential-tests == 'true')
         run: |
           set -euo pipefail
 
@@ -422,7 +522,11 @@ jobs:
           if-no-files-found: warn
 
       - name: "Fail job if tests failed"
-        if: steps.functional-tests.outputs.exit_code != '0'
+        # Only fails when the test step actually ran and reported a
+        # non-zero exit. When the step is skipped (matrix entry needs
+        # secrets that are not available on this trigger) exit_code is
+        # empty, so this step is a no-op.
+        if: steps.functional-tests.outputs.exit_code == '1'
         run: |
           echo "Functional tests failed for filter: ${{ matrix.test_filter }}"
           exit 1
@@ -442,20 +546,23 @@ jobs:
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
 
-          # Check if tests were skipped due to Dependabot
-          if [[ "${{ needs.check-actor.outputs.is-dependabot }}" == "true" ]]; then
+          # Note skipped credential-dependent entries
+          # (Dependabot/fork PRs).
+          if [[ "${{ needs.check-actor.outputs.skip-credential-tests }}" == "true" ]]; then
             {
-              echo "ℹ️ Functional tests were skipped for this Dependabot PR."
+              echo "ℹ️ Credential-dependent matrix entries skipped."
               echo ""
-              echo "**Reason:** Dependabot PRs don't have access to repository secrets"
-              echo "required for functional tests (API tokens, credentials, etc.)."
+              echo "**Reason:** ${{ needs.check-actor.outputs.skip-reason }}"
               echo ""
-              echo "**Action:** A maintainer should review the dependency changes and"
-              echo "merge if appropriate. Full functional tests will run on the main"
-              echo "branch after merge."
+              echo "GitHub Actions does not expose repository secrets to"
+              echo "workflows triggered by Dependabot PRs or pull requests"
+              echo "raised from forks. Secret-free entries (\`core\`,"
+              echo "\`help\`, \`ldap\`) ran above. The credential-dependent"
+              echo "entries (OpenStack, Jenkins, Nexus, GitHub) will run"
+              echo "automatically on the \`push\` event once these changes"
+              echo "merge to the base branch."
             } >> "$GITHUB_STEP_SUMMARY"
-            echo "::notice::Functional tests skipped for Dependabot PR (expected behavior)"
-            exit 0
+            echo "::notice::Credential-dependent matrix entries skipped (expected for Dependabot/fork PRs)"
           fi
 
           # Check if any jobs failed
@@ -486,8 +593,9 @@ jobs:
     name: "Security Baseline Check"
     runs-on: ubuntu-latest
     needs: check-actor
-    # Skip on Dependabot PRs - they don't have access to required secrets
-    if: needs.check-actor.outputs.is-dependabot != 'true'
+    # Run only when credential-dependent tests are permitted
+    # (skipped for Dependabot PRs and fork PRs, which lack secret access).
+    if: needs.check-actor.outputs.skip-credential-tests != 'true'
     timeout-minutes: 10
     steps:
       - name: "Harden Runner"

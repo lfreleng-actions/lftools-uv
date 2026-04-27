@@ -9,7 +9,7 @@ We maintain release notes for lftools-uv using GitHub's native release system.
 
 You can find all release notes and changelogs at:
 
-**https://github.com/lfit/lftools-uv/releases**
+**https://github.com/lfreleng-actions/lftools-uv/releases**
 
 Each release includes:
 
