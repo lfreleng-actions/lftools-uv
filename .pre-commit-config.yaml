@@ -79,11 +79,14 @@ repos:
     hooks:
       - id: write-good
         files: "\\.(rst|md|markdown|mdown|mkdn)$"
+        # yamllint disable-line rule:line-length
+        exclude: ".(specify/*|github/((agents|prompts)/speckit.*|copilot-instructions.md))"
 
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: 745eface02aef23e168a8afb6b5737818efbea95  # frozen: v0.11.0.1
     hooks:
       - id: shellcheck
+        exclude: ".specify/(extensions/git/|)scripts/*/*"
 
   - repo: https://github.com/igorshubovych/markdownlint-cli
     rev: e72a3ca1632f0b11a07d171449fe447a7ff6795e  # frozen: v0.48.0
@@ -108,6 +111,7 @@ repos:
     rev: 2ccb47ff45ad361a21071a7eedda4c37e6ae8c5a  # frozen: v2.4.2
     hooks:
       - id: codespell
+        exclude: ".specify/scripts/bash/common.sh"
 
   # Run basedpyright via uv so it resolves imports from the project venv.
   # Skipped in pre-commit.ci (no uv); still runs locally and in GH Actions.
