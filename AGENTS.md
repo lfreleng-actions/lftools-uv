@@ -1,6 +1,6 @@
 <!--
-SPDX-FileCopyrightText: 2026 The Linux Foundation
 SPDX-License-Identifier: EPL-1.0
+SPDX-FileCopyrightText: 2026 The Linux Foundation
 -->
 
 # Agent Development Guidelines
