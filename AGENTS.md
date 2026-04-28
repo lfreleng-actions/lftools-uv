@@ -141,15 +141,14 @@ automatically.
 
 ## Gitlint Enforcement Summary
 
-The following gitlint rules are active (see `.gitlint` for full config).
-Note: `title-max-length` (50) and `body-max-line-length` (72) use
-gitlint's built-in defaults since `.gitlint` does not override them:
+The following gitlint rules are active (see `.gitlint` for full config):
 
 | Rule | What it checks | Value |
 | ---- | -------------- | ----- |
 | `title-max-length` (T1) | Subject ≤50 chars | 50 |
 | `title-trailing-punctuation` (T3) | No trailing `.` `;` `:` | On |
 | `body-max-line-length` (B1) | Body lines ≤72 chars | 72 |
+| `ignore-by-body` | Exempt URL lines from B1 | On |
 | `contrib-title-conventional-commits` | Capitalized type prefix | On |
 | `contrib-body-requires-signed-off-by` | DCO sign-off present | On |
 
