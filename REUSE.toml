@@ -56,3 +56,11 @@ path = [
 ]
 SPDX-License-Identifier = "EPL-1.0"
 SPDX-FileCopyrightText = "2025 The Linux Foundation"
+
+[[annotations]]
+path = [
+    ".github/*/speckit*",
+    ".specify/**"
+]
+SPDX-License-Identifier = "MIT"
+SPDX-FileCopyrightText = "Delimarsky, D., & Riem, M. (2026)"
