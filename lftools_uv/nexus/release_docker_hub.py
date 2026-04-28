@@ -446,7 +446,9 @@ class ProjectClass:
         else:
             log.info(f"{b4_txt}: {info_text} {due_to_txt}")
 
-    def _docker_pull(self, nexus_image_str: str, count: int, tag: str, retry_text: str = "", progbar: bool = False) -> docker.models.images.Image:
+    def _docker_pull(
+        self, nexus_image_str: str, count: int, tag: str, retry_text: str = "", progbar: bool = False
+    ) -> docker.models.images.Image:
         """Pull an image from Nexus."""
         self._pull_tag_push_msg(
             f"Pulling  Nexus3 image {self.calc_nexus_project_name()} with tag {tag}", count, retry_text
@@ -454,21 +456,27 @@ class ProjectClass:
         image = self.docker_client.images.pull(nexus_image_str)
         return image
 
-    def _docker_tag(self, count: int, image: docker.models.images.Image, tag: str, retry_text: str = "", progbar: bool = False) -> None:
+    def _docker_tag(
+        self, count: int, image: docker.models.images.Image, tag: str, retry_text: str = "", progbar: bool = False
+    ) -> None:
         """Tag the image with proper docker name and version."""
         self._pull_tag_push_msg(
             f"Creating docker image {self.calc_docker_project_name()} with tag {tag}", count, retry_text
         )
         image.tag(self.calc_docker_project_name(), tag=tag)
 
-    def _docker_push(self, count: int, image: docker.models.images.Image, tag: str, retry_text: str, progbar: bool = False) -> None:
+    def _docker_push(
+        self, count: int, image: docker.models.images.Image, tag: str, retry_text: str, progbar: bool = False
+    ) -> None:
         """Push the docker image to Docker Hub."""
         self._pull_tag_push_msg(
             f"Pushing  docker image {self.calc_docker_project_name()} with tag {tag}", count, retry_text
         )
         self.docker_client.images.push(self.calc_docker_project_name(), tag=tag)
 
-    def _docker_cleanup(self, count: int, image: docker.models.images.Image, tag: str, retry_text: str = "", progbar: bool = False) -> None:
+    def _docker_cleanup(
+        self, count: int, image: docker.models.images.Image, tag: str, retry_text: str = "", progbar: bool = False
+    ) -> None:
         """Remove the local copy of the image."""
         image_id = _format_image_id(image.short_id)
         self._pull_tag_push_msg(
@@ -577,7 +585,9 @@ def get_docker_name_from_file(check_repo: str = "", repo_file_name: str = "") ->
     return ""
 
 
-def get_nexus3_catalog(org_name: str = "", find_pattern: str = "", exact_match: bool = False, repo_is_filename: bool = False) -> bool:
+def get_nexus3_catalog(
+    org_name: str = "", find_pattern: str = "", exact_match: bool = False, repo_is_filename: bool = False
+) -> bool:
     """Main function to collect all Nexus3 repositories.
 
     This function will collect the Nexus catalog for all projects starting with

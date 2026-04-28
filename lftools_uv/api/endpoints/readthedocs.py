@@ -105,9 +105,7 @@ class ReadTheDocs(client.RestApi):
 
         if more_results:
             while more_results is not None:
-                next_response: ApiResponse = self.get(
-                    f"projects/{project}/versions/" + more_results
-                )
+                next_response: ApiResponse = self.get(f"projects/{project}/versions/" + more_results)
                 get_more_results: dict[str, object] = self._json_body(next_response)
                 raw_next: object = get_more_results["next"]
                 more_results = raw_next if isinstance(raw_next, str) else None
@@ -137,9 +135,7 @@ class ReadTheDocs(client.RestApi):
         result: dict[str, object] = self._json_body(response)
         return json.dumps(result, indent=2)
 
-    def project_version_update(
-        self, project: str, version: str, active: bool
-    ) -> ApiResponse:
+    def project_version_update(self, project: str, version: str, active: bool) -> ApiResponse:
         """Edit version activity.
 
         :param project: The project slug
@@ -150,9 +146,7 @@ class ReadTheDocs(client.RestApi):
         data: dict[str, bool] = {"active": active}
 
         json_data: str = json.dumps(data)
-        result: ApiResponse = self.patch(
-            f"projects/{project}/versions/{version}/", data=json_data
-        )
+        result: ApiResponse = self.patch(f"projects/{project}/versions/{version}/", data=json_data)
         return result
 
     def project_update(self, project: str, *args: object) -> tuple[bool, int]:
@@ -247,9 +241,7 @@ class ReadTheDocs(client.RestApi):
                         (must be an active version)
         :return: {result}
         """
-        response: ApiResponse = self.post(
-            f"projects/{project}/versions/{version}/builds/"
-        )
+        response: ApiResponse = self.post(f"projects/{project}/versions/{version}/builds/")
         result: dict[str, object] = self._json_body(response)
         return json.dumps(result, indent=2)
 
@@ -262,9 +254,7 @@ class ReadTheDocs(client.RestApi):
         :param kwargs:
         :return: [subprojects]
         """
-        response: ApiResponse = self.get(
-            f"projects/{project}/subprojects/?limit=999"
-        )  # NOQA
+        response: ApiResponse = self.get(f"projects/{project}/subprojects/?limit=999")  # NOQA
         result: dict[str, object] = self._json_body(response)
         data: object = result["results"]
         subproject_list: list[str] = []
@@ -282,24 +272,18 @@ class ReadTheDocs(client.RestApi):
 
         return subproject_list
 
-    def subproject_details(
-        self, project: str, subproject: str
-    ) -> dict[str, object]:
+    def subproject_details(self, project: str, subproject: str) -> dict[str, object]:
         """Retrieve the details of a specific subproject.
 
         :param project:
         :param subproject:
         :return:
         """
-        response: ApiResponse = self.get(
-            f"projects/{project}/subprojects/{subproject}/"
-        )
+        response: ApiResponse = self.get(f"projects/{project}/subprojects/{subproject}/")
         result: dict[str, object] = self._json_body(response)
         return result
 
-    def subproject_create(
-        self, project: str, subproject: str, alias: str | None = None
-    ) -> ApiResponse:
+    def subproject_create(self, project: str, subproject: str, alias: str | None = None) -> ApiResponse:
         """Create a subproject.
 
         Subprojects are actually just top-level projects that
@@ -314,23 +298,17 @@ class ReadTheDocs(client.RestApi):
         """
         data: dict[str, str | None] = {"child": subproject, "alias": alias}
         json_data: str = json.dumps(data)
-        result: ApiResponse = self.post(
-            f"projects/{project}/subprojects/", data=json_data
-        )
+        result: ApiResponse = self.post(f"projects/{project}/subprojects/", data=json_data)
         return result
 
-    def subproject_delete(
-        self, project: str, subproject: str
-    ) -> bool | tuple[bool, int]:
+    def subproject_delete(self, project: str, subproject: str) -> bool | tuple[bool, int]:
         """Delete project/sub relationship.
 
         :param project:
         :param subproject:
         :return:
         """
-        result: ApiResponse = self.delete(
-            f"projects/{project}/subprojects/{subproject}/"
-        )
+        result: ApiResponse = self.delete(f"projects/{project}/subprojects/{subproject}/")
         resp = self._response_of(result)
 
         if resp.status_code == 204:

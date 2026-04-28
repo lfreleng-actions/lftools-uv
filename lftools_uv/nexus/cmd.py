@@ -156,7 +156,9 @@ def create_repos(config_file: str, settings_file: str | None, url: str) -> None:
     else:
         _nexus = Nexus(url, username, password)
 
-    def create_nexus_perms(name: str, targets: list[str], email: str, password: str, extra_privs: list[str] | None = None) -> None:
+    def create_nexus_perms(
+        name: str, targets: list[str], email: str, password: str, extra_privs: list[str] | None = None
+    ) -> None:
         if extra_privs is None:
             extra_privs = []
         # Create target
@@ -195,7 +197,15 @@ def create_repos(config_file: str, settings_file: str | None, url: str) -> None:
         except LookupError:
             _nexus.create_user(name, email, role_id, password, extra_privs)
 
-    def build_repo(repo: str, repoId: str, config: dict[str, Any], base_groupId: str, global_privs: list[str], email_domain: str, strict: bool = True) -> None:
+    def build_repo(
+        repo: str,
+        repoId: str,
+        config: dict[str, Any],
+        base_groupId: str,
+        global_privs: list[str],
+        email_domain: str,
+        strict: bool = True,
+    ) -> None:
         log.info(f"-> Building for {base_groupId}.{repo} in Nexus")
         groupId = f"{base_groupId}.{repo}"
         target = util.create_repo_target_regex(groupId, strict)
@@ -290,7 +300,11 @@ def create_roles(config_file: str, settings_file: str) -> None:
 
     for role in role_config:
         _nexus.create_role(
-            role_config[role]["name"], role_config[role]["privileges"], role, role_config[role]["description"], role_config[role]["roles"]
+            role_config[role]["name"],
+            role_config[role]["privileges"],
+            role,
+            role_config[role]["description"],
+            role_config[role]["roles"],
         )
 
 

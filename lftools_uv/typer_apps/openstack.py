@@ -51,7 +51,9 @@ state = OpenStackState()
 
 
 @openstack_app.callback()
-def openstack_callback(os_cloud: str = typer.Option(..., "--os-cloud", envvar="OS_CLOUD", help="OpenStack cloud name")) -> None:
+def openstack_callback(
+    os_cloud: str = typer.Option(..., "--os-cloud", envvar="OS_CLOUD", help="OpenStack cloud name"),
+) -> None:
     """Provide an interface to OpenStack."""
     state.os_cloud = os_cloud
 

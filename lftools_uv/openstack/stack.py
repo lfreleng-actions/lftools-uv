@@ -32,7 +32,9 @@ from lftools_uv.jenkins import Jenkins
 log = logging.getLogger(__name__)
 
 
-def create(os_cloud: str, name: str, template_file: str, parameter_file: str, timeout: int = 900, tries: int = 2) -> None:
+def create(
+    os_cloud: str, name: str, template_file: str, parameter_file: str, timeout: int = 900, tries: int = 2
+) -> None:
     """Create a heat stack from a template_file and a parameter_file."""
     cloud = openstack.connection.from_config(cloud=os_cloud)
     stack_success = False
@@ -111,8 +113,8 @@ def cost(os_cloud: str, stack_name: str, timeout: int = 60) -> None:
 
     def get_server_info(server_id: str) -> tuple[str, float]:
         server = cloud.compute.find_server(server_id)  # pyright: ignore[reportAttributeAccessIssue]
-        diff = datetime.utcnow() - parse_iso8601_time(server.launched_at) # pyright: ignore[reportOptionalMemberAccess]
-        return server.flavor["original_name"], diff.total_seconds() # pyright: ignore[reportOptionalMemberAccess]
+        diff = datetime.utcnow() - parse_iso8601_time(server.launched_at)  # pyright: ignore[reportOptionalMemberAccess]
+        return server.flavor["original_name"], diff.total_seconds()  # pyright: ignore[reportOptionalMemberAccess]
 
     def get_server_ids(stack_name: str) -> list[str]:
         servers = get_resources_by_type(stack_name, "OS::Nova::Server")

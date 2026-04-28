@@ -61,9 +61,7 @@ class Nexus3(client.RestApi):
             return cast("dict[str, object]", obj)
         return {}
 
-    def _items_from_response(
-        self, response: ApiResponse
-    ) -> list[dict[str, object]]:
+    def _items_from_response(self, response: ApiResponse) -> list[dict[str, object]]:
         """Extract the ``items`` list from a Nexus 3 paged response.
 
         Nexus 3 wraps paged collection responses in::
@@ -76,20 +74,14 @@ class Nexus3(client.RestApi):
         body: dict[str, object] = self._json_body(response)
         items: object = body.get("items", [])
         if isinstance(items, list):
-            return [
-                cast("dict[str, object]", item)
-                for item in cast("list[object]", items)
-                if isinstance(item, dict)
-            ]
+            return [cast("dict[str, object]", item) for item in cast("list[object]", items) if isinstance(item, dict)]
         return []
 
     # -----------------------------------------------------------------------
     # Roles
     # -----------------------------------------------------------------------
 
-    def create_role(
-        self, name: str, description: str, privileges: str, roles: str
-    ) -> str:
+    def create_role(self, name: str, description: str, privileges: str, roles: str) -> str:
         """Create a new role.
 
         :param name: the role name
@@ -109,9 +101,7 @@ class Nexus3(client.RestApi):
         }
 
         json_data: str = json.dumps(data, indent=4)
-        response: ApiResponse = self.post(
-            "service/rest/beta/security/roles", data=json_data
-        )
+        response: ApiResponse = self.post("service/rest/beta/security/roles", data=json_data)
         resp = self._response_of(response)
 
         if resp.status_code == 200:
@@ -136,9 +126,7 @@ class Nexus3(client.RestApi):
         }
 
         json_data: str = json.dumps(data)
-        response: ApiResponse = self.post(
-            "service/rest/v1/script", data=json_data
-        )
+        response: ApiResponse = self.post("service/rest/v1/script", data=json_data)
         resp = self._response_of(response)
 
         if resp.status_code == 204:
@@ -181,9 +169,7 @@ class Nexus3(client.RestApi):
 
         :param name: the script name
         """
-        response: ApiResponse = self.post(
-            f"service/rest/v1/script/{name}/run"
-        )
+        response: ApiResponse = self.post(f"service/rest/v1/script/{name}/run")
         resp = self._response_of(response)
 
         if resp.status_code == 200:
@@ -208,9 +194,7 @@ class Nexus3(client.RestApi):
         }
 
         json_data: str = json.dumps(data)
-        response: ApiResponse = self.put(
-            f"service/rest/v1/script/{name}", data=json_data
-        )
+        response: ApiResponse = self.put(f"service/rest/v1/script/{name}", data=json_data)
         resp = self._response_of(response)
 
         if resp.status_code == 204:
@@ -247,9 +231,7 @@ class Nexus3(client.RestApi):
             data["attributes"] = attributes
 
         json_data: str = json.dumps(data)
-        response: ApiResponse = self.post(
-            "service/rest/v1/tags", data=json_data
-        )
+        response: ApiResponse = self.post("service/rest/v1/tags", data=json_data)
         resp = self._response_of(response)
 
         if resp.status_code == 200:
@@ -262,9 +244,7 @@ class Nexus3(client.RestApi):
 
         :param name: the tag's name
         """
-        response: ApiResponse = self.delete(
-            f"service/rest/v1/tags/{name}"
-        )
+        response: ApiResponse = self.delete(f"service/rest/v1/tags/{name}")
         resp = self._response_of(response)
 
         if resp.status_code == 204:
@@ -305,11 +285,7 @@ class Nexus3(client.RestApi):
                         if tag:
                             list_of_tags.append(str(tag.get("name", "")))
                 cont_token: object = result.get("continuationToken")
-                next_response: ApiResponse = self.get(
-                    "service/rest/v1/tags?continuationToken={}".format(
-                        str(cont_token)
-                    )
-                )
+                next_response: ApiResponse = self.get(f"service/rest/v1/tags?continuationToken={str(cont_token)}")
                 if isinstance(next_response, tuple):
                     result = self._json_body(next_response)
                     token = result.get("continuationToken")
@@ -321,9 +297,7 @@ class Nexus3(client.RestApi):
                 for raw_tag in cast("list[object]", items_obj):
                     tag_dict: dict[str, object] = self._as_dict(raw_tag)
                     if tag_dict:
-                        list_of_tags.append(
-                            str(tag_dict.get("name", ""))
-                        )
+                        list_of_tags.append(str(tag_dict.get("name", "")))
 
         if list_of_tags:
             return list_of_tags
@@ -367,15 +341,11 @@ class Nexus3(client.RestApi):
             data["password"] = helpers.generate_password()
 
         json_data: str = json.dumps(data)
-        response: ApiResponse = self.post(
-            "service/rest/beta/security/users", data=json_data
-        )
+        response: ApiResponse = self.post("service/rest/beta/security/users", data=json_data)
         resp = self._response_of(response)
 
         if resp.status_code == 200:
-            return "User {} successfully created with password {}".format(
-                username, data["password"]
-            )
+            return "User {} successfully created with password {}".format(username, data["password"])
         resp.raise_for_status()
         log.error("Failed to create user %s", username)
         return None
@@ -385,18 +355,13 @@ class Nexus3(client.RestApi):
 
         @param username:
         """
-        response: ApiResponse = self.delete(
-            f"service/rest/beta/security/users/{username}"
-        )
+        response: ApiResponse = self.delete(f"service/rest/beta/security/users/{username}")
         resp = self._response_of(response)
 
         if resp.status_code == 204:
             return f"Successfully deleted user {username}"
         if isinstance(response, tuple):
-            return (
-                f"Failed to delete user {username}"
-                f" with error: {response[1]}"
-            )
+            return f"Failed to delete user {username} with error: {response[1]}"
         resp.raise_for_status()
         return f"Failed to delete user {username}"
 
@@ -405,9 +370,7 @@ class Nexus3(client.RestApi):
 
         :param username: the user's username
         """
-        response: ApiResponse = self.get(
-            f"service/rest/beta/security/users?userId={username}"
-        )
+        response: ApiResponse = self.get(f"service/rest/beta/security/users?userId={username}")
         result: list[object] = self._list_body(response)
         user_info: list[list[object]] = []
         for raw_user in result:
@@ -427,9 +390,7 @@ class Nexus3(client.RestApi):
 
     def list_users(self) -> list[list[object]]:
         """List all users."""
-        response: ApiResponse = self.get(
-            "service/rest/beta/security/users"
-        )
+        response: ApiResponse = self.get("service/rest/beta/security/users")
         result: list[object] = self._list_body(response)
         list_of_users: list[list[object]] = []
         for raw_user in result:
@@ -456,9 +417,7 @@ class Nexus3(client.RestApi):
 
         :param repository: repo name
         """
-        response: ApiResponse = self.get(
-            f"service/rest/v1/assets?repository={repository}"
-        )
+        response: ApiResponse = self.get(f"service/rest/v1/assets?repository={repository}")
         items: list[dict[str, object]] = self._items_from_response(response)
         if not items:
             return "This repository has no assets"
@@ -473,17 +432,13 @@ class Nexus3(client.RestApi):
 
         :param repository: the repo name
         """
-        response: ApiResponse = self.get(
-            f"service/rest/v1/components?repository={repository}"
-        )
+        response: ApiResponse = self.get(f"service/rest/v1/components?repository={repository}")
         items: list[dict[str, object]] = self._items_from_response(response)
         if not items:
             return "This repository has no components"
         return items
 
-    def search_asset(
-        self, query: str, repository: str, details: bool = False
-    ) -> list[str] | str:
+    def search_asset(self, query: str, repository: str, details: bool = False) -> list[str] | str:
         """Search for an asset.
 
         :param query: querystring to use, eg myjar-1 to find myjar-1.2.3.jar
@@ -531,9 +486,7 @@ class Nexus3(client.RestApi):
 
     def list_privileges(self) -> list[list[object]]:
         """List server-configured privileges."""
-        response: ApiResponse = self.get(
-            "service/rest/beta/security/privileges"
-        )
+        response: ApiResponse = self.get("service/rest/beta/security/privileges")
         result: list[object] = self._list_body(response)
         list_of_privileges: list[list[object]] = []
         for raw_priv in result:
@@ -570,9 +523,7 @@ class Nexus3(client.RestApi):
 
     def list_roles(self) -> list[list[str]]:
         """List server roles."""
-        response: ApiResponse = self.get(
-            "service/rest/beta/security/roles"
-        )
+        response: ApiResponse = self.get("service/rest/beta/security/roles")
         result: list[object] = self._list_body(response)
         list_of_roles: list[list[str]] = []
         for raw_role in result:
@@ -605,9 +556,7 @@ class Nexus3(client.RestApi):
     # Staging
     # -----------------------------------------------------------------------
 
-    def staging_promotion(
-        self, destination_repo: str, tag: str
-    ) -> ApiResponse:
+    def staging_promotion(self, destination_repo: str, tag: str) -> ApiResponse:
         """Promote repo assets to a new location.
 
         :param destination_repo: the repo to promote into
