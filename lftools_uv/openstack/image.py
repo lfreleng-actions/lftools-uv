@@ -14,7 +14,6 @@ __author__ = "Thanh Ha"
 
 import builtins
 import logging
-from typing import Any
 import re
 import subprocess
 import sys
@@ -22,6 +21,7 @@ import tempfile
 import urllib
 import urllib.request
 from datetime import datetime, timedelta
+from typing import Any
 
 import openstack
 import openstack.connection

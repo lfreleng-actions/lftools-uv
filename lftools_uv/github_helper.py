@@ -70,9 +70,7 @@ def helper_list(  # noqa: C901, PLR0912
     if audit:
         log.info("%s members without 2fa:", organization)
         try:
-            members: PaginatedList[NamedUser] = org.get_members(
-                filter_="2fa_disabled"
-            )
+            members: PaginatedList[NamedUser] = org.get_members(filter_="2fa_disabled")
         except GithubException as ghe:
             log.error(ghe)
             sys.exit(1)
@@ -80,9 +78,7 @@ def helper_list(  # noqa: C901, PLR0912
             log.info(member.login)
         log.info("%s outside collaborators without 2fa:", organization)
         try:
-            collaborators: PaginatedList[NamedUser] = (
-                org.get_outside_collaborators(filter_="2fa_disabled")
-            )
+            collaborators: PaginatedList[NamedUser] = org.get_outside_collaborators(filter_="2fa_disabled")
         except GithubException as ghe:
             log.error(ghe)
             sys.exit(1)
@@ -108,9 +104,7 @@ def helper_list(  # noqa: C901, PLR0912
         log.info("%s-owners:", organization)
 
         try:
-            admin_members: PaginatedList[NamedUser] = org.get_members(
-                role="admin"
-            )
+            admin_members: PaginatedList[NamedUser] = org.get_members(role="admin")
         except GithubException as ghe:
             log.error(ghe)
             sys.exit(1)
@@ -169,9 +163,7 @@ def helper_list(  # noqa: C901, PLR0912
     return None
 
 
-def prvotes(
-    organization: str, repo: str, pr: int
-) -> list[str]:
+def prvotes(organization: str, repo: str, pr: int) -> list[str]:
     """Get votes on a github pr."""
     token: str = config.get_setting("github", "token")
     g: Github = Github(token)
@@ -238,9 +230,7 @@ def helper_user_github(  # noqa: C901, PLR0912
 
     # set team to proper object
     my_teams: list[str] = [team]
-    this_team: list[Team] = [
-        t for t in get_teams_fn() if t.name in my_teams
-    ]
+    this_team: list[Team] = [t for t in get_teams_fn() if t.name in my_teams]
     team_id: int = 0
     for t in this_team:
         team_id = t.id
@@ -264,9 +254,7 @@ def helper_user_github(  # noqa: C901, PLR0912
     if user and not delete:
         if admin and is_member:
             try:
-                team_obj.add_membership(
-                    member=user_object, role="maintainer"
-                )
+                team_obj.add_membership(member=user_object, role="maintainer")
             except GithubException as ghe:
                 log.error(ghe)
         if admin and not is_member:
@@ -283,9 +271,7 @@ def helper_user_github(  # noqa: C901, PLR0912
 
         if not admin and is_member:
             try:
-                team_obj.add_membership(
-                    member=user_object, role="member"
-                )
+                team_obj.add_membership(member=user_object, role="member")
             except GithubException as ghe:
                 log.error(ghe)
 

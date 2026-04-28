@@ -203,7 +203,9 @@ class Gerrit:
         commit_msg = f"Chore: Automation adds {filename}"
         self.commit(commit_msg, issue_id, push=True)
 
-    def add_maven_config(self, fqdn: str, gerrit_project: str, issue_id: str | None, nexus3_url: str = "", nexus3_ports: str = "") -> None:
+    def add_maven_config(
+        self, fqdn: str, gerrit_project: str, issue_id: str | None, nexus3_url: str = "", nexus3_ports: str = ""
+    ) -> None:
         """Add the four required JCasC files to create settings for a new project."""
         project_dashed = gerrit_project.replace("/", "-")
         params_path = "config-params.yaml"

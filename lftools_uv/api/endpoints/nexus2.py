@@ -81,11 +81,7 @@ class Nexus2(client.RestApi):
             data: object = body.get("data", [])
             if isinstance(data, list):
                 typed_data: list[object] = cast("list[object]", data)
-                return [
-                    cast("dict[str, object]", item)
-                    for item in typed_data
-                    if isinstance(item, dict)
-                ]
+                return [cast("dict[str, object]", item) for item in typed_data if isinstance(item, dict)]
         return []
 
     # -----------------------------------------------------------------------
@@ -124,9 +120,7 @@ class Nexus2(client.RestApi):
         }
 
         json_data: str = json.dumps(data)
-        response: ApiResponse = self.post(
-            "service/local/privileges_target", data=json_data
-        )
+        response: ApiResponse = self.post("service/local/privileges_target", data=json_data)
 
         if isinstance(response, tuple):
             if response[0].status_code == 201:
@@ -140,9 +134,7 @@ class Nexus2(client.RestApi):
 
         :param privilege_id: the ID of the privilege (from privilege list)
         """
-        response: ApiResponse = self.delete(
-            f"service/local/privileges/{privilege_id}"
-        )
+        response: ApiResponse = self.delete(f"service/local/privileges/{privilege_id}")
         resp = self._response_of(response)
 
         if resp.status_code == 204:
@@ -238,9 +230,7 @@ class Nexus2(client.RestApi):
 
         data: dict[str, dict[str, object]] = {"data": inner}
         json_data: str = json.dumps(data)
-        response: ApiResponse = self.post(
-            "service/local/repositories", data=json_data
-        )
+        response: ApiResponse = self.post("service/local/repositories", data=json_data)
 
         if isinstance(response, tuple):
             if response[0].status_code == 201:
@@ -254,9 +244,7 @@ class Nexus2(client.RestApi):
 
         :param repo_id: the ID of the repo from repo list.
         """
-        response: ApiResponse = self.delete(
-            f"service/local/repositories/{repo_id}"
-        )
+        response: ApiResponse = self.delete(f"service/local/repositories/{repo_id}")
         resp = self._response_of(response)
 
         if resp.status_code == 204:
@@ -302,9 +290,7 @@ class Nexus2(client.RestApi):
                 for p in cast("list[object]", privs_obj):
                     privs_string += str(p) + "\n"
 
-            role_list.append(
-                [role["id"], role["name"], roles_string, privs_string]
-            )
+            role_list.append([role["id"], role["name"], roles_string, privs_string])
 
         return role_list
 
@@ -340,9 +326,7 @@ class Nexus2(client.RestApi):
 
         data: dict[str, dict[str, object]] = {"data": inner}
         json_data: str = json.dumps(data)
-        response: ApiResponse = self.post(
-            "service/local/roles", data=json_data
-        )
+        response: ApiResponse = self.post("service/local/roles", data=json_data)
 
         if isinstance(response, tuple):
             if response[0].status_code == 201:
@@ -356,9 +340,7 @@ class Nexus2(client.RestApi):
 
         :param role_id: The ID of the role to delete (from role list)
         """
-        response: ApiResponse = self.delete(
-            f"service/local/roles/{role_id}"
-        )
+        response: ApiResponse = self.delete(f"service/local/roles/{role_id}")
         resp = self._response_of(response)
 
         if resp.status_code == 204:
@@ -371,9 +353,7 @@ class Nexus2(client.RestApi):
 
     def user_list(self) -> list[list[object]]:
         """List all users."""
-        response: ApiResponse = self.get(
-            "service/local/plexus_users/allConfigured"
-        )
+        response: ApiResponse = self.get("service/local/plexus_users/allConfigured")
         result: list[dict[str, object]] = self._data_items(response)
 
         user_list: list[list[object]] = []
@@ -431,9 +411,7 @@ class Nexus2(client.RestApi):
 
         data: dict[str, dict[str, object]] = {"data": inner}
         json_data: str = json.dumps(data)
-        response: ApiResponse = self.post(
-            "service/local/users", data=json_data
-        )
+        response: ApiResponse = self.post("service/local/users", data=json_data)
 
         if isinstance(response, tuple):
             if response[0].status_code == 201:
@@ -447,9 +425,7 @@ class Nexus2(client.RestApi):
 
         :param username: The username to delete (from user list)
         """
-        response: ApiResponse = self.delete(
-            f"service/local/users/{username}"
-        )
+        response: ApiResponse = self.delete(f"service/local/users/{username}")
         resp = self._response_of(response)
 
         if resp.status_code == 204:

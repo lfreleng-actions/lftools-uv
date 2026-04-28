@@ -125,7 +125,9 @@ def reset(ctx, servers):
         url = config.get(server, "url")
 
         try:
-            token = get_token(name="token-created-by-lftools", url=url, change=True, username=username, password=password)
+            token = get_token(
+                name="token-created-by-lftools", url=url, change=True, username=username, password=password
+            )
             config.set(server, "password", token)
             with open(jenkins.config_file, "w") as configfile:
                 config.write(configfile)

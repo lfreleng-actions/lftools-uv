@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 # SPDX-License-Identifier: EPL-1.0
 ##############################################################################
 # Copyright (c) 2025 The Linux Foundation and others.
@@ -10,6 +8,8 @@ from __future__ import annotations
 # http://www.eclipse.org/legal/epl-v10.html
 ##############################################################################
 """Cluster related sub-commands for openstack command."""
+
+from __future__ import annotations
 
 __author__ = "Anil Belur"
 

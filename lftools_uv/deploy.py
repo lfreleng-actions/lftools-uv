@@ -87,9 +87,7 @@ def _log_error_and_exit(*msg_list: object) -> NoReturn:
     sys.exit(1)
 
 
-def _request_post(
-    url: str, data: str, headers: dict[str, str]
-) -> requests.Response:
+def _request_post(url: str, data: str, headers: dict[str, str]) -> requests.Response:
     """Execute a request post, return the resp."""
     resp: requests.Response | None = None
     try:

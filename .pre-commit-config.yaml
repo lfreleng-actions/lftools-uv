@@ -56,10 +56,10 @@ repos:
     rev: 6fec9b7edb08fd9989088709d864a7826dc74e80  # frozen: v0.15.12
     hooks:
       - id: ruff
-        files: ^(scripts|tests|custom_components)/.+\.py$
+        files: ^(lftools_uv|scripts|tests)/.+\.py$
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
-        files: ^(scripts|tests|custom_components)/.+\.py$
+        files: ^(lftools_uv|scripts|tests)/.+\.py$
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: fc0f09a29bb495f4a91f00266155d6282d52485d  # frozen: v1.20.2

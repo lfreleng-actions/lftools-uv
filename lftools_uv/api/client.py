@@ -15,7 +15,6 @@ import json
 
 import requests
 
-
 # Type alias for parsed JSON response body.
 # REST APIs return heterogeneous JSON; Any is unavoidable at
 # this deserialization boundary.  Callers should narrow as needed.
@@ -111,9 +110,7 @@ class RestApi:
         if isinstance(data, str):
             data = data.encode("utf-8")
 
-        resp: requests.Response = self.r.request(
-            method, self.endpoint + url, data=data, timeout=timeout
-        )
+        resp: requests.Response = self.r.request(method, self.endpoint + url, data=data, timeout=timeout)
 
         # Some massaging to make our gerrit python code work
         if resp.status_code == 409:
