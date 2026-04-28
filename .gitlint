@@ -42,12 +42,12 @@ line-length=50
 # (e.g. title-must-not-contain-word).
 # regex=^US[0-9]*
 
-[B1]
-# B1 = body-max-line-length
+[body-max-line-length]
 line-length=72
 
 [ignore-by-body]
-# Exempt lines containing URLs from body line-length check
+# If ANY body line contains a URL, disable B1 for the ENTIRE commit body.
+# This is a gitlint limitation: it cannot exempt only the matching lines.
 regex=https?://
 ignore=B1
 
