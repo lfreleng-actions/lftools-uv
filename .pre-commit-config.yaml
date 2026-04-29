@@ -80,7 +80,7 @@ repos:
       - id: write-good
         files: "\\.(rst|md|markdown|mdown|mkdn)$"
         # yamllint disable-line rule:line-length
-        exclude: ".(specify/*|github/((agents|prompts)/speckit.*|copilot-instructions.md))"
+        exclude: "^(\\.specify/|\\.github/((agents|prompts)/speckit.*|copilot-instructions\\.md)|specs/)"
 
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: 745eface02aef23e168a8afb6b5737818efbea95  # frozen: v0.11.0.1
