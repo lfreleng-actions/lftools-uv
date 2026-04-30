@@ -30,8 +30,9 @@ on:
   release:
     types: [published]
 
-# Cancel in-progress runs for the same ref but never cancel an in-flight
-# Pages deployment (see actions/deploy-pages docs).
+# Serialize concurrent runs for the same ref so that an in-flight Pages
+# deployment is never cancelled (per actions/deploy-pages guidance);
+# subsequent runs queue rather than aborting the running one.
 concurrency:
   group: "pages-${{ github.ref }}"
   cancel-in-progress: false
@@ -74,14 +75,13 @@ jobs:
       - name: 'Set up Python'
         run: uv python install 3.13
 
-      - name: 'Install system packages for python-ldap'
-        shell: bash
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libldap2-dev libsasl2-dev libssl-dev \
-            libsasl2-modules gcc build-essential
-          sudo rm -rf /var/lib/apt/lists/*
+      # The docs build only renders CLI "--help" output via
+      # sphinxcontrib-programoutput; it does not install the optional
+      # "ldap" extra and the CLI falls back to a no-op "no_ldap" stub
+      # when python-ldap is unavailable. System packages for python-ldap
+      # (libldap2-dev / libsasl2-dev / build-essential) are therefore
+      # not required here and have been deliberately omitted to keep
+      # the build fast.
 
       - name: 'Sync project (with docs extras)'
         run: uv sync --extra docs --extra openstack
