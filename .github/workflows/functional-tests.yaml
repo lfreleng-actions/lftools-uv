@@ -371,6 +371,11 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
+          # Unique suffix per matrix entry avoids parallel cache write
+          # contention ("Unable to reserve cache with key ...") when all
+          # matrix jobs would otherwise compute the same cache key from
+          # identical OS + Python + uv.lock inputs.
+          cache-suffix: "functional-${{ matrix.test_filter }}"
 
       - name: "Install system packages for python-ldap"
         if: >-
@@ -732,6 +737,9 @@ jobs:
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b  # v8.1.0
         with:
           enable-cache: true
+          # Distinct suffix prevents this job racing the matrix jobs for
+          # the same cache key when running in parallel.
+          cache-suffix: "security-baseline"
 
       - name: "Install system packages for python-ldap"
         shell: bash
