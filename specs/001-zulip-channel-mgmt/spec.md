@@ -57,23 +57,27 @@ a single Zulip server."
 - Q: Should the tool support listing user groups to aid private channel
   creation? → A: Yes — add `lftools-uv zulip group list` command. This is a
   prerequisite for channel creation since private channels can specify
-  allowed groups. Groups are identifiable by `--group-name` (case-
-  insensitive) or `--group-id`; ambiguous name matches fail with error.
+  allowed groups. The `group list` command supports `--group-name` (case-
+  insensitive) and `--group-id` for filtering; ambiguous name matches fail
+  with error. Permission flags (`--allow-group`, `--can-remove-subscribers-group`)
+  use inline comma-separated values with `id:` prefix disambiguation.
 - Q: Should an unarchive command be provided since archive is reversible?
   → A: Yes — add `lftools-uv zulip channel unarchive` with `--yes` flag
   required for safety.
 - Q: How should channel commands identify a target channel? → A: The
-  channel is the first positional argument and MUST be interpreted as a
-  channel name by default, even if numeric-looking. Use `--channel-id`
-  to target a channel by numeric ID explicitly; use `--channel-name`
-  only for explicitness, not disambiguation. Channel name matching
+  `[channel]` positional argument is OPTIONAL (defaults to None) and MUST
+  be interpreted as a channel name by default, even if numeric-looking.
+  Use `--channel-id` to target a channel by numeric ID explicitly. Exactly
+  one of `[channel]` (positional) or `--channel-id` MUST be provided — if
+  neither or both are given, the CLI errors. Channel name matching
   MUST be case-insensitive. (Zulip channel names are
   case-insensitively unique.)
 - Q: Should archived channels appear in the default channel list? → A:
   No — list active channels only by default; add `--include-archived`
   flag to include archived channels.
 - Q: What fields should the update command support in v1? → A: Name,
-  description, channel type (public/web-public/private), and topic policy.
+  description, channel type (public/web-public/private), topic policy,
+  `--allow-group`, and `--can-remove-subscribers-group`.
   No other settings for v1.
 - Q: What should the config CLI flag be named and what is the exact
   precedence? → A: `--zuliprc PATH` pointing to a zuliprc-format file.
@@ -85,14 +89,21 @@ a single Zulip server."
   user to retry with `--by-id` or `--by-email`.
 - Q: Should "initial subscribers" and "allowed groups" be separate concepts
   in private channel creation? → A: Yes — `--subscribe USER` adds
-  immediate subscribers; `--allow-group GROUP` grants group-based access
-  permission (users are NOT auto-subscribed). For public and web-public
-  channels, `--allow-group` is not applicable. Lockout prevention
-  requires at least one `--subscribe` or `--allow-group`.
-- Q: How should groups be identified in commands? → A: By `--group-name`
-  (case-insensitive) or `--group-id`. If a group name is ambiguous, the
+  immediate subscribers; `--allow-group GROUP` defines which group(s) are
+  allowed to join the channel (users are NOT auto-subscribed).
+  `--allow-group` has ONE consistent meaning across ALL channel types:
+  "who is allowed to join." On private channels the server enforces this
+  restriction; on public/web-public channels the server accepts the setting
+  but does NOT enforce it (anyone can still join). Lockout prevention
+  requires at least one `--subscribe` or non-Nobody `--allow-group`.
+- Q: How should groups be identified in commands? → A: In `group list`
+  filtering: by `--group-name` (case-insensitive) or `--group-id`. In
+  permission flags (`--allow-group`, `--can-remove-subscribers-group`):
+  inline comma-separated values (names by default, `id:NUM` for ID lookup).
+  If a group name is ambiguous, the
   command MUST fail with an error instructing the user to use
-  `--group-id`.
+  `--group-id` in `group list` context, or `id:NUM` prefix syntax in
+  permission flag contexts (`--allow-group`, `--can-remove-subscribers-group`).
 - Q: Should the tool require a minimum Zulip server version? → A: No —
   feature-detect at runtime. Commands relying on newer features
   (unarchive, group-based access, topic policy, web-public channels)
@@ -119,15 +130,21 @@ a single Zulip server."
   `--by-name` ambiguity follows the same fail-with-error behavior as
   FR-005/FR-006.
 - Q: How should numeric channel/group identifiers be disambiguated?
-  → A: Channels use `--channel-id`/`--channel-name` for explicit
-  disambiguation. Groups use `--group-id`/`--group-name`. Users keep
-  `--by-id`/`--by-email`/`--by-name`. The positional channel argument
-  defaults to name interpretation unless `--channel-id` is specified.
+  → A: Channels use an optional `[channel]` positional argument (interpreted
+  as name) or `--channel-id` for explicit ID targeting. Groups use
+  `--group-id`/`--group-name` for `group list` filtering; `id:`
+  prefix inside permission flag values. Users keep
+  `--by-id`/`--by-email`/`--by-name`. The `[channel]` positional argument
+  is optional (defaults to None); exactly one of `[channel]` or
+  `--channel-id` must be provided.
 - Q: How should commands resolve archived channels as targets? → A:
   Commands search active channels only by default. `--include-archived`
   extends the search to include archived channels. Commands like
   `unarchive` (where targeting archived channels is the primary use case)
-  require `--include-archived` to locate the target channel.
+  need `--include-archived` to locate the target channel in practice, but
+  it is OPTIONAL (not parser-required). If the target is not found and
+  `--include-archived` was not specified, the CLI errors with a helpful
+  suggestion to use `--include-archived`.
 - Q: What happens when `--allow-group` is used against a Zulip server
   that doesn't support group-based access control? → A: Command returns
   a clear feature-level error following the FR-019 pattern.
@@ -152,8 +169,10 @@ a single Zulip server."
   This makes the lockout prevention policy for private channels even more
   critical — an empty private channel is inaccessible to everyone.
 - Q: How should identifier flags be namespaced to avoid ambiguity?
-  → A: Channels: `--channel-id`/`--channel-name` (positional arg
-  defaults to name). Groups: `--group-id`/`--group-name`. Users:
+  → A: Channels: optional `[channel]` positional arg (defaults to name) or
+  `--channel-id` for explicit ID targeting. Groups:
+  `--group-id`/`--group-name` for `group list` filtering only;
+  `id:` prefix for permission flag values. Users:
   `--by-email`/`--by-id`/`--by-name`. This eliminates cross-entity
   ambiguity (e.g., `subscribe 123 --by-name Alice` is unambiguous:
   `123` is the channel name, `--by-name` applies to user `Alice`).
@@ -178,13 +197,87 @@ a single Zulip server."
   subscribers, the command MUST require `--subscribe` or `--allow-group` to
   prevent creating an inaccessible channel (same rule as FR-002 for
   creation).
-- Q: Should ambiguous `--group-name` in `--allow-group` fail with an error?
-  → A: Yes — if `--group-name` matches multiple groups, the command MUST
-  fail with an ambiguity error listing matching groups (with IDs) and
-  instruct the user to retry with `--group-id`.
+- Q: Should ambiguous group names in `--allow-group` fail with an error?
+  → A: Yes — if a group name (case-insensitive) matches multiple groups, the
+  command MUST fail with an ambiguity error listing matching groups (with IDs)
+  and instruct the user to retry with `id:NUM` prefix syntax.
 - Q: Should US7 use the canonical command name in acceptance scenarios?
   → A: Yes — use `lftools-uv zulip channel subscribers` explicitly in
   US7 narrative and acceptance scenarios for clarity and testability.
+
+### Session 2026-04-30
+
+- Q: Should `lftools-uv zulip group list` include only custom user groups or also
+  built-in system role groups? → A: MUST include BOTH custom user groups AND
+  built-in system role groups (Owners, Administrators, Moderators, Full Members,
+  Members, Everyone, Nobody). System role groups are the primary mechanism for
+  restricting channel access in conjunction with channel creation. Both custom
+  and system role groups MUST be usable with `--allow-group` for private channel
+  access control. `Nobody` effectively disables a permission.
+  The listing MUST include a `type` field (`custom` or `system`) to distinguish
+  them. The JSON schema for groups MUST include the `type` field. This is the
+  PRIMARY use case for the group listing feature — discovering system role group
+  names to use with `--allow-group` during private channel creation.
+- Q: Should `--allow-group` be accepted during update-to-private type conversion?
+  → A: Yes — when using `channel update` to convert a public or web-public
+  channel to private, `--allow-group` MUST be accepted in the same command to
+  atomically set group-based access control during conversion. The Zulip API
+  supports setting `is_private=true` and `can_access_group` in a single PATCH
+  request. The lockout prevention policy still applies — converting to private
+  without existing subscribers requires `--subscribe` or `--allow-group`.
+- Q: Should `--allow-group` be restricted to private channels only? → A: No —
+  `--allow-group` has ONE consistent meaning on ALL channel types: it defines
+  which group(s) are allowed to join the channel. On private channels the server
+  enforces this restriction; on public/web-public channels the server accepts
+  the setting but does NOT enforce it (anyone can still join a public channel).
+  The semantics are identical regardless of channel type — the flag should NOT
+  be rejected on public/web-public channels. Administrative permissions (e.g.,
+  who can remove subscribers) require a SEPARATE flag
+  (`--can-remove-subscribers-group`) that is valid on ALL channel types. The
+  lockout prevention policy (requiring `--subscribe` or `--allow-group` for
+  private channels with no subscribers) remains unchanged.
+- Q: [CORRECTION] What are the correct semantics of `--allow-group` across
+  channel types? → A: `--allow-group` has ONE consistent meaning on ALL channel
+  types: "who is allowed to join the channel." On private channels the server
+  enforces the restriction; on public/web-public channels the server accepts
+  the setting but does NOT enforce it. The previous clarification that
+  `--allow-group` sets "administrative permissions (who can remove subscribers)"
+  on public channels was INCORRECT and has been removed. A new SEPARATE flag
+  `--can-remove-subscribers-group` is required for "who can remove subscribers"
+  and is valid on ALL channel types independently of `--allow-group`.
+- Q: What scope should `--can-remove-subscribers-group` have in v1? → A:
+  Include in v1 for create & update commands on all channel types; no
+  lockout-prevention interaction (it is purely an administrative permission
+  flag, not required for channel accessibility).
+- Q: How does `--can-remove-subscribers-group` identify groups, and can it
+  coexist with `--allow-group` in one command? → A: Both flags take a direct
+  comma-separated, quoted string value. Each item is interpreted as a group
+  name by default. For disambiguation, use prefix syntax: `id:123` forces
+  ID lookup. Without a prefix, values are always treated as names
+  (consistent with channel identifier rules). The `name:` prefix is
+  reserved for future use if default parsing rules change but is not
+  needed under current rules. Both flags can appear in the same command
+  with independent group lists. This eliminates the need for `--group-name`/
+  `--group-id` as separate flags for permission flag contexts. Examples:
+  `--allow-group 'foo, bar, id:123'` — groups "foo" and "bar" by name, plus
+  group with ID 123.
+  `--can-remove-subscribers-group 'baz, admin'` — groups "baz" and
+  "admin" by name.
+  Note: `--group-name`/`--group-id` remain for `lftools-uv zulip group list`
+  filtering only.
+- Q: What Zulip API field does `--allow-group` map to on public/web-public
+  channels? → A: Same field (`can_access_group`) on ALL channel types. The
+  CLI passes the setting through to the API regardless of channel type; it is
+  the server's responsibility to enforce or not enforce based on channel type.
+- Q: Should `--can-remove-subscribers-group` require runtime feature-level
+  detection? → A: Yes — same FR-019 pattern. The CLI MUST probe server
+  capabilities at runtime. If the server does not support the
+  `can_remove_subscribers_group` API field, the CLI MUST return a clear error:
+  "This operation requires Zulip feature level N (server has M)" — matching
+  the canonical FR-019 format. The exact feature level threshold will be
+  determined during implementation by checking the Zulip changelog; for spec
+  purposes, the BEHAVIOR (probe and error with informative message) is the
+  requirement, not a specific number.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -261,32 +354,41 @@ full names, emails, and user IDs.
 
 ### User Story 3 - List User Groups (Priority: P1)
 
-As a Zulip administrator, I want to list all user groups on the Zulip server so
-that I can discover group identifiers to use when creating private channels with
-group-based access control.
+As a Zulip administrator, I want to list all user groups on the Zulip server —
+both custom user groups and built-in system role groups (Owners, Administrators,
+Moderators, Full Members, Members, Everyone, Nobody) — so that I can discover
+group identifiers (especially system role group names) to use when creating private
+channels with group-based access control.
 
 **Why this priority**: Group discovery is a prerequisite for private channel
-creation when specifying allowed groups. This must be implemented before
-channel creation (User Story 4).
+creation when specifying allowed groups. System role groups are the primary
+mechanism for restricting channel access and this is the PRIMARY use case for
+the group listing feature. This must be implemented before channel creation
+(User Story 4).
 
 **Dependency**: None (depends only on Zulip configuration, same as
 User Story 1).
 
 **Independent Test**: Can be tested by running the group list command against a
-Zulip server and verifying that all known user groups appear with correct names,
-IDs, and member counts.
+Zulip server and verifying that all known user groups (custom and system role
+groups) appear with correct names, IDs, member counts, and type classification.
 
 **Acceptance Scenarios**:
 
 1. **Given** a configured Zulip connection, **When** I run the list groups
-   command, **Then** I see a human-readable table showing all user groups with
-   their name, group ID, description, and member count.
+   command, **Then** I see a human-readable table showing all user groups
+   (custom and system role groups) with their name, group ID, description,
+   member count, and type (custom/system).
 2. **Given** a configured Zulip connection, **When** I run the list groups
    command with `--json`, **Then** I receive JSON output containing the same
-   group data suitable for scripting and automation.
+   group data (including `type` field) suitable for scripting and automation.
 3. **Given** no valid Zulip configuration exists, **When** I run the list groups
    command, **Then** I see a clear error message indicating the configuration
    problem and the command exits with a non-zero exit code.
+4. **Given** a configured Zulip connection with default system role groups,
+   **When** I run the list groups command, **Then** the output includes the
+   built-in system role groups (Owners, Administrators, Moderators, Full
+   Members, Members, Everyone, Nobody) each with `type` = `system`.
 
 ---
 
@@ -325,8 +427,8 @@ it appears in the channel list with the correct name, description, and type.
    ambiguity error listing the matching users (with their emails and user IDs)
    and instructs the user to retry with `--by-id` or `--by-email`.
 4. **Given** a configured Zulip connection, **When** I create a private channel
-   with a name, description, and `--allow-group GROUP` (using `--group-name` or
-   `--group-id`), **Then** the channel is created as a private channel with the
+   with a name, description, and `--allow-group 'GroupName'` (or `--allow-group
+   'id:123'`), **Then** the channel is created as a private channel with the
    specified group(s) granted access permission. Group members are NOT
    automatically subscribed.
 5. **Given** a configured Zulip connection, **When** I create a private channel
@@ -341,8 +443,11 @@ it appears in the channel list with the correct name, description, and type.
    auto-subscribe the requester — without explicit subscribers, no one is
    subscribed and the channel is inaccessible.)
 7. **Given** a public or web-public channel creation, **When** I specify
-   `--allow-group`, **Then** the command rejects the request with an error
-   explaining that `--allow-group` is only applicable to private channels.
+   `--allow-group`, **Then** the command accepts the flag and sets the
+   allowed-to-join group on the channel. The semantics are the same as on
+   private channels (defines who is allowed to join), but on public/web-public
+   channels the server does NOT enforce the restriction (anyone can still
+   join).
 8. **Given** a channel with the same name already exists, **When** I attempt to
    create a channel with that name, **Then** I see an error message indicating
    the name conflict and the command exits with a non-zero exit code.
@@ -369,22 +474,22 @@ it appears in the channel list with the correct name, description, and type.
     server's default topic policy.
 16. **Given** a Zulip server that does not support the topic policy feature,
     **When** I create a channel with `--topic-policy`, **Then** the command
-    returns a clear error message indicating the required Zulip feature level
-    and the server's current level, and exits with a non-zero exit code.
+    returns an error in FR-019 canonical format ("This operation requires Zulip
+    feature level X (server has Y)") and exits with a non-zero exit code.
 17. **Given** a Zulip server that does not support web-public channels
     (spectator access not enabled), **When** I create a web-public
-    channel, **Then** the command returns a clear error message
-    indicating the required capability and exits with a non-zero exit
-    code.
+    channel, **Then** the command returns an error in FR-019 canonical
+    format ("This operation requires Zulip feature level X (server has Y)")
+    and exits with a non-zero exit code.
 18. **Given** a configured Zulip connection, **When** I create a channel with
     `--json`, **Then** the JSON response follows the standard mutation schema:
     `{"status": "success", "channel_id": int, "channel_name": str,
     "operation": "create", "type": "public"|"web-public"|"private"}`.
 19. **Given** a configured Zulip connection, **When** I create a private
-    channel with `--allow-group GROUP --group-name` and the group name matches
-    multiple groups, **Then** the command fails with an ambiguity error listing
-    the matching groups (with their IDs) and instructs the user to retry with
-    `--group-id`.
+    channel with `--allow-group 'GroupName'` and the group name matches
+    multiple groups (case-insensitive), **Then** the command fails with an
+    ambiguity error listing the matching groups (with their IDs) and instructs
+    the user to retry with `id:NUM` prefix syntax.
 
 ---
 
@@ -538,12 +643,12 @@ and verifying the changes via the list command.
    changed to follow the server's default setting.
 7. **Given** a Zulip server that does not support the topic policy feature,
    **When** I update a channel with `--topic-policy`, **Then** the command
-   returns a clear error message indicating the required Zulip feature level
-   and the server's current level, and exits with a non-zero exit code.
+   returns an error in FR-019 canonical format ("This operation requires Zulip
+   feature level X (server has Y)") and exits with a non-zero exit code.
 8. **Given** a Zulip server that does not support web-public channels, **When**
-   I update a channel's type to web-public, **Then** the command returns a
-   clear error message indicating the required capability and exits with a
-   non-zero exit code.
+   I update a channel's type to web-public, **Then** the command returns an
+   error in FR-019 canonical format ("This operation requires Zulip feature
+   level X (server has Y)") and exits with a non-zero exit code.
 9. **Given** an existing channel, **When** I update multiple settings (e.g.,
    name and description) in a single command, **Then** all specified settings
    are updated.
@@ -565,6 +670,15 @@ and verifying the changes via the list command.
 14. **Given** a public channel with existing subscribers, **When** I update its
     type to private, **Then** the type change succeeds (existing subscribers
     retain access).
+15. **Given** a public or web-public channel (with or without subscribers),
+    **When** I update its type to private and specify `--allow-group GROUP` in
+    the same command, **Then** the type conversion and group-based access
+    control are applied atomically in a single API request.
+16. **Given** a public or web-public channel, **When** I specify `--allow-group`
+    without changing the type to private, **Then** the command accepts the flag
+    and sets the allowed-to-join group on the channel. The semantics are the
+    same as on private channels but the server does NOT enforce the restriction
+    on public/web-public channels.
 
 ---
 
@@ -613,6 +727,9 @@ after an archive operation.
 
 **Note**: Since commands search active channels by default, unarchiving an
 archived channel requires `--include-archived` to locate the target channel.
+However, `--include-archived` is optional (not parser-required); if omitted and
+the target is archived, the CLI returns a helpful "not found" error suggesting
+the flag.
 
 **Independent Test**: Can be tested by unarchiving a previously archived channel
 and verifying it reappears in the active channel list.
@@ -627,21 +744,27 @@ and verifying it reappears in the active channel list.
    explaining that `--yes` is required to confirm unarchival.
 3. **Given** an archived channel, **When** I attempt to unarchive it without
    `--include-archived`, **Then** the command returns a "channel not found"
-   error and suggests using `--include-archived` to target archived channels.
+   error with a helpful message like "Channel 'foo' not found. Did you mean to
+   include archived channels? Use --include-archived" (the flag is optional but
+   needed in practice to locate archived targets).
 4. **Given** a channel that is already active, **When** I attempt to unarchive
-   it with `--yes`, **Then** the command succeeds silently (exit 0) — this is
-   a no-op.
-5. **Given** a non-existent channel, **When** I attempt to unarchive it,
+   it with `--include-archived --yes`, **Then** the command succeeds silently
+   (exit 0) — this is a no-op consistent with FR-020 idempotency.
+5. **Given** a channel that is already active, **When** I attempt to unarchive
+   it with `--yes` (without `--include-archived`), **Then** the command finds
+   the channel among active channels and succeeds silently (exit 0) — already
+   active is a no-op.
+6. **Given** a non-existent channel, **When** I attempt to unarchive it,
    **Then** I see an error indicating the channel was not found and the command
    exits with a non-zero exit code.
-6. **Given** an archived channel, **When** I unarchive it with
+7. **Given** an archived channel, **When** I unarchive it with
    `--include-archived --yes --json`, **Then** the JSON response follows the
    standard mutation schema: `{"status": "success", "channel_id": int,
    "channel_name": str, "operation": "unarchive"}`.
-7. **Given** a Zulip server that does not support channel reactivation, **When**
-   I attempt to unarchive a channel, **Then** the command returns a clear error
-   message indicating the required Zulip feature level and the server's current
-   level, and exits with a non-zero exit code.
+8. **Given** a Zulip server that does not support channel reactivation, **When**
+   I attempt to unarchive a channel, **Then** the command returns an error in
+   FR-019 canonical format ("This operation requires Zulip feature level X
+   (server has Y)") and exits with a non-zero exit code.
 
 ---
 
@@ -668,29 +791,46 @@ and verifying it reappears in the active channel list.
   or allowed group to prevent creating an inaccessible channel. (The Zulip API
   does NOT auto-subscribe the requester — without explicit subscribers, no one
   is subscribed.)
+- What happens when creating a private channel with `--allow-group Nobody` and
+  no `--subscribe` targets? The system MUST reject the request. `Nobody`
+  effectively grants access to no one, so it does NOT satisfy the lockout
+  prevention requirement. The error MUST explain that `--allow-group Nobody`
+  does not grant access and the channel would be inaccessible.
 - What happens when `--by-name` matches multiple users with the same
   `full_name`? The command MUST fail with an ambiguity error listing all
   matching users (with their emails and user IDs) and instruct the user to
   retry with `--by-id` or `--by-email`. This applies to `subscribe`,
   `unsubscribe`, and `channel create --subscribe --by-name`.
 - What happens when `--allow-group` is used with a public or web-public channel
-  creation? The command MUST reject the request with an error explaining that
-  `--allow-group` is only applicable to private channels.
+  creation or update? The command MUST accept the flag and set the
+  allowed-to-join group on the channel. `--allow-group` has the same semantics
+  on ALL channel types (defines who is allowed to join). On private channels the
+  server enforces this; on public/web-public channels the server accepts it but
+  does NOT enforce it (anyone can still join).
+- What happens when updating a channel type from public/web-public to private
+  with `--allow-group`? The command MUST apply both the type conversion and
+  group-based access control atomically in a single Zulip API PATCH request
+  (setting `is_private=true` and `can_access_group` together).
 - What happens when a command uses a feature unsupported by the target Zulip
   server version? The system MUST detect the missing capability at runtime and
   return a clear error like "This operation requires Zulip feature level X
   (server has Y)" and exit with a non-zero code. This applies to `unarchive`,
-  `--allow-group` (group-based access control), `--topic-policy`, and
-  web-public channel type (requires spectator access).
+  `--allow-group` (group-based access control), `--can-remove-subscribers-group`,
+  `--topic-policy`, and web-public channel type (requires spectator access).
 - What happens when a mutation is a no-op (e.g., archiving an already-archived
   channel, subscribing an already-subscribed user)? The command MUST succeed
   silently (exit 0) and, when `--json` is used, return `"status": "success"`.
 - What happens when a channel identifier is ambiguous (e.g., a numeric name)?
-  The positional channel argument defaults to name interpretation. Users can
-  explicitly use `--channel-id` or `--channel-name` flags to disambiguate.
+  The `[channel]` positional argument is optional and defaults to name
+  interpretation. Users can explicitly use `--channel-id` to target by numeric
+  ID. Exactly one of `[channel]` or `--channel-id` must be provided; if
+  neither or both are given, the CLI errors.
 - What happens when a command targets an archived channel without
   `--include-archived`? The command returns a "channel not found" error and
-  suggests using `--include-archived` to search archived channels.
+  suggests using `--include-archived` to search archived channels (e.g.,
+  "Channel 'foo' not found. Did you mean to include archived channels? Use
+  --include-archived"). The `--include-archived` flag is always optional (never
+  parser-required), even on the `unarchive` command.
 - What happens when both `--announce` and `--no-announce` are specified?
   The command rejects the request with an error explaining these flags are
   mutually exclusive.
@@ -702,7 +842,9 @@ and verifying it reappears in the active channel list.
 - What happens when updating a channel's type from public/web-public to
   private when the channel has no subscribers? The command MUST reject the
   request with an error requiring `--subscribe` or `--allow-group` to prevent
-  lockout (same rule as private channel creation in FR-002).
+  lockout (same rule as private channel creation in FR-002). `--allow-group`
+  MUST be accepted in the same command as the type conversion, enabling atomic
+  application via a single API PATCH request.
 
 ## Requirements *(mandatory)*
 
@@ -721,25 +863,94 @@ and verifying it reappears in the active channel list.
   default behavior (neither flag) follows the API default (no announcement).
   A `--topic-policy` flag MUST be supported with values `allow` (messages
   without a topic are permitted), `deny` (messages must have a topic), or
-  `follow-default` (use the server's default setting). If not specified, the
-  server default applies. This flag requires runtime feature-level detection
-  per FR-019; if the server does not support the topic policy feature, the
-  command MUST return a clear feature-level error.
+  `follow-default` (use the server's default setting). These are the ONLY
+  valid values; any other value MUST be rejected with an error listing the
+  valid options. If not specified, the server default applies. This flag
+  requires runtime feature-level detection per FR-019; if the server does not
+  support the topic policy feature, the command MUST return a clear
+  feature-level error. Topic policy is also available as a standalone command
+  per FR-021.
   When creating a private channel, the command MUST require at least
   one `--subscribe USER` (immediate subscriber) or `--allow-group GROUP` (grant
   group-based access permission; members are NOT auto-subscribed). Both flags
   may be combined. The command MUST reject private channel creation if neither
   is specified — the Zulip API does NOT auto-subscribe the requester, so
-  without explicit subscribers the channel becomes inaccessible. For public and
+  without explicit subscribers the channel becomes inaccessible.
+  **`Nobody` group exclusion**: `--allow-group Nobody` does NOT satisfy the
+  lockout prevention requirement. The `Nobody` system role group grants access
+  to no one, so specifying it alone is equivalent to specifying no group at all.
+  If the only `--allow-group` value(s) resolve to `Nobody` AND no `--subscribe`
+  targets are provided, the CLI MUST reject the request with an error explaining
+  that `--allow-group Nobody` does not grant access to anyone and the channel
+  would be inaccessible. At least one non-`Nobody` allowed group OR at least one
+  `--subscribe` target is required for private channel creation.
+  For public and
   web-public channels, `--subscribe` is optional (anyone can join later) and
-  `--allow-group` is not applicable and MUST be rejected if provided.
+  `--allow-group` is accepted with the same semantics (defines who is allowed to
+  join) but the server does NOT enforce the restriction on public/web-public
+  channels. The CLI maps `--allow-group` to the Zulip API `can_access_group`
+  field on ALL channel types (pass-through; enforcement is the server's
+  responsibility). Both custom user groups AND system role groups (Everyone,
+  Members, Full Members, Moderators, Administrators, Owners, Nobody) are valid
+  inputs to `--allow-group` and `--can-remove-subscribers-group`. Users specify
+  system role groups by their display name only (case-insensitive matching).
+  System role groups (Owners, Administrators, Moderators, Full Members,
+  Members, Everyone, Nobody) are standard Zulip user groups with numeric IDs,
+  just like custom groups. The CLI resolution path is identical for both:
+  (1) user provides display name, (2) CLI fetches all groups from the user
+  groups API (`GET /user_groups`), (3) CLI identifies system groups by their
+  `is_system_group: true` property, (4) CLI matches display names to API names
+  (e.g., "Administrators" → `role:administrators`), (5) CLI extracts the
+  numeric group ID, (6) CLI uses the numeric ID in the group-setting value
+  payload. There is NO separate "role token" path at the API level — the
+  `role:` prefix is purely internal Zulip nomenclature; the API uses numeric
+  IDs for all groups regardless of type. Users do NOT type `role:` prefixes.
+  `Nobody` effectively disables a permission.
+  Administrative permissions (e.g., who can remove subscribers) are managed via
+  a separate `--can-remove-subscribers-group` flag, valid on ALL channel types
+  in both `channel create` and `channel update`. This flag is NOT part of
+  lockout-prevention logic (it controls an administrative capability, not
+  channel accessibility). Both `--allow-group` and `--can-remove-subscribers-group`
+  MAY be specified in the same command invocation — they are independent flags
+  targeting different permissions. Each takes a direct comma-separated, quoted
+  string value (e.g., `--allow-group 'foo, bar, id:123'`). Values are interpreted
+  as group names by default; `id:NUM` forces ID lookup.
+  **API Translation (Group-Setting Values)**: The Zulip API `can_access_group`
+  and `can_remove_subscribers_group` fields use a "group-setting value" format:
+  - **Simple form**: A single integer user group ID (used when only one group is
+    specified).
+  - **Complex form**: `{"direct_members": [], "direct_subgroups": [id1, id2, ...]}`
+    (used when multiple groups are specified).
+  The CLI MUST resolve each comma-separated group name/ID to a numeric group ID,
+  then build the appropriate group-setting value: if exactly one group is
+  specified, send the simple integer form; if multiple groups are specified,
+  send the complex form with all resolved IDs in the `direct_subgroups` array
+  and an empty `direct_members` array. This translation is transparent to the
+  user — they always use the comma-separated name/ID syntax.
+  **Create vs Update Payload Difference**: The Zulip API uses different payload
+  formats for permission fields depending on the endpoint:
+  - **Create** (POST `/users/me/subscriptions`): Permission fields accept a raw
+    group-setting value directly (integer or complex object).
+  - **Update** (PATCH `/streams/{stream_id}`): Permission fields use a
+    "group-setting-update" wrapper format: `{"new": <group-setting-value>}`.
+    The `old` field is optional and used for optimistic concurrency control; the
+    CLI MUST omit `old` because it operates as an integration syncing desired
+    state rather than an interactive editor making incremental changes (per Zulip
+    API documentation: omitting `old` is appropriate where the intent is a new
+    complete value rather than an edit).
+  The CLI MUST automatically wrap group-setting values in the `{"new": ...}`
+  format when issuing PATCH requests, and send raw values for POST requests.
+  This wrapping is an internal implementation detail — user-facing syntax is
+  identical for create and update commands.
   `--subscribe USER` MUST use the same `--by-email`/`--by-id`/`--by-name`
   identification mechanism as the subscribe/unsubscribe commands; the identifier
   flag applies to ALL `--subscribe` values in a single invocation (mixing email
   and ID in one command is not permitted). `--by-name` ambiguity follows the
   same fail-with-error behavior as FR-005/FR-006.
-  Groups in `--allow-group` are identified by `--group-name` (case-insensitive)
-  or `--group-id`.
+  Groups in `--allow-group` and `--can-remove-subscribers-group` are identified
+  inline via comma-separated values (names by default, `id:NUM` prefix for ID
+  lookup). Case-insensitive
+  name matching applies; ambiguous matches fail with an error.
 - **FR-003**: System MUST provide a
   `lftools-uv zulip channel archive` command that
   archives (deactivates) a channel. The command MUST require a `--yes` flag to
@@ -750,13 +961,32 @@ and verifying it reappears in the active channel list.
   `lftools-uv zulip channel update` command that
   can modify a channel's name, description, channel type (public, web-public, or
   private — transitions between all three types are supported where the Zulip
-  API allows it), and topic policy (`--topic-policy` with values `allow`,
-  `deny`, or `follow-default`). These are the only fields supported for v1; no
-  other settings are in scope. The `--topic-policy` flag requires runtime
+  API allows it), topic policy (`--topic-policy` with values `allow`,
+  `deny`, or `follow-default`; also available as a standalone command per
+  FR-021), `--allow-group` (who is allowed to join —
+  maps to Zulip API `can_access_group`), and `--can-remove-subscribers-group`
+  (who can remove subscribers — maps to Zulip API
+  `can_remove_subscribers_group`). These are the only fields supported for v1;
+  no other settings are in scope. When `--subscribe` is used in the update
+  context (e.g., during type conversion to private for lockout prevention), the
+  same `--by-email`/`--by-id`/`--by-name` identifier flags apply as in
+  FR-005/FR-006. The `--topic-policy` flag requires runtime
   feature-level detection per FR-019. When updating a channel's type to
   private, the same lockout prevention rule as FR-002 applies: if the channel
   has NO current subscribers, the command MUST require `--subscribe` or
   `--allow-group` to prevent creating an inaccessible private channel.
+  The same `Nobody` group exclusion from FR-002 applies: `--allow-group Nobody`
+  does NOT satisfy this requirement. At least one non-`Nobody` allowed group OR
+  at least one `--subscribe` target is required.
+  `--allow-group` MUST be accepted during type conversion to private in the same
+  command, enabling atomic setting of group-based access control via a single
+  Zulip API PATCH request (`is_private=true` + `can_access_group`). For updates
+  to public/web-public channels (or updates that do not change type),
+  `--allow-group` is accepted with the same semantics (defines who is allowed to
+  join) but the server does NOT enforce the restriction on non-private channels.
+  Administrative permissions (e.g., who can remove subscribers) are managed via
+  `--can-remove-subscribers-group`, valid on ALL channel types in both create
+  and update. This flag is NOT part of lockout-prevention logic.
 - **FR-005**: System MUST provide a `lftools-uv zulip channel subscribe` command
   that subscribes one or more users to a channel, with support for bulk
   operations. Users MUST be identified via an explicit `--by-email`,
@@ -833,47 +1063,93 @@ and verifying it reappears in the active channel list.
   and `is_active` (bool).
 - **FR-016**: System MUST provide a
   `lftools-uv zulip group list` command that returns all user
-  groups on the Zulip server with their name, group ID,
-  description, and member count. Groups MUST be identifiable
-  by `--group-name` (case-insensitive) or `--group-id` in
-  commands that reference them (e.g., `--allow-group`). If a
-  group name is ambiguous, the command MUST fail with an error
-  instructing the user to specify by `--group-id`. The command
-  MUST support `--json` output producing `{"groups": [...]}`
-  where each entry contains `group_id` (int), `name` (str),
-  `description` (str), and `member_count` (int).
+  groups on the Zulip server — both custom user groups AND
+  built-in system role groups (Owners, Administrators,
+  Moderators, Full Members, Members, Everyone, Nobody).
+  System role groups are the primary mechanism for restricting
+  channel access and their discovery is the PRIMARY use case
+  for this command (finding system role group names to use with
+  `--allow-group` for channel permission management). Both
+  custom and system role groups MUST be usable with
+  `--allow-group` (who is allowed to join) and
+  `--can-remove-subscribers-group` (who can remove subscribers)
+  for channel permissions on ALL channel types. In permission
+  flag contexts (`--allow-group`, `--can-remove-subscribers-group`),
+  groups are identified inline via comma-separated values
+  (names by default, `id:NUM` for ID lookup). The `group list` command itself
+  supports `--group-name` (case-insensitive) and `--group-id`
+  for filtering. If a group name is ambiguous in `group list` context, the
+  command MUST fail with an error instructing the user to use `--group-id`
+  for filtering (NOT `id:NUM` prefix syntax, which is only valid in
+  permission flag contexts like `--allow-group` and
+  `--can-remove-subscribers-group`). The command MUST support `--json` output
+  producing `{"groups": [...]}` where each entry contains
+  `group_id` (int), `name` (str), `description` (str),
+  `member_count` (int), and `type` (str: `"custom"` or
+  `"system"`).
 - **FR-017**: System MUST provide a `lftools-uv zulip channel unarchive` command
   that reactivates a previously archived channel. The command MUST require a
   `--yes` flag to confirm the operation; without it, the command MUST reject the
   request with an explanatory message.
 - **FR-018**: All channel commands that target a specific channel MUST
-  accept the channel as a positional argument interpreted as a channel
-  name by default, even if numeric-looking. `--channel-id` MUST be
-  supported to target a channel by numeric ID; `--channel-name` MAY
-  be used for explicitness but is not required for disambiguation.
+  accept an OPTIONAL `[channel]` positional argument (defaulting to None)
+  interpreted as a channel name by default, even if numeric-looking.
+  `--channel-id` MUST be supported to target a channel by numeric ID;
+  Exactly ONE of `[channel]` (positional) or `--channel-id`
+  MUST be provided — if neither or both are given, the CLI MUST error with a
+  message indicating that exactly one channel identifier is required. This
+  applies to: update, archive, unarchive, subscribe, unsubscribe,
+  subscribers, and topic-policy commands. For subscribe/unsubscribe,
+  where USER positionals are also required, the first positional is
+  treated as the channel name only when `--channel-id` is absent;
+  otherwise all positionals are USER values.
   Channel name matching MUST be case-insensitive. (Zulip channel
   names are case-insensitively unique, so no ambiguity handling is
   needed for channels.)
   Channel target resolution searches active channels only by default; an
   `--include-archived` flag extends the search to include archived channels.
-  Commands where targeting archived channels is the primary use case (e.g.,
-  `unarchive`) require `--include-archived` to locate the target. When a
-  channel is not found and `--include-archived` was not specified, the error
-  message MUST suggest using `--include-archived`.
+  The `--include-archived` flag is OPTIONAL on all commands (never
+  parser-required). Commands where targeting archived channels is the primary
+  use case (e.g., `unarchive`) still need `--include-archived` to locate the
+  target in practice, but the CLI MUST NOT enforce it as a required argument.
+  Instead, if the target channel is not found among active channels and
+  `--include-archived` was not specified, the error message MUST suggest using
+  `--include-archived` (e.g., "Channel 'foo' not found. Did you mean to include
+  archived channels? Use --include-archived"). If `--include-archived` is
+  provided and the target channel is already active (e.g., unarchiving an active
+  channel), the flag is a no-op and the command proceeds normally (the unarchive
+  command succeeds silently per its idempotency rule).
 - **FR-019**: Commands that rely on Zulip features not universally available
   (e.g., unarchive, group-based access control, topic policy, web-public
-  channels) MUST detect server capabilities at runtime via the Zulip API
-  feature level. If a required feature is unsupported, the command MUST return
-  a clear error message in the format "This operation requires Zulip feature
-  level X (server has Y)" and exit with a non-zero exit code. No minimum Zulip
-  server version is required. Web-public channels specifically require spectator
-  access to be enabled on the server/organization.
+  channels, `can_remove_subscribers_group`) MUST detect server capabilities at
+  runtime via the Zulip API feature level. If a required feature is unsupported,
+  the command MUST return a clear error message in the format "This operation
+  requires Zulip feature level X (server has Y)" and exit with a non-zero exit
+  code. No minimum Zulip server version is required. Web-public channels
+  specifically require spectator access to be enabled on the
+  server/organization.
 - **FR-020**: All mutation commands MUST be idempotent for no-op cases:
   archiving an already-archived channel, unarchiving an already-active channel,
   subscribing an already-subscribed user, unsubscribing a user who is not
   subscribed, and updating with values identical to the current state MUST all
   succeed silently (exit 0). When `--json` is used, no-ops MUST return
   `"status": "success"`.
+- **FR-021**: System MUST provide a
+  `lftools-uv zulip channel topic-policy` command that views or sets the topic
+  editing policy for a specific channel. This is a convenience shortcut
+  equivalent to `channel update [channel] --topic-policy <value>` but provides
+  a focused interface for this specific setting. Usage:
+  `lftools-uv zulip channel topic-policy [channel] [--channel-id ID] [--policy <value>]`.
+  If `--policy` is omitted, the command MUST display the current topic policy
+  setting for the target channel. If `--policy` is provided, the command MUST
+  update the channel's topic policy to the specified value. Valid `--policy`
+  values are: `allow` (messages without a topic are permitted), `deny`
+  (messages must have a topic), or `follow-default` (use the server's default
+  setting). The command MUST reject any value not in this set with a clear
+  error listing valid options. Channel targeting follows FR-018 (optional
+  positional `[channel]` or `--channel-id`). This command requires runtime
+  feature-level detection per FR-019; if the server does not support the topic
+  policy feature, the command MUST return a clear feature-level error.
 
 ### Key Entities
 
@@ -881,19 +1157,61 @@ and verifying it reappears in the active channel list.
   name, description, type (public/web-public/private), topic policy
   (allow/deny/follow-default), archived status, subscriber count, and channel
   ID. Zulip's API refers to these as "streams" internally. Identifiable by
-  positional name argument (case-insensitive) or explicit `--channel-id`/
-  `--channel-name` flags for disambiguation.
+  optional `[channel]` positional name argument (case-insensitive) or explicit
+  `--channel-id` flag. Exactly one of `[channel]` or `--channel-id` must be
+  provided.
 - **Subscriber**: A Zulip user who is a member of a channel, identified by email
   address, user ID, and full name.
 - **Zulip User**: A user account on the Zulip server, identified by full name,
   email address, user ID, and active/deactivated status. Used for user discovery
   prior to channel subscription management. Zulip has no stable "username"
   field; `full_name` is used for name-based identification via `--by-name`.
-- **User Group**: A named group of Zulip users, identified by `--group-id` or
-  `--group-name` (case-insensitive), with description and member count. Used for
-  group-based access control when creating private channels via `--allow-group`.
-  Groups granted access are permitted to join but are NOT automatically
-  subscribed.
+- **User Group**: A named group of Zulip users, with description and member count.
+  Includes both custom user groups and built-in system role groups. System role
+  groups (Owners, Administrators, Moderators, Full Members, Members, Everyone,
+  Nobody) are standard Zulip user groups with numeric IDs, just like custom
+  groups. They are referenced by display name in all user-facing CLI input
+  (case-insensitive). The CLI resolves ALL groups (system and custom) to
+  numeric IDs via the same lookup mechanism: display name → groups API lookup
+  → numeric group ID → group-setting value payload. There is NO separate
+  "role token" path at the API level — the `role:` prefix is purely internal
+  Zulip nomenclature; the API uses numeric IDs for all groups regardless of
+  type. Users do NOT type `role:` prefixes — display names are the only
+  accepted form. `Nobody` effectively disables a permission.
+  **System Group Discovery Mechanism**: System groups are standard user group
+  objects returned by the Zulip user groups API (`GET /user_groups`). They are
+  identified by the `is_system_group: true` property on the group object and
+  use the `role:` naming convention in the API. The CLI discovers them by
+  fetching all groups and filtering by `is_system_group`. The display-name to
+  API-name mapping is:
+  - "Owners" → group with API name `role:owners`
+  - "Administrators" → group with API name `role:administrators`
+  - "Moderators" → group with API name `role:moderators`
+  - "Full Members" → group with API name `role:fullmembers`
+  - "Members" → group with API name `role:members`
+  - "Everyone" → group with API name `role:everyone`
+  - "Nobody" → group with API name `role:nobody`
+  Resolution path: user provides display name → CLI matches against known
+  display-name-to-API-name mapping → finds group object in API response →
+  extracts numeric ID for use in group-setting value payloads. For `group list`
+  output: the CLI MUST show the human-friendly display name and a `type` field
+  (`system` or `custom`), NOT the raw `role:` API name.
+  In `group list`, identifiable by `--group-id` or `--group-name`
+  (case-insensitive) for filtering. In permission flags (`--allow-group`,
+  `--can-remove-subscribers-group`), identified inline via comma-separated
+  values (names by default, `id:NUM` for ID lookup). Used for
+  group-based permissions on ALL channel
+  types via two distinct flags: `--allow-group` (who is allowed to join —
+  enforced on private channels, accepted but not enforced on public/web-public)
+  and `--can-remove-subscribers-group` (who can remove subscribers — valid on
+  ALL channel types). Groups granted access to private channels are permitted to
+  join but are NOT automatically subscribed. The CLI resolves group names/IDs to
+  numeric IDs and translates to the Zulip API "group-setting value" format:
+  simple integer (single group) or `{"direct_members": [], "direct_subgroups":
+  [id1, id2, ...]}` (multiple groups). For **update** operations (PATCH), the
+  API wraps these in a group-setting-update format: `{"new": <group-setting-value>}`
+  (the CLI handles this wrapping automatically; user syntax is the same for
+  create and update).
 - **Zulip Configuration**: Connection and authentication details (server URL,
   bot email, API key) resolved from multiple sources with defined precedence:
   `--zuliprc PATH` > `./zuliprc` > `[zulip]` in lftools.ini > `~/.zuliprc`.
@@ -959,9 +1277,11 @@ and verifying it reappears in the active channel list.
   and degrade gracefully with clear error messages.
 - Zulip channel names are case-insensitively unique on the server, so channel
   name lookups are unambiguous.
-- Identifier flag namespaces are split by entity type: channels use positional
-  arg (defaults to name) plus `--channel-id`/`--channel-name` for
-  disambiguation; groups use `--group-id`/`--group-name`; users use
+- Identifier flag namespaces are split by entity type: channels use optional
+  `[channel]` positional arg (defaults to name) or `--channel-id` (exactly one
+  required). Groups use
+  `--group-id`/`--group-name` for `group list` filtering only; permission flags
+  use inline `id:` prefix. Users use
   `--by-email`/`--by-id`/`--by-name`. This prevents cross-entity ambiguity.
 - The Zulip API `announce` parameter defaults to `false` (no announcement on
   channel creation). The CLI mirrors this default; `--announce` must be
