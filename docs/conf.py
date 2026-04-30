@@ -30,13 +30,26 @@ copyright = '2025, Linux Foundation Release Engineering'
 author = 'Linux Foundation Release Engineering'
 
 # Version information
+#
+# The project uses hatch-vcs (PEP 440 / setuptools-scm-style) dynamic
+# versioning, configured in pyproject.toml. Read the version from the
+# installed package metadata via importlib.metadata so the value reflects
+# the real distribution version (including tag-derived versions for
+# tagged builds and dev versions for post-tag commits). This requires
+# the project to be installed (e.g. "uv sync" or "pip install -e .")
+# in the build environment, and the build environment to have access to
+# git tags so hatch-vcs can derive the version at install time.
 try:
-    from pbr.version import VersionInfo
-    version = str(VersionInfo("lftools-uv"))
-    release = str(VersionInfo("lftools-uv"))
+    from importlib.metadata import PackageNotFoundError, version as _pkg_version
+
+    try:
+        version = _pkg_version("lftools-uv")
+    except PackageNotFoundError:
+        version = "0.0.0"
 except Exception:
-    version = '0.37.14'
-    release = '0.37.14'
+    version = "0.0.0"
+
+release = version
 
 # Sphinx extensions
 extensions = [
