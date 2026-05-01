@@ -4,50 +4,119 @@
 
 # Builds Sphinx documentation and publishes it to GitHub Pages using the
 # modern Pages deployment model (configure-pages + upload-pages-artifact
-# + deploy-pages). Read the Docs continues to publish independently via
-# the .readthedocs.yml configuration.
+# + deploy-pages). Read the Docs (if configured separately via
+# .readthedocs.yml) continues to publish independently.
+#
+# This workflow resolves the Python project's distribution name and
+# version at runtime via the python-project-metadata-action (with a
+# fall-back to the repository name when Python project metadata is
+# unavailable), but it is not fully project-agnostic: the build assumes
+# a Python project with a `pyproject.toml` that can be installed via
+# `uv sync` (by default using a `docs` extra).
 #
 # IMPORTANT: in the repository settings under "Pages > Build and
 # deployment", the "Source" must be set to "GitHub Actions" for this
-# workflow to deploy successfully. The legacy "Deploy from a branch"
-# (gh-pages) source is no longer used.
+# workflow to deploy successfully.
 
 name: 'GitHub Pages Documentation'
 
+# This workflow runs on `workflow_dispatch` (manual republish) and on
+# `push` of any tag. Tag-triggered runs are gated by a mandatory
+# tag-validation job (signature + format check) that mirrors the
+# policy used by `build-test-release.yaml`; only semver tags (for
+# example `v1.2.3`) that pass validation proceed to the build/deploy
+# jobs. Pull requests and branch pushes never trigger this workflow.
 # yamllint disable-line rule:truthy
 on:
   workflow_dispatch:
+    inputs:
+      uv_sync_args:
+        description: >-
+          Arguments passed to `uv sync` when installing the project
+          before building the docs. Defaults to `--extra docs`, which
+          assumes the project's pyproject.toml defines a self-contained
+          `docs` optional-dependency extra (the de-facto convention).
+          Override with e.g. `--extra documentation`, `--all-extras`,
+          or a space-separated list of extras for projects that follow
+          a different convention.
+        required: false
+        default: '--extra docs'
+      docs_source_dir:
+        description: >-
+          Directory containing the Sphinx source tree (conf.py).
+        required: false
+        default: 'docs'
   push:
-    branches:
-      - 'main'
-      - 'master'
-    paths:
-      - 'docs/**'
-      - 'lftools_uv/**'
-      - 'pyproject.toml'
-      - 'uv.lock'
-      - '.github/workflows/documentation.yaml'
-  release:
-    types: [published]
+    tags:
+      - '**'
 
-# Serialize concurrent runs for the same ref so that an in-flight Pages
-# deployment is never cancelled (per actions/deploy-pages guidance);
-# subsequent runs queue rather than aborting the running one.
+# Serialize all Pages deployments globally (not keyed by ref) so a
+# tag-push deploy and a workflow_dispatch deploy can never race each
+# other — they all publish to the same Pages site, and out-of-order
+# completions would publish stale content. `cancel-in-progress: false`
+# ensures an in-flight deploy is never aborted (per actions/deploy-pages
+# guidance); subsequent runs queue rather than cancel.
 concurrency:
-  group: "pages-${{ github.ref }}"
+  group: 'github-pages'
   cancel-in-progress: false
 
 permissions: {}
 
 jobs:
-  build:
-    name: 'Build Documentation'
+  tag-validate:
+    name: 'Validate Tag Push'
+    if: github.event_name == 'push'
     runs-on: 'ubuntu-latest'
     permissions:
       contents: read
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.tag-validate.outputs.tag_name }}
+    steps:
+      # yamllint disable-line rule:line-length
+      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
+        with:
+          egress-policy: 'audit'
+
+      - name: 'Checkout repository'
+        # yamllint disable-line rule:line-length
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: 'Verify pushed tag'
+        id: 'tag-validate'
+        # yamllint disable-line rule:line-length
+        uses: lfreleng-actions/tag-validate-action@461d187a53b5de27b068c2cea5af972c085a4a6a  # v1.0.2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          require_type: 'semver'
+          reject_development: 'true'
+          require_github: 'true'
+          # GPG verification requires the signing key on the runner;
+          # accept SSH signatures and GPG signatures we cannot verify
+          # locally (consistent with build-test-release.yaml).
+          require_signed: 'ssh,gpg-unverifiable'
+
+  build:
+    name: 'Build Documentation'
+    needs: tag-validate
+    # `needs: tag-validate` only runs on tag pushes (the job has an `if`
+    # gate). For workflow_dispatch the dependency is skipped; we still
+    # want the build to run, so we accept skipped/successful results.
+    if: >-
+      always()
+      && (needs.tag-validate.result == 'success'
+          || needs.tag-validate.result == 'skipped')
+    runs-on: 'ubuntu-latest'
+    permissions:
+      contents: read
+      pull-requests: read
     timeout-minutes: 15
     outputs:
-      project-version: ${{ steps.version.outputs.version }}
+      project_name: ${{ steps.resolve-name.outputs.name }}
+      project_version: ${{ steps.version.outputs.version }}
     steps:
       # yamllint disable-line rule:line-length
       - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
@@ -58,10 +127,9 @@ jobs:
         # yamllint disable-line rule:line-length
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
-          # Fetch full history and tags so hatch-vcs can derive the
-          # correct dynamic version. Without this the build falls back
-          # to the configured fallback-version (0.0.0) and produces a
-          # misleading "0.0.1.dev1"-style version string.
+          # Fetch full history and tags so dynamic versioning backends
+          # (hatch-vcs / setuptools-scm / etc.) can derive the correct
+          # version. Statically versioned projects are unaffected.
           fetch-depth: 0
 
       - name: 'Gather repository metadata'
@@ -75,6 +143,51 @@ jobs:
           artifact_upload: 'true'
           artifact_formats: 'json'
 
+      - name: 'Detect pyproject.toml'
+        id: pyproject-check
+        # yamllint disable-line rule:line-length
+        uses: lfreleng-actions/path-check-action@9606e61c870025bc956e63156d1d55c5df54426c  # v0.2.0
+        with:
+          path: 'pyproject.toml'
+
+      - name: 'Require pyproject.toml'
+        if: steps.pyproject-check.outputs.type != 'file'
+        shell: bash
+        # yamllint disable rule:line-length
+        run: |
+          echo "::error title=Missing pyproject.toml::This workflow requires a pyproject.toml at the repository root. The project is installed via 'uv sync' before sphinx-build is invoked."
+          exit 1
+        # yamllint enable rule:line-length
+
+      - name: 'Gather Python project metadata'
+        id: python-metadata
+        continue-on-error: true
+        # yamllint disable-line rule:line-length
+        uses: lfreleng-actions/python-project-metadata-action@30b89c6787eaf73797e4698dcfd3aa8b26213824  # v0.1.11
+
+      - name: 'Resolve project name'
+        id: resolve-name
+        shell: bash
+        env:
+          PYTHON_PROJECT_NAME: >-
+            ${{ steps.python-metadata.outputs.python_project_name }}
+          REPOSITORY_NAME: >-
+            ${{ steps.repo-metadata.outputs.repository_name }}
+        run: |
+          # Prefer the distribution name from the Python project
+          # metadata; fall back to the repository name when the project
+          # isn't a Python package or the metadata action wasn't able to
+          # resolve a name.
+          if [ -n "${PYTHON_PROJECT_NAME}" ]; then
+            name="${PYTHON_PROJECT_NAME}"
+            source="python-project-metadata-action"
+          else
+            name="${REPOSITORY_NAME}"
+            source="repository-metadata-action (fallback)"
+          fi
+          echo "name=${name}" >> "${GITHUB_OUTPUT}"
+          echo "Resolved project name: ${name} (source: ${source})"
+
       - name: 'Install uv'
         # yamllint disable-line rule:line-length
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b  # v8.1.0
@@ -86,71 +199,76 @@ jobs:
       - name: 'Set up Python'
         run: uv python install 3.13
 
-      # The docs build only renders CLI "--help" output via
-      # sphinxcontrib-programoutput; it does not install the optional
-      # "ldap" extra and the CLI falls back to a no-op "no_ldap" stub
-      # when python-ldap is unavailable. System packages for python-ldap
-      # (libldap2-dev / libsasl2-dev / build-essential) are therefore
-      # not required here and have been deliberately omitted to keep
-      # the build fast.
-
-      - name: 'Sync project (with docs extras)'
-        run: uv sync --extra docs --extra openstack
+      - name: 'Sync project'
+        shell: bash
+        env:
+          UV_SYNC_ARGS: ${{ inputs.uv_sync_args || '--extra docs' }}
+        run: |
+          # Split UV_SYNC_ARGS into an array on whitespace without
+          # invoking the shell on its contents. `read -ra` performs
+          # word-splitting only; it does not expand `$()`, backticks,
+          # `;`, `&&`, etc., so a malicious workflow_dispatch input
+          # cannot inject additional commands.
+          # shellcheck disable=SC2153
+          read -ra uv_sync_args <<< "${UV_SYNC_ARGS}"
+          uv sync "${uv_sync_args[@]}"
 
       - name: 'Resolve project version'
         id: version
         shell: bash
+        env:
+          PYTHON_PROJECT_VERSION: >-
+            ${{ steps.python-metadata.outputs.python_project_version }}
         run: |
-          # Read the installed distribution version (set by hatch-vcs at
-          # install time). This is what Sphinx will pick up via
-          # importlib.metadata in docs/conf.py.
-          py='import importlib.metadata as m; print(m.version("lftools-uv"))'
-          version=$(uv run python -c "${py}")
+          # Use the version reported by python-project-metadata-action
+          # (which handles both static pyproject.toml versions and
+          # dynamic backends like hatch-vcs / setuptools-scm). If the
+          # action failed to resolve or emit a version, fall through
+          # to an "unknown" placeholder.
+          version="${PYTHON_PROJECT_VERSION:-unknown}"
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
           echo "Resolved project version: ${version}"
 
       - name: 'Build Sphinx documentation'
         shell: bash
+        env:
+          DOCS_DIR: ${{ inputs.docs_source_dir || 'docs' }}
         run: |
           uv run sphinx-build -b html -n --keep-going \
-            -d docs/_build/doctrees \
-            docs/ docs/_build/html
+            -d "${DOCS_DIR}/_build/doctrees" \
+            "${DOCS_DIR}" "${DOCS_DIR}/_build/html"
 
       - name: 'Upload Pages artifact'
         # yamllint disable-line rule:line-length
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9  # v5.0.0
         with:
-          path: 'docs/_build/html'
+          path: '${{ inputs.docs_source_dir || ''docs'' }}/_build/html'
 
       - name: 'Build summary'
         if: always()
         shell: bash
         env:
+          PROJECT_NAME: ${{ steps.resolve-name.outputs.name }}
           PROJECT_VERSION: ${{ steps.version.outputs.version }}
+          DOCS_DIR: ${{ inputs.docs_source_dir || 'docs' }}
         run: |
           {
             echo "## 📚 Documentation build"
             echo ""
             echo "| Item | Value |"
             echo "| ---- | ----- |"
+            echo "| Project name | \`${PROJECT_NAME:-unknown}\` |"
             echo "| Project version | \`${PROJECT_VERSION:-unknown}\` |"
             echo "| Git ref | \`${GITHUB_REF}\` |"
             echo "| Commit | \`${GITHUB_SHA}\` |"
             echo "| Builder | Sphinx (\`uv run sphinx-build\`) |"
-            echo "| Output | \`docs/_build/html\` |"
+            echo "| Source | \`${DOCS_DIR}\` |"
+            echo "| Output | \`${DOCS_DIR}/_build/html\` |"
           } >> "${GITHUB_STEP_SUMMARY}"
 
   deploy:
     name: 'Deploy to GitHub Pages'
     needs: build
-    # Only deploy on push to the default branch, on a published release,
-    # or on manual dispatch. Pull requests should never deploy.
-    if: >-
-      github.event_name == 'workflow_dispatch'
-      || github.event_name == 'release'
-      || (github.event_name == 'push'
-          && (github.ref == 'refs/heads/main'
-              || github.ref == 'refs/heads/master'))
     runs-on: ubuntu-latest
     permissions:
       pages: write
@@ -178,7 +296,8 @@ jobs:
         if: always()
         shell: bash
         env:
-          PROJECT_VERSION: ${{ needs.build.outputs.project-version }}
+          PROJECT_NAME: ${{ needs.build.outputs.project_name }}
+          PROJECT_VERSION: ${{ needs.build.outputs.project_version }}
           PAGE_URL: ${{ steps.deployment.outputs.page_url }}
         run: |
           {
@@ -192,11 +311,9 @@ jobs:
             echo ""
             echo "| Item | Value |"
             echo "| ---- | ----- |"
+            echo "| Project name | \`${PROJECT_NAME:-unknown}\` |"
             echo "| Project version | \`${PROJECT_VERSION:-unknown}\` |"
             echo "| Trigger | \`${GITHUB_EVENT_NAME}\` |"
             echo "| Git ref | \`${GITHUB_REF}\` |"
             echo "| Commit | \`${GITHUB_SHA}\` |"
-            echo ""
-            echo "_Read the Docs builds (if enabled) publish independently"
-            echo "via the \`.readthedocs.yml\` configuration._"
           } >> "${GITHUB_STEP_SUMMARY}"
