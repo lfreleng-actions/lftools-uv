@@ -8,8 +8,14 @@ SPDX-FileCopyrightText: 2026 The Linux Foundation
 ## Prerequisites
 
 - Python >=3.11, <3.15
-- `lftools-uv` installed (the `zulip` dependency will be added during
-  implementation)
+- `lftools-uv` installed with the `zulip` extra:
+
+  ```bash
+  pip install "lftools-uv[zulip]"
+  # or
+  uv pip install "lftools-uv[zulip]"
+  ```
+
 - A Zulip bot or user account with organization admin permissions
 - A zuliprc file or equivalent configuration
 
