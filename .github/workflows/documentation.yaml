@@ -2,97 +2,201 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2025 The Linux Foundation
 
-# Publishes documentation to GitHub Pages
-name: 'GitHub Pages Documentation'
+# Builds Sphinx documentation and publishes it to GitHub Pages using the
+# modern Pages deployment model (configure-pages + upload-pages-artifact
+# + deploy-pages). Read the Docs continues to publish independently via
+# the .readthedocs.yml configuration.
+#
+# IMPORTANT: in the repository settings under "Pages > Build and
+# deployment", the "Source" must be set to "GitHub Actions" for this
+# workflow to deploy successfully. The legacy "Deploy from a branch"
+# (gh-pages) source is no longer used.
 
-# Note: The initial publish may fail, see the documentation here:
-# https://github.com/peaceiris/actions-gh-pages
-# Heading: First Deployment with GITHUB_TOKEN
+name: 'GitHub Pages Documentation'
 
 # yamllint disable-line rule:truthy
 on:
   workflow_dispatch:
-  pull_request:
-    types: [closed]
+  push:
     branches:
       - 'main'
       - 'master'
-      - '!update-devops-tooling'
     paths:
-      - '**'
-      - '!.github/**'
-      - '!.*'
-      - '!pdm.lock'
-      - '!tox.ini'
+      - 'docs/**'
+      - 'lftools_uv/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/documentation.yaml'
+  release:
+    types: [published]
+
+# Serialize concurrent runs for the same ref so that an in-flight Pages
+# deployment is never cancelled (per actions/deploy-pages guidance);
+# subsequent runs queue rather than aborting the running one.
+concurrency:
+  group: "pages-${{ github.ref }}"
+  cancel-in-progress: false
 
 permissions: {}
 
 jobs:
-  publish-docs:
-    name: 'Publish Documentation'
+  build:
+    name: 'Build Documentation'
     runs-on: 'ubuntu-latest'
-    concurrency:
-      group: "${{ github.workflow }}-${{ github.ref }}"
     permissions:
-      # IMPORTANT: mandatory for documentation updates; used in final step
-      contents: write
-    env:
-      GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-    timeout-minutes: 12
+      contents: read
+    timeout-minutes: 15
+    outputs:
+      project-version: ${{ steps.version.outputs.version }}
     steps:
-      # Harden the runner used by this workflow
       # yamllint disable-line rule:line-length
       - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
         with:
           egress-policy: audit
 
-      - name: 'Checkout Repository'
+      - name: 'Checkout repository'
         # yamllint disable-line rule:line-length
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          # Fetch full history and tags so hatch-vcs can derive the
+          # correct dynamic version. Without this the build falls back
+          # to the configured fallback-version (0.0.0) and produces a
+          # misleading "0.0.1.dev1"-style version string.
+          fetch-depth: 0
+
+      - name: 'Gather repository metadata'
+        id: repo-metadata
+        # yamllint disable-line rule:line-length
+        uses: lfreleng-actions/repository-metadata-action@ceabcd987d13d7bfefd2372e01eebb0ddac45956  # v0.2.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_summary: 'true'
+          gerrit_summary: 'false'
+          artifact_upload: 'true'
+          artifact_formats: 'json'
+
+      - name: 'Install uv'
+        # yamllint disable-line rule:line-length
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b  # v8.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+          cache-suffix: "documentation"
 
       - name: 'Set up Python'
-        # yamllint disable-line rule:line-length
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-        with:
-          python-version: '3.13'
+        run: uv python install 3.13
 
-      - name: 'Check documentation dependencies'
-        id: docs-requirements
-        # yamllint disable-line rule:line-length
-        uses: lfreleng-actions/path-check-action@9606e61c870025bc956e63156d1d55c5df54426c # v0.2.0
-        with:
-          path: 'docs/requirements.txt'
+      # The docs build only renders CLI "--help" output via
+      # sphinxcontrib-programoutput; it does not install the optional
+      # "ldap" extra and the CLI falls back to a no-op "no_ldap" stub
+      # when python-ldap is unavailable. System packages for python-ldap
+      # (libldap2-dev / libsasl2-dev / build-essential) are therefore
+      # not required here and have been deliberately omitted to keep
+      # the build fast.
 
-      - name: 'Check for TOX configuration'
-        id: tox-ini
-        # yamllint disable-line rule:line-length
-        uses: lfreleng-actions/path-check-action@9606e61c870025bc956e63156d1d55c5df54426c # v0.2.0
-        with:
-          path: 'tox.ini'
+      - name: 'Sync project (with docs extras)'
+        run: uv sync --extra docs --extra openstack
 
-      - name: 'Install documentation dependencies'
-        if: steps.docs-requirements.outputs.type == 'file'
+      - name: 'Resolve project version'
+        id: version
+        shell: bash
         run: |
-          # Install documentation dependencies
-          echo "Installing documentation dependencies"
-          pip --disable-pip-version-check install -r docs/requirements.txt
-          echo "Documentation dependencies installed ✅"
+          # Read the installed distribution version (set by hatch-vcs at
+          # install time). This is what Sphinx will pick up via
+          # importlib.metadata in docs/conf.py.
+          py='import importlib.metadata as m; print(m.version("lftools-uv"))'
+          version=$(uv run python -c "${py}")
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "Resolved project version: ${version}"
 
-      - name: 'Build documentation (tox/sphinx)'
-        if: steps.tox-ini.outputs.type == 'file'
+      - name: 'Build Sphinx documentation'
+        shell: bash
         run: |
-          # Build documentation (tox/sphinx)
-          pip --disable-pip-version-check install --upgrade tox
-          tox -e docs
-          echo "Tox documentation build ✅"
+          uv run sphinx-build -b html -n --keep-going \
+            -d docs/_build/doctrees \
+            docs/ docs/_build/html
 
-      - name: 'Publish documentation'
-        if: success()
+      - name: 'Upload Pages artifact'
         # yamllint disable-line rule:line-length
-        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4.0.0
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9  # v5.0.0
         with:
-          publish_branch: 'gh-pages'
-          # github_token: "${{ secrets.GITHUB_TOKEN }}"
-          github_token: "${{ github.token }}"
-          publish_dir: 'docs/_build/html/'
-          keep_files: true
+          path: 'docs/_build/html'
+
+      - name: 'Build summary'
+        if: always()
+        shell: bash
+        env:
+          PROJECT_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          {
+            echo "## 📚 Documentation build"
+            echo ""
+            echo "| Item | Value |"
+            echo "| ---- | ----- |"
+            echo "| Project version | \`${PROJECT_VERSION:-unknown}\` |"
+            echo "| Git ref | \`${GITHUB_REF}\` |"
+            echo "| Commit | \`${GITHUB_SHA}\` |"
+            echo "| Builder | Sphinx (\`uv run sphinx-build\`) |"
+            echo "| Output | \`docs/_build/html\` |"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  deploy:
+    name: 'Deploy to GitHub Pages'
+    needs: build
+    # Only deploy on push to the default branch, on a published release,
+    # or on manual dispatch. Pull requests should never deploy.
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || github.event_name == 'release'
+      || (github.event_name == 'push'
+          && (github.ref == 'refs/heads/main'
+              || github.ref == 'refs/heads/master'))
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    timeout-minutes: 10
+    steps:
+      # yamllint disable-line rule:line-length
+      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
+        with:
+          egress-policy: audit
+
+      - name: 'Configure Pages'
+        # yamllint disable-line rule:line-length
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d  # v6.0.0
+
+      - name: 'Deploy to GitHub Pages'
+        id: deployment
+        # yamllint disable-line rule:line-length
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128  # v5.0.0
+
+      - name: 'Deployment summary'
+        if: always()
+        shell: bash
+        env:
+          PROJECT_VERSION: ${{ needs.build.outputs.project-version }}
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          {
+            echo "## 🚀 GitHub Pages deployment"
+            echo ""
+            if [ -n "${PAGE_URL}" ]; then
+              echo "**Site:** [${PAGE_URL}](${PAGE_URL})"
+            else
+              echo "**Site:** _(deployment did not produce a URL)_"
+            fi
+            echo ""
+            echo "| Item | Value |"
+            echo "| ---- | ----- |"
+            echo "| Project version | \`${PROJECT_VERSION:-unknown}\` |"
+            echo "| Trigger | \`${GITHUB_EVENT_NAME}\` |"
+            echo "| Git ref | \`${GITHUB_REF}\` |"
+            echo "| Commit | \`${GITHUB_SHA}\` |"
+            echo ""
+            echo "_Read the Docs builds (if enabled) publish independently"
+            echo "via the \`.readthedocs.yml\` configuration._"
+          } >> "${GITHUB_STEP_SUMMARY}"
