@@ -279,6 +279,24 @@ a single Zulip server."
   purposes, the BEHAVIOR (probe and error with informative message) is the
   requirement, not a specific number.
 
+### Session 2026-05-01
+
+- Q: Should the `zulip` (python-zulip-api) package be a required or optional
+  dependency? → A: The `zulip` package MUST be an optional dependency under
+  `[project.optional-dependencies]`, installed via `pip install "lftools-uv[zulip]"`
+  or `uv pip install "lftools-uv[zulip]"`. The `lftools-uv zulip` command group
+  MUST still appear in help output when the extra is not installed. Running any
+  zulip subcommand without the extra installed MUST produce a clear error
+  and exit non-zero. The canonical error message is:
+
+  ```text
+  Zulip support requires the zulip extra. Install with:
+    pip install "lftools-uv[zulip]"
+  ```
+
+  The CLI MUST NOT crash with an ImportError. This follows the existing
+  `[project.optional-dependencies]` pattern in pyproject.toml.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - List Available Channels (Priority: P1)
@@ -1150,6 +1168,19 @@ and verifying it reappears in the active channel list.
   positional `[channel]` or `--channel-id`). This command requires runtime
   feature-level detection per FR-019; if the server does not support the topic
   policy feature, the command MUST return a clear feature-level error.
+- **FR-022**: The `lftools-uv zulip` command group MUST be registered in the CLI
+  regardless of whether the `zulip` optional extra is installed. When the extra
+  is NOT installed, the command group MUST still appear in `--help` output.
+  Running any zulip subcommand without the extra installed MUST produce the
+  following error and exit with a non-zero status:
+
+  ```text
+  Zulip support requires the zulip extra. Install with:
+    pip install "lftools-uv[zulip]"
+  ```
+
+  The CLI MUST NOT raise an unhandled `ImportError` or
+  `ModuleNotFoundError`.
 
 ### Key Entities
 
@@ -1253,8 +1284,9 @@ and verifying it reappears in the active channel list.
   management operations.
 - Only a single Zulip server needs to be managed per command invocation; multi-
   server support is out of scope.
-- An official supported Zulip client library will be added as a project
-  dependency.
+- The `zulip` (python-zulip-api) package is an **optional dependency**
+  installed via the `lftools-uv[zulip]` extra under
+  `[project.optional-dependencies]`. It is NOT a required dependency.
 - The implementation will integrate with existing lftools-uv API and CLI
   conventions for exposing commands and Zulip operations.
 - Channel operations use Zulip's REST API v1, which uses the term "streams"

@@ -7,7 +7,16 @@ SPDX-FileCopyrightText: 2026 The Linux Foundation
 
 ## Decision 1: Zulip Python Client Library
 
-**Decision**: Use the official `zulip` PyPI package as the Zulip API client.
+**Decision**: Use the official `zulip` PyPI package as the Zulip API client,
+declared as an optional dependency under `[project.optional-dependencies]`
+in pyproject.toml. Users install via `pip install "lftools-uv[zulip]"`.
+
+**Optional Dependency Model**: The `zulip` package is NOT a core
+dependency. It is gated behind the `zulip` extra to avoid pulling in
+Zulip-specific transitive dependencies for users who don't need Zulip
+features. When the extra is not installed, the CLI command group still
+appears in help output but any subcommand invocation produces a clear
+error directing users to install the extra (FR-022).
 
 **Rationale**: FR-013 mandates use of an official supported Zulip client
 library.
