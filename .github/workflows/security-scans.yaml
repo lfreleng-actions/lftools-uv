@@ -34,7 +34,7 @@ jobs:
     # yamllint disable-line rule:line-length
     uses: lfit/releng-reusable-workflows/.github/workflows/reuse-sonatype-lifecycle.yaml@2f4f1db634cdecc9af63d7946cb6b818ce590484 # v0.3.3
     with:
-      APPLICATION_ID: "bb7c7df5d19445cba258b6012b38bff3_lftools-uv"
+      APPLICATION_ID: "lftools-uv"
     secrets:
       NEXUS_IQ_PASSWORD: "${{ secrets.NEXUS_IQ_PASSWORD }}"
 
