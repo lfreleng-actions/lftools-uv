@@ -1100,8 +1100,8 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'" },
     { name = "nodeenv" },
     { name = "openstacksdk", specifier = ">=4.0.0,<5.0.0" },
-    { name = "osc-lib", marker = "extra == 'all'", specifier = ">=2.2,<4.6" },
-    { name = "osc-lib", marker = "extra == 'openstack'", specifier = ">=2.2,<4.6" },
+    { name = "osc-lib", marker = "extra == 'all'", specifier = ">=2.2,<4.7" },
+    { name = "osc-lib", marker = "extra == 'openstack'", specifier = ">=2.2,<4.7" },
     { name = "pbr" },
     { name = "platformdirs" },
     { name = "pre-commit", marker = "extra == 'all'" },
@@ -1592,7 +1592,7 @@ wheels = [
 
 [[package]]
 name = "osc-lib"
-version = "4.5.0"
+version = "4.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cliff" },
@@ -1604,9 +1604,9 @@ dependencies = [
     { name = "requests" },
     { name = "stevedore" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1a/cb/d96dc7cfcfcc23025997e647bfe73269946da89b366e05d48ff0c71dda76/osc_lib-4.5.0.tar.gz", hash = "sha256:9eae7a4c391bac502fbaa17c508f423f31f2d060ba99e09c3e011c46e83a7a24", size = 105164, upload-time = "2026-04-14T12:04:20.067Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/16/f9/e9815fb7ea7c559b033c1c458da8f05e704571bd625526d60f90c9f02f20/osc_lib-4.6.0.tar.gz", hash = "sha256:b2588feb50c4192ebacf51f95c51278eb709c8217b36cb72c667958bbfeece3e", size = 105274, upload-time = "2026-05-05T11:37:28.352Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/70/88/c21b22a2df4c84abf81d93170e085c24f6346c9e407b4e77ceeaeb923c6e/osc_lib-4.5.0-py3-none-any.whl", hash = "sha256:daa096fe9b767ffbd1bbc69a2f3cae7313afbce58887c649dca21ac860496a04", size = 96908, upload-time = "2026-04-14T12:04:18.846Z" },
+    { url = "https://files.pythonhosted.org/packages/5d/1d/f5f325100f77b62e983a2b0d21ed860093574ba1a7bc66fb845f1ee1e38a/osc_lib-4.6.0-py3-none-any.whl", hash = "sha256:b896217bcb175e29f41f84d05b5b4b7163269cd6a7f873cc71b17a991b5b0055", size = 96980, upload-time = "2026-05-05T11:37:26.864Z" },
 ]
 
 [[package]]

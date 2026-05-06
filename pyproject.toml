@@ -110,7 +110,7 @@ ldap = [
 ]
 
 openstack = [
-    "osc-lib>=2.2,<4.6"
+    "osc-lib>=2.2,<4.7"
 ]
 
 test = [
