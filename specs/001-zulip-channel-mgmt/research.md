@@ -9,7 +9,8 @@ SPDX-FileCopyrightText: 2026 The Linux Foundation
 
 **Decision**: Use the official `zulip` PyPI package as the Zulip API client,
 declared as an optional dependency under `[project.optional-dependencies]`
-in pyproject.toml. Users install via `pip install "lftools-uv[zulip]"`.
+in pyproject.toml. Users install via `pip install "lftools-uv[zulip]"`
+(or `uv pip install "lftools-uv[zulip]"`).
 
 **Optional Dependency Model**: The `zulip` package is NOT a core
 dependency. It is gated behind the `zulip` extra to avoid pulling in
