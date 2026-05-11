@@ -154,8 +154,12 @@ def _request_put_file(
     url: str,
     file_to_upload: str,
     parameters: dict[str, object] | None = None,
-) -> bool:
-    """Execute a request put, return the resp."""
+) -> None:
+    """Execute a request put.
+
+    Returns nothing on success. Raises ``requests.HTTPError`` (or
+    ``FileNotFoundError`` if the local file is missing) on failure.
+    """
     resp: requests.Response | None = None
     try:
         upload_file = open(file_to_upload, "rb")  # noqa: PTH123, SIM115
@@ -179,12 +183,12 @@ def _request_put_file(
     except requests.exceptions.InvalidURL as err:
         raise requests.HTTPError(f"Invalid URL format: {url}") from err
     except requests.RequestException as err:
-        log.error(err)
-        raise requests.HTTPError(f"Request error during PUT to {url}") from err
+        # Caller (deploy_nexus) logs the wrapped HTTPError once; avoid
+        # duplicate logging here. The original exception is preserved as
+        # the cause via 'raise ... from err' for diagnostics.
+        raise requests.HTTPError(f"Request error during PUT to {url}: {err}") from err
 
     assert resp is not None  # noqa: S101
-    if resp.status_code == 201:
-        return True
     if resp.status_code == 400:
         raise requests.HTTPError("Repository is read only")
     if resp.status_code == 401:
@@ -196,7 +200,6 @@ def _request_put_file(
         raise requests.HTTPError(
             f"Failed to upload to Nexus with status code: {resp.status_code}.\n{resp.text}\n{file_to_upload}"
         )
-    return True
 
 
 def _get_node_from_xml(xml_data: str, tag_name: str) -> str:
@@ -866,14 +869,11 @@ def deploy_nexus(nexus_repo_url: str, deploy_dir: str, snapshot: bool = False, w
         s: float = round(bytesize / p, 2)
         return f"{s} {suffix[i]}"
 
-    def _deploy_nexus_upload(file: str) -> bool:
+    def _deploy_nexus_upload(file: str) -> None:
         # Fix file path, and call _request_put_file.
         nexus_url_with_file: str = f"{_format_url(nexus_repo_url)}/{file}"
         log.info("Attempting to upload %s (%s)", file, _get_filesize(file))
-        if _request_put_file(nexus_url_with_file, file):
-            return True
-        else:
-            return False
+        _request_put_file(nexus_url_with_file, file)
 
     file_list: list[str] = []
     previous_dir: str = os.getcwd()
@@ -896,32 +896,44 @@ def deploy_nexus(nexus_repo_url: str, deploy_dir: str, snapshot: bool = False, w
     log.info("#######################################################")
     log.info("Deploying directory %s to %s", deploy_dir, nexus_repo_url)
 
+    failed_uploads: list[tuple[str, str]] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
         # this creates a dict where the key is the Future object, and the value is the file name
         # see concurrent.futures.Future for more info
-        futures: dict[concurrent.futures.Future[bool], str] = {
+        futures: dict[concurrent.futures.Future[None], str] = {
             executor.submit(_deploy_nexus_upload, file_name): file_name for file_name in file_list
         }
         for future in concurrent.futures.as_completed(futures):
             filename: str = futures[future]
             try:
-                _ = future.result()
+                future.result()
             except Exception as e:
-                log.error("Uploading %s: %s", filename, e)
-
-        # wait until all threads complete (successfully or not)
-        # then log the results of the upload threads
-        _ = concurrent.futures.wait(futures)
-        for k, v in futures.items():
-            if k.result():
-                log.info("Successfully uploaded %s", v)
+                log.error("FAILURE: Uploading %s failed: %s", filename, e)
+                failed_uploads.append((filename, str(e)))
             else:
-                log.error("FAILURE: Uploading %s failed", v)
+                log.info("Successfully uploaded %s", filename)
 
-    log.info("Finished deploying %s to %s", deploy_dir, nexus_repo_url)
+    if failed_uploads:
+        log.error(
+            "Completed deploying %s to %s with %d failure(s)",
+            deploy_dir,
+            nexus_repo_url,
+            len(failed_uploads),
+        )
+    else:
+        log.info("Finished deploying %s to %s", deploy_dir, nexus_repo_url)
     log.info("#######################################################")
 
     os.chdir(previous_dir)
+
+    if failed_uploads:
+        # Surface a single aggregated failure to callers (CLI front-ends rely
+        # on a raised exception to exit non-zero). Per-file errors are
+        # already logged above.
+        summary: str = "; ".join(f"{name}: {err}" for name, err in failed_uploads)
+        raise requests.HTTPError(
+            f"Failed to upload {len(failed_uploads)} of {len(file_list)} file(s) to {nexus_repo_url}: {summary}"
+        )
 
 
 def deploy_nexus_stage(nexus_url: str, staging_profile_id: str, deploy_dir: str) -> None:
