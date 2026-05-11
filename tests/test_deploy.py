@@ -808,6 +808,47 @@ def test_deploy_nexus_nosnapshot(datafiles, responses):
 @pytest.mark.datafiles(
     os.path.join(FIXTURE_DIR, "deploy"),
 )
+def test_deploy_nexus_partial_failure(datafiles, responses):
+    """Test deploy_nexus raises when one or more uploads fail.
+
+    CLI front-ends rely on deploy_nexus raising to exit non-zero. The
+    function should attempt every file (best-effort), then aggregate
+    failures into a single raised HTTPError after the upload pool
+    drains.
+    """
+    os.chdir(str(datafiles))
+    nexus_url = "http://partial.failure.nexus.deploy/nexus/content/repositories/releases"
+    deploy_dir = "m2repo"
+
+    test_files = [
+        "4.0.3-SNAPSHOT/odlparent-lite-4.0.3-20181120.113136-1.pom",
+        "4.0.3-SNAPSHOT/odlparent-lite-4.0.3-20181120.113136-1.pom.sha1",
+        "4.0.3-SNAPSHOT/odlparent-lite-4.0.3-20181120.113136-1.pom.md5",
+    ]
+    # First file uploads successfully; the other two get 500 responses.
+    for index, file in enumerate(test_files):
+        url = f"{nexus_url}/{file}"
+        responses.add(responses.PUT, url, status=201 if index == 0 else 500)
+
+    with pytest.raises(requests.HTTPError) as excinfo:
+        deploy_sys.deploy_nexus(nexus_url, deploy_dir)
+
+    message = str(excinfo.value)
+    assert "Failed to upload" in message
+    assert "2 of 3" in message
+    # Successful file should not appear as a failure entry in the
+    # aggregated summary. The summary format is 'name: error', so check
+    # for the failure-marker form to avoid prefix collisions with the
+    # other test filenames (which share '...113136-1.pom' as a prefix).
+    assert f"{test_files[0]}:" not in message
+    # Both failed filenames should be referenced in the aggregated message.
+    assert test_files[1] in message
+    assert test_files[2] in message
+
+
+@pytest.mark.datafiles(
+    os.path.join(FIXTURE_DIR, "deploy"),
+)
 def test_deploy_nexus_stage(datafiles, responses):
     """Test deploy_nexus_stage."""
     url = "http://valid.deploy.stage"
