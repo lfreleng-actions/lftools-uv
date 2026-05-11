@@ -8,6 +8,18 @@ SPDX-FileCopyrightText: 2026 The Linux Foundation
 This document defines the public CLI interface contracts for all Zulip
 channel management commands.
 
+## Optional Dependency
+
+The `zulip` command group requires the `zulip` optional extra. Install
+with `pip install "lftools-uv[zulip]"` or `uv pip install "lftools-uv[zulip]"`.
+When the extra is not installed, the command group still appears in CLI
+help but running any subcommand produces a user-friendly error:
+
+```text
+Zulip support requires the zulip extra. Install with:
+  pip install "lftools-uv[zulip]"
+```
+
 ## Global Options (all zulip commands)
 
 | Option         | Type   | Required | Description                             |
