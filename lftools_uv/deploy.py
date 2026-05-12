@@ -518,11 +518,11 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
         text_plain_extra_args: dict[str, str] = _extra_args(_CONTENT_TYPE_TEXT)
         app_xml_extra_args: dict[str, str] = _extra_args(_CONTENT_TYPE_XML)
         if file == "_tmpfile":
-            for dir in (logs_dir, silo_dir, jenkins_node_dir):
+            for prefix in (logs_dir, silo_dir, jenkins_node_dir):
                 try:
-                    s3.Bucket(s3_bucket).upload_file(file, f"{dir}{file}")
+                    s3.Bucket(s3_bucket).upload_file(file, f"{prefix}{file}")
                 except ClientError:
-                    log.exception("Failed to upload _tmpfile marker to %s", dir)
+                    log.exception("Failed to upload _tmpfile marker to %s", prefix)
                     return False
             return True
         if mime_type is None and mime_encoding is None:
