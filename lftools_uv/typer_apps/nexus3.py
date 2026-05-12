@@ -81,7 +81,7 @@ def asset_list(ctx: typer.Context, repository: str = typer.Argument(..., help="R
         for item in data:
             log.info(pformat(item))
     except Exception as e:
-        log.error(f"Failed to list assets: {e}")
+        log.exception(f"Failed to list assets: {e}")
         raise typer.Exit(1) from None
 
 
@@ -103,7 +103,7 @@ def asset_search(
             for item in data:
                 log.info(item)
     except Exception as e:
-        log.error(f"Failed to search assets: {e}")
+        log.exception(f"Failed to search assets: {e}")
         raise typer.Exit(1) from None
 
 
@@ -116,7 +116,7 @@ def list_privileges(ctx: typer.Context) -> None:
         data = r.list_privileges()
         log.info(tabulate(data, headers=["Type", "Name", "Description", "Read Only"]))
     except Exception as e:
-        log.error(f"Failed to list privileges: {e}")
+        log.exception(f"Failed to list privileges: {e}")
         raise typer.Exit(1) from None
 
 
@@ -129,7 +129,7 @@ def list_repositories(ctx: typer.Context) -> None:
         data = r.list_repositories()
         log.info(pformat(data))
     except Exception as e:
-        log.error(f"Failed to list repositories: {e}")
+        log.exception(f"Failed to list repositories: {e}")
         raise typer.Exit(1) from None
 
 
@@ -142,7 +142,7 @@ def list_roles(ctx: typer.Context) -> None:
         data = r.list_roles()
         log.info(tabulate(data, headers=["Roles"]))
     except Exception as e:
-        log.error(f"Failed to list roles: {e}")
+        log.exception(f"Failed to list roles: {e}")
         raise typer.Exit(1) from None
 
 
@@ -160,7 +160,7 @@ def create_role(
         data = r.create_role(name, description, privileges, roles)
         log.info(pformat(data))
     except Exception as e:
-        log.error(f"Failed to create role: {e}")
+        log.exception(f"Failed to create role: {e}")
         raise typer.Exit(1) from None
 
 
@@ -177,7 +177,7 @@ def create_script(
         data = r.create_script(name, filename)
         log.info(data)
     except Exception as e:
-        log.error(f"Failed to create script: {e}")
+        log.exception(f"Failed to create script: {e}")
         raise typer.Exit(1) from None
 
 
@@ -192,7 +192,7 @@ def delete_script(
         data = r.delete_script(name)
         log.info(data)
     except Exception as e:
-        log.error(f"Failed to delete script: {e}")
+        log.exception(f"Failed to delete script: {e}")
         raise typer.Exit(1) from None
 
 
@@ -204,7 +204,7 @@ def list_scripts(ctx: typer.Context) -> None:
         data = r.list_scripts()
         log.info(data)
     except Exception as e:
-        log.error(f"Failed to list scripts: {e}")
+        log.exception(f"Failed to list scripts: {e}")
         raise typer.Exit(1) from None
 
 
@@ -219,7 +219,7 @@ def read_script(
         data = r.read_script(name)
         log.info(data)
     except Exception as e:
-        log.error(f"Failed to read script: {e}")
+        log.exception(f"Failed to read script: {e}")
         raise typer.Exit(1) from None
 
 
@@ -234,7 +234,7 @@ def run_script(
         data = r.run_script(name)
         log.info(data)
     except Exception as e:
-        log.error(f"Failed to run script: {e}")
+        log.exception(f"Failed to run script: {e}")
         raise typer.Exit(1) from None
 
 
@@ -250,7 +250,7 @@ def update_script(
         data = r.update_script(name, content)
         log.info(data)
     except Exception as e:
-        log.error(f"Failed to update script: {e}")
+        log.exception(f"Failed to update script: {e}")
         raise typer.Exit(1) from None
 
 
@@ -267,7 +267,7 @@ def add_tag(
         data = r.create_tag(name, attributes)
         log.info(pformat(data))
     except Exception as e:
-        log.error(f"Failed to add tag: {e}")
+        log.exception(f"Failed to add tag: {e}")
         raise typer.Exit(1) from None
 
 
@@ -282,7 +282,7 @@ def delete_tag(
         data = r.delete_tag(name)
         log.info(pformat(data))
     except Exception as e:
-        log.error(f"Failed to delete tag: {e}")
+        log.exception(f"Failed to delete tag: {e}")
         raise typer.Exit(1) from None
 
 
@@ -294,7 +294,7 @@ def list_tags(ctx: typer.Context) -> None:
         data = r.list_tags()
         log.info(pformat(data))
     except Exception as e:
-        log.error(f"Failed to list tags: {e}")
+        log.exception(f"Failed to list tags: {e}")
         raise typer.Exit(1) from None
 
 
@@ -309,7 +309,7 @@ def show_tag(
         data = r.show_tag(name)
         log.info(pformat(data))
     except Exception as e:
-        log.error(f"Failed to show tag: {e}")
+        log.exception(f"Failed to show tag: {e}")
         raise typer.Exit(1) from None
 
 
@@ -327,7 +327,7 @@ def list_tasks(ctx: typer.Context) -> None:
             )
         )
     except Exception as e:
-        log.error(f"Failed to list tasks: {e}")
+        log.exception(f"Failed to list tasks: {e}")
         raise typer.Exit(1) from None
 
 
@@ -355,7 +355,7 @@ def search_user(
             )
         )
     except Exception as e:
-        log.error(f"Failed to search user: {e}")
+        log.exception(f"Failed to search user: {e}")
         raise typer.Exit(1) from None
 
 
@@ -375,7 +375,7 @@ def user_create(
         data = r.create_user(username, first_name, last_name, email_address, roles, password)
         log.info(data)
     except Exception as e:
-        log.error(f"Failed to create user: {e}")
+        log.exception(f"Failed to create user: {e}")
         raise typer.Exit(1) from None
 
 
@@ -390,5 +390,5 @@ def user_delete(
         data = r.delete_user(username)
         log.info(data)
     except Exception as e:
-        log.error(f"Failed to delete user: {e}")
+        log.exception(f"Failed to delete user: {e}")
         raise typer.Exit(1) from None

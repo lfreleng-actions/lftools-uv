@@ -221,7 +221,7 @@ def sync_committers(ctx, id, info_file, ldap_file, repo):
         try:
             yaml.safe_load(stream)
         except yaml.YAMLError as exc:
-            log.error(exc)
+            log.exception(exc)
 
     with open(info_file) as f:
         info_data = ryaml.load(f)
@@ -299,7 +299,7 @@ def check_votes(ctx, info_file, endpoint, change_number, tsc, github_repo):
             try:
                 info_data = yaml.safe_load(file)
             except yaml.YAMLError as exc:
-                log.error(exc)
+                log.exception(exc)
                 sys.exit(1)
 
         committer_info = info_data["committers"]

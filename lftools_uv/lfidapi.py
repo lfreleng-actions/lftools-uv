@@ -61,7 +61,7 @@ def helper_search_members(group: str) -> list[dict[str, str]] | None:
         try:
             check_response_code(response)
         except requests.HTTPError as e:
-            log.error(e)
+            log.exception(e)
             exit(1)
         result = response.json()
         members: list[dict[str, str]] = result["members"]
@@ -87,7 +87,7 @@ def helper_user(user: str, group: str, delete: bool | str) -> None:
     try:
         check_response_code(response)
     except requests.HTTPError as e:
-        log.error(e)
+        log.exception(e)
         exit(1)
     # Avoid logging PII - only log operation success
     log.debug("User operation completed successfully")
@@ -114,7 +114,7 @@ def helper_invite(email: str, group: str) -> None:
     try:
         check_response_code(response)
     except requests.HTTPError as e:
-        log.error(e)
+        log.exception(e)
         exit(1)
     # Avoid logging PII - only log operation success
     log.debug("Invite operation completed successfully")
@@ -136,7 +136,7 @@ def helper_create_group(group: str) -> None:
         try:
             check_response_code(response)
         except requests.HTTPError as e:
-            log.error(e)
+            log.exception(e)
             exit(1)
         # Avoid logging potentially sensitive response data
         log.debug("Group creation completed successfully")

@@ -78,7 +78,7 @@ def jenkins_callback(
         if state:
             state.jenkins = jenkins_client
     except Exception as e:
-        log.error(f"Failed to initialize Jenkins client: {e}")
+        log.exception(f"Failed to initialize Jenkins client: {e}")
         # For help requests, don't fail - just continue without initializing client
         if ctx.obj is None:
             ctx.obj = {}
@@ -110,7 +110,7 @@ for (c in creds) {
         result = jenkins.server.run_script(groovy_script)
         log.info(result)
     except Exception as e:
-        log.error(f"Failed to get credentials: {e}")
+        log.exception(f"Failed to get credentials: {e}")
         raise typer.Exit(1) from None
 
 
@@ -139,7 +139,7 @@ for (c in creds) {
         result = jenkins.server.run_script(groovy_script)
         log.info(result)
     except Exception as e:
-        log.error(f"Failed to get secrets: {e}")
+        log.exception(f"Failed to get secrets: {e}")
         raise typer.Exit(1) from None
 
 
@@ -172,7 +172,7 @@ for (c in creds) {
         result = jenkins.server.run_script(groovy_script)
         log.info(result)
     except Exception as e:
-        log.error(f"Failed to get private keys: {e}")
+        log.exception(f"Failed to get private keys: {e}")
         raise typer.Exit(1) from None
 
 
@@ -190,7 +190,7 @@ def groovy(ctx: typer.Context, groovy_file: str = typer.Argument(..., help="Path
         log.error(f"Groovy file not found: {groovy_file}")
         raise typer.Exit(1) from None
     except Exception as e:
-        log.error(f"Failed to run groovy script: {e}")
+        log.exception(f"Failed to run groovy script: {e}")
         raise typer.Exit(1) from None
 
 
@@ -215,15 +215,15 @@ def quiet_down(
         jenkins.server.quiet_down()
     except HTTPError as m:
         if m.code == 405:
-            log.error(
+            log.exception(
                 f"\n[{m}]\nJenkins {version} does not support Quiet Down without a CSRF Token. (CVE-2017-04-26)\nPlease file a bug with 'python-jenkins'"
             )
             raise typer.Exit(1) from None
         else:
-            log.error(f"HTTP error: {m}")
+            log.exception(f"HTTP error: {m}")
             raise typer.Exit(1) from None
     except Exception as e:
-        log.error(f"Failed to quiet down Jenkins: {e}")
+        log.exception(f"Failed to quiet down Jenkins: {e}")
         raise typer.Exit(1) from None
 
 
@@ -296,7 +296,7 @@ for (node in Jenkins.instance.computers) {
             result = jenkins.server.run_script(groovy_script)
         log.info(result)
     except Exception as e:
-        log.error(f"Failed to remove offline nodes: {e}")
+        log.exception(f"Failed to remove offline nodes: {e}")
         raise typer.Exit(1) from None
 
 
@@ -311,7 +311,7 @@ def builds_running(ctx: typer.Context) -> None:
         for build in running_builds:
             log.info("- %s on %s", build["name"], build["node"])
     except Exception as e:
-        log.error(f"Failed to get running builds: {e}")
+        log.exception(f"Failed to get running builds: {e}")
         raise typer.Exit(1) from None
 
 
@@ -332,7 +332,7 @@ def builds_queued(ctx: typer.Context) -> None:
                 status_flags.append("[Blocked]")
             log.info(" - %s%s", build["task"]["name"], (" " + " ".join(status_flags)) if status_flags else "")
     except Exception as e:
-        log.error(f"Failed to get queued builds: {e}")
+        log.exception(f"Failed to get queued builds: {e}")
         raise typer.Exit(1) from None
 
 
@@ -367,7 +367,7 @@ def jobs_enable(ctx: typer.Context, regex: str = typer.Argument(..., help="Regex
         result = jenkins.server.run_script(enable_disable_jobs.format(regex, "enable"))
         log.info(result)
     except Exception as e:
-        log.error(f"Failed to enable jobs: {e}")
+        log.exception(f"Failed to enable jobs: {e}")
         raise typer.Exit(1) from None
 
 
@@ -379,7 +379,7 @@ def jobs_disable(ctx: typer.Context, regex: str = typer.Argument(..., help="Rege
         result = jenkins.server.run_script(enable_disable_jobs.format(regex, "disable"))
         log.info(result)
     except Exception as e:
-        log.error(f"Failed to disable jobs: {e}")
+        log.exception(f"Failed to disable jobs: {e}")
         raise typer.Exit(1) from None
 
 
@@ -401,7 +401,7 @@ def nodes_list(ctx: typer.Context) -> None:
         for node in node_list:
             log.info("%s [%s]", node["name"], offline_str(node["offline"]))
     except Exception as e:
-        log.error(f"Failed to list nodes: {e}")
+        log.exception(f"Failed to list nodes: {e}")
         raise typer.Exit(1) from None
 
 
@@ -432,7 +432,7 @@ def plugins_list(ctx: typer.Context) -> None:
             plugin = plugins[plugin_name]
             print_plugin(plugin)
     except Exception as e:
-        log.error(f"Failed to list plugins: {e}")
+        log.exception(f"Failed to list plugins: {e}")
         raise typer.Exit(1) from None
 
 
@@ -448,7 +448,7 @@ def plugins_pinned(ctx: typer.Context) -> None:
             if plugin["pinned"]:
                 print_plugin(plugin)
     except Exception as e:
-        log.error(f"Failed to list pinned plugins: {e}")
+        log.exception(f"Failed to list pinned plugins: {e}")
         raise typer.Exit(1) from None
 
 
@@ -464,7 +464,7 @@ def plugins_dynamic(ctx: typer.Context) -> None:
             if plugin["supportsDynamicLoad"] == "YES":
                 print_plugin(plugin)
     except Exception as e:
-        log.error(f"Failed to list dynamic plugins: {e}")
+        log.exception(f"Failed to list dynamic plugins: {e}")
         raise typer.Exit(1) from None
 
 
@@ -480,7 +480,7 @@ def plugins_needs_update(ctx: typer.Context) -> None:
             if plugin["hasUpdate"]:
                 print_plugin(plugin)
     except Exception as e:
-        log.error(f"Failed to list plugins needing updates: {e}")
+        log.exception(f"Failed to list plugins needing updates: {e}")
         raise typer.Exit(1) from None
 
 
@@ -496,7 +496,7 @@ def plugins_enabled(ctx: typer.Context) -> None:
             if plugin["enabled"]:
                 print_plugin(plugin)
     except Exception as e:
-        log.error(f"Failed to list enabled plugins: {e}")
+        log.exception(f"Failed to list enabled plugins: {e}")
         raise typer.Exit(1) from None
 
 
@@ -516,7 +516,7 @@ def plugins_disabled(ctx: typer.Context) -> None:
             if not plugin["enabled"]:
                 print_plugin(plugin)
     except Exception as e:
-        log.error(f"Failed to list disabled plugins: {e}")
+        log.exception(f"Failed to list disabled plugins: {e}")
         raise typer.Exit(1) from None
 
 
@@ -532,7 +532,7 @@ def plugins_active(ctx: typer.Context) -> None:
             if plugin["active"]:
                 print_plugin(plugin)
     except Exception as e:
-        log.error(f"Failed to list active plugins: {e}")
+        log.exception(f"Failed to list active plugins: {e}")
         raise typer.Exit(1) from None
 
 
@@ -591,7 +591,7 @@ def plugins_sec(ctx: typer.Context) -> None:
                     if name == key and secdict[key] == lastversion:
                         log.info("%s:%s\t%s:%s\t%s", key, secdict[key], key, activedict[key], url)
     except Exception as e:
-        log.error(f"Failed to check plugin security: {e}")
+        log.exception(f"Failed to check plugin security: {e}")
         raise typer.Exit(1) from None
 
 
@@ -619,7 +619,7 @@ def token_change(
 
         log.info(get_token(name, jenkins.url, username=username, password=password, change=True))
     except Exception as e:
-        log.error(f"Failed to change token: {e}")
+        log.exception(f"Failed to change token: {e}")
         raise typer.Exit(1) from None
 
 
@@ -648,7 +648,7 @@ def token_init(
         try:
             config.add_section(name)
         except configparser.DuplicateSectionError as e:
-            log.error(e)
+            log.exception(e)
             raise typer.Exit(1) from None
 
         config.set(name, "url", url)
@@ -662,7 +662,7 @@ def token_init(
         with open(jenkins.config_file, "w") as configfile:
             config.write(configfile)
     except Exception as e:
-        log.error(f"Failed to initialize token: {e}")
+        log.exception(f"Failed to initialize token: {e}")
         raise typer.Exit(1) from None
 
 
@@ -680,7 +680,7 @@ def token_print(ctx: typer.Context) -> None:
 
         log.info(get_token("token", jenkins.url, username, password))
     except Exception as e:
-        log.error(f"Failed to print token: {e}")
+        log.exception(f"Failed to print token: {e}")
         raise typer.Exit(1) from None
 
 
@@ -753,5 +753,5 @@ def token_reset(
         log.info(f"Success: {success}")
         log.info(f"Failed: {fail}")
     except Exception as e:
-        log.error(f"Failed to reset tokens: {e}")
+        log.exception(f"Failed to reset tokens: {e}")
         raise typer.Exit(1) from None

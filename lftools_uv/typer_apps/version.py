@@ -80,7 +80,7 @@ def bump(
         subprocess.run(["version", "bump", release_tag], check=True, capture_output=False)
         typer.echo(f"Version bump completed successfully for release tag: {release_tag}")
     except subprocess.CalledProcessError as e:
-        log.error(f"Version bump failed with exit code {e.returncode}")
+        log.exception(f"Version bump failed with exit code {e.returncode}")
         typer.echo(f"Error: Version bump failed with exit code {e.returncode}", err=True)
         raise typer.Exit(e.returncode) from None
     except FileNotFoundError:
@@ -110,7 +110,7 @@ def release(
         subprocess.run(["version", "release", release_tag], check=True, capture_output=False)
         typer.echo(f"Version release completed successfully for tag: {release_tag}")
     except subprocess.CalledProcessError as e:
-        log.error(f"Version release failed with exit code {e.returncode}")
+        log.exception(f"Version release failed with exit code {e.returncode}")
         typer.echo(f"Error: Version release failed with exit code {e.returncode}", err=True)
         raise typer.Exit(e.returncode) from None
     except FileNotFoundError:
@@ -150,7 +150,7 @@ def patch(
         subprocess.run(["version", "patch", release_tag, patch_dir, project], check=True, capture_output=False)
         typer.echo(f"Version patch completed successfully for release tag: {release_tag}")
     except subprocess.CalledProcessError as e:
-        log.error(f"Version patch failed with exit code {e.returncode}")
+        log.exception(f"Version patch failed with exit code {e.returncode}")
         typer.echo(f"Error: Version patch failed with exit code {e.returncode}", err=True)
         raise typer.Exit(e.returncode) from None
     except FileNotFoundError:

@@ -159,10 +159,10 @@ def maven_file(
         typer.echo(f"Deploy Maven file {file_name} to {nexus_url}")
         typer.echo("Note: This functionality needs to be implemented")
     except FileNotFoundError as e:
-        log.error("Maven binary not found: %s", e)
+        log.exception("Maven binary not found: %s", e)
         raise typer.Exit(127) from None
     except Exception as e:
-        log.error("Maven deployment failed: %s", e)
+        log.exception("Maven deployment failed: %s", e)
         raise typer.Exit(1) from None
 
 
@@ -182,10 +182,10 @@ def nexus(
     try:
         deploy_sys.deploy_nexus(nexus_repo_url, deploy_dir, snapshot)
     except HTTPError as e:
-        log.error(str(e))
+        log.exception(str(e))
         raise typer.Exit(1) from None
     except OSError as e:
-        log.error(str(e))
+        log.exception(str(e))
         raise typer.Exit(1) from None
 
 
@@ -241,10 +241,10 @@ def nexus_zip(
     try:
         deploy_sys.deploy_nexus_zip(nexus_url, nexus_repo, nexus_path, deploy_zip)
     except HTTPError as e:
-        log.error(str(e))
+        log.exception(str(e))
         raise typer.Exit(1) from None
     except OSError as e:
-        log.error(str(e))
+        log.exception(str(e))
         raise typer.Exit(1) from None
 
     log.info("Zip file upload complete.")

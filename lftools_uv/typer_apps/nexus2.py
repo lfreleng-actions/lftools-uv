@@ -70,7 +70,7 @@ def privilege_list(ctx: typer.Context) -> None:
         data = r.privilege_list()
         log.info(tabulate(data, headers=["Name", "ID"]))
     except Exception as e:
-        log.error(f"Failed to list privileges: {e}")
+        log.exception(f"Failed to list privileges: {e}")
         raise typer.Exit(1) from None
 
 
@@ -87,7 +87,7 @@ def privilege_create(
         data = r.privilege_create(name, description, repo)
         log.info(data)
     except Exception as e:
-        log.error(f"Failed to create privilege: {e}")
+        log.exception(f"Failed to create privilege: {e}")
         raise typer.Exit(1) from None
 
 
@@ -102,7 +102,7 @@ def privilege_delete(
         data = r.privilege_delete(privilege_id)
         log.info(data)
     except Exception as e:
-        log.error(f"Failed to delete privilege: {e}")
+        log.exception(f"Failed to delete privilege: {e}")
         raise typer.Exit(1) from None
 
 
@@ -115,7 +115,7 @@ def repo_list(ctx: typer.Context) -> None:
         data = r.repo_list()
         log.info(tabulate(data, headers=["Name", "Type", "Provider", "ID"]))
     except Exception as e:
-        log.error(f"Failed to list repositories: {e}")
+        log.exception(f"Failed to list repositories: {e}")
         raise typer.Exit(1) from None
 
 
@@ -135,7 +135,7 @@ def repo_create(
         data = r.repo_create(repo_type, repo_id, repo_name, repo_provider, repo_policy, repo_upstream_url)
         log.info(data)
     except Exception as e:
-        log.error(f"Failed to create repository: {e}")
+        log.exception(f"Failed to create repository: {e}")
         raise typer.Exit(1) from None
 
 
@@ -150,7 +150,7 @@ def repo_delete(
         data = r.repo_delete(repo_id)
         log.info(data)
     except Exception as e:
-        log.error(f"Failed to delete repository: {e}")
+        log.exception(f"Failed to delete repository: {e}")
         raise typer.Exit(1) from None
 
 
@@ -163,7 +163,7 @@ def role_list(ctx: typer.Context) -> None:
         data = r.role_list()
         log.info(tabulate(data, headers=["ID", "Name", "Roles", "Privileges"], tablefmt="grid"))
     except Exception as e:
-        log.error(f"Failed to list roles: {e}")
+        log.exception(f"Failed to list roles: {e}")
         raise typer.Exit(1) from None
 
 
@@ -182,7 +182,7 @@ def role_create(
         data = r.role_create(role_id, role_name, role_description, roles_list, privileges_list)
         log.info(data)
     except Exception as e:
-        log.error(f"Failed to create role: {e}")
+        log.exception(f"Failed to create role: {e}")
         raise typer.Exit(1) from None
 
 
@@ -197,7 +197,7 @@ def role_delete(
         data = r.role_delete(role_id)
         log.info(data)
     except Exception as e:
-        log.error(f"Failed to delete role: {e}")
+        log.exception(f"Failed to delete role: {e}")
         raise typer.Exit(1) from None
 
 
@@ -210,7 +210,7 @@ def user_list(ctx: typer.Context) -> None:
         data = r.user_list()
         log.info(tabulate(data, headers=["ID", "First Name", "Last Name", "Status", "Roles"]))
     except Exception as e:
-        log.error(f"Failed to list users: {e}")
+        log.exception(f"Failed to list users: {e}")
         raise typer.Exit(1) from None
 
 
@@ -230,7 +230,7 @@ def user_create(
         data = r.user_create(username, firstname, lastname, email, roles, password)
         log.info(data)
     except Exception as e:
-        log.error(f"Failed to create user: {e}")
+        log.exception(f"Failed to create user: {e}")
         raise typer.Exit(1) from None
 
 
@@ -245,5 +245,5 @@ def user_delete(
         data = r.user_delete(username)
         log.info(data)
     except Exception as e:
-        log.error(f"Failed to delete user: {e}")
+        log.exception(f"Failed to delete user: {e}")
         raise typer.Exit(1) from None

@@ -62,7 +62,7 @@ def archives(ctx, nexus_url, nexus_path, workspace, pattern):
     try:
         deploy_sys.deploy_archives(nexus_url, nexus_path, workspace, pattern)
     except HTTPError as e:
-        log.error(str(e))
+        log.exception(str(e))
         sys.exit(1)
     except OSError as e:
         deploy_sys._log_error_and_exit(str(e))
@@ -108,7 +108,7 @@ def file(ctx, nexus_url, nexus_repo_id, group_id, artifact_id, version, packagin
             nexus_url, nexus_repo_id, group_id, artifact_id, version, packaging, file, classifier
         )
     except HTTPError as e:
-        log.error(str(e))
+        log.exception(str(e))
         sys.exit(1)
 
     log.info("Upload maven file to nexus completed.")
@@ -131,7 +131,7 @@ def logs(ctx, nexus_url, nexus_path, build_url):
     try:
         deploy_sys.deploy_logs(nexus_url, nexus_path, build_url)
     except HTTPError as e:
-        log.error(str(e))
+        log.exception(str(e))
         sys.exit(1)
 
     log.info("Logs upload complete.")
@@ -307,10 +307,10 @@ def nexus_zip(ctx, nexus_url, nexus_repo, nexus_path, deploy_zip):
     try:
         deploy_sys.deploy_nexus_zip(nexus_url, nexus_repo, nexus_path, deploy_zip)
     except HTTPError as e:
-        log.error(str(e))
+        log.exception(str(e))
         sys.exit(1)
     except OSError as e:
-        log.error(str(e))
+        log.exception(str(e))
         sys.exit(1)
 
     log.info("Zip file upload complete.")

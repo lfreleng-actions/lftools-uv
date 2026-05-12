@@ -139,7 +139,7 @@ def main():
 
             typer_app()
         except ImportError as e:
-            log.error("Failed to import Typer CLI: %s", e)
+            log.exception("Failed to import Typer CLI: %s", e)
             log.info("Falling back to legacy Click CLI")
             cli(obj={})
         except Exception as e:

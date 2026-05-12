@@ -54,7 +54,7 @@ def directory(
         subprocess.run(["sign", "dir", str(directory), mode], check=True, capture_output=False)
         typer.echo(f"✅ Successfully signed files in {directory} using {mode} mode")
     except subprocess.CalledProcessError as e:
-        log.error(f"Signing failed with exit code {e.returncode}")
+        log.exception(f"Signing failed with exit code {e.returncode}")
         typer.echo(f"Error: Signing failed with exit code {e.returncode}", err=True)
         raise typer.Exit(e.returncode) from None
     except FileNotFoundError:
@@ -80,7 +80,7 @@ def git_tag(
         subprocess.run(["sign", "git-tag", tag], check=True, capture_output=False)
         typer.echo(f"✅ Successfully signed git tag: {tag}")
     except subprocess.CalledProcessError as e:
-        log.error(f"Git tag signing failed with exit code {e.returncode}")
+        log.exception(f"Git tag signing failed with exit code {e.returncode}")
         typer.echo(f"Error: Git tag signing failed with exit code {e.returncode}", err=True)
         raise typer.Exit(e.returncode) from None
     except FileNotFoundError:
@@ -105,7 +105,7 @@ def nexus(
         subprocess.run(["sign", "nexus", nexus_repo_url], check=True, capture_output=False)
         typer.echo(f"✅ Successfully signed Nexus artifacts at: {nexus_repo_url}")
     except subprocess.CalledProcessError as e:
-        log.error(f"Nexus signing failed with exit code {e.returncode}")
+        log.exception(f"Nexus signing failed with exit code {e.returncode}")
         typer.echo(f"Error: Nexus signing failed with exit code {e.returncode}", err=True)
         raise typer.Exit(e.returncode) from None
     except FileNotFoundError:

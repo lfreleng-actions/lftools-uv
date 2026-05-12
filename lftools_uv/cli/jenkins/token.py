@@ -70,7 +70,7 @@ def init(ctx, name, url):
     try:
         config.add_section(name)
     except configparser.DuplicateSectionError as e:
-        log.error(e)
+        log.exception(e)
         sys.exit(1)
 
     config.set(name, "url", url)

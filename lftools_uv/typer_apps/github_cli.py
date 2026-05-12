@@ -56,7 +56,7 @@ def submit_pr(
             log.error("PR NOT MERGEABLE %s", pr_mergeable)
             raise typer.Exit(1)
     except GithubException as e:
-        log.error("GitHub API error: %s", e)
+        log.exception("GitHub API error: %s", e)
         raise typer.Exit(1) from None
 
 
@@ -112,7 +112,7 @@ def create_repo(
         )
         log.info("Repository '%s' created successfully in organization '%s'", repository, organization)
     except GithubException as e:
-        log.error("Failed to create repository: %s", e)
+        log.exception("Failed to create repository: %s", e)
         raise typer.Exit(1) from None
 
 
@@ -151,7 +151,7 @@ def update_repo(
 
         log.info("Repository '%s' updated successfully", repository)
     except GithubException as e:
-        log.error("Failed to update repository: %s", e)
+        log.exception("Failed to update repository: %s", e)
         raise typer.Exit(1) from None
 
 
@@ -186,7 +186,7 @@ def create_team(
 
         log.info("Team '%s' created successfully in organization '%s'", name, organization)
     except GithubException as e:
-        log.error("Failed to create team: %s", e)
+        log.exception("Failed to create team: %s", e)
         raise typer.Exit(1) from None
 
 
@@ -204,5 +204,5 @@ def user(
         action = "removed from" if delete else "added to"
         log.info("User '%s' %s team '%s' successfully", user, action, team)
     except Exception as e:
-        log.error("Failed to modify user team membership: %s", e)
+        log.exception("Failed to modify user team membership: %s", e)
         raise typer.Exit(1) from None

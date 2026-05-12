@@ -60,7 +60,7 @@ def create_info_file(
         typer.echo("Note: This command requires the original lftools CLI implementation.")
         typer.echo("Use: lftools infofile create-info-file for full functionality.")
     except Exception as e:
-        log.error(f"Failed to create info file: {e}")
+        log.exception(f"Failed to create info file: {e}")
         typer.echo(f"Error: Failed to create info file: {e}", err=True)
         raise typer.Exit(1) from None
 
@@ -92,7 +92,7 @@ def get_committers(
         typer.echo("Note: This command requires the original lftools CLI implementation.")
         typer.echo("Use: lftools infofile get-committers for full functionality.")
     except Exception as e:
-        log.error(f"Failed to get committers: {e}")
+        log.exception(f"Failed to get committers: {e}")
         typer.echo(f"Error: Failed to get committers: {e}", err=True)
         raise typer.Exit(1) from None
 
@@ -114,7 +114,7 @@ def validate_info_file(
         typer.echo("Note: This command requires the original lftools CLI implementation.")
         typer.echo("Use: lftools infofile validate-info-file for full functionality.")
     except Exception as e:
-        log.error(f"INFO file validation failed: {e}")
+        log.exception(f"INFO file validation failed: {e}")
         typer.echo(f"Error: INFO file validation failed: {e}", err=True)
         raise typer.Exit(1) from None
 
@@ -136,7 +136,7 @@ def check_committers(
         typer.echo("Note: This command requires the original lftools CLI implementation.")
         typer.echo("Use: lftools infofile check-committers for full functionality.")
     except Exception as e:
-        log.error(f"Committers check failed: {e}")
+        log.exception(f"Committers check failed: {e}")
         typer.echo(f"Error: Committers check failed: {e}", err=True)
         raise typer.Exit(1) from None
 
@@ -158,7 +158,7 @@ def match_ldap(
         typer.echo("Note: This command requires the original lftools CLI implementation.")
         typer.echo("Use: lftools infofile match-ldap for full functionality.")
     except Exception as e:
-        log.error(f"LDAP matching failed: {e}")
+        log.exception(f"LDAP matching failed: {e}")
         typer.echo(f"Error: LDAP matching failed: {e}", err=True)
         raise typer.Exit(1) from None
 
