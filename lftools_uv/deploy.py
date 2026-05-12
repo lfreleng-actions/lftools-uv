@@ -524,7 +524,7 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
                 except ClientError as e:
                     log.error(e)
                     return False
-                return True
+            return True
         if mime_type is None and mime_encoding is None:
             try:
                 s3.Bucket(s3_bucket).upload_file(file, f"{s3_path}{file}", ExtraArgs=extra_args)
