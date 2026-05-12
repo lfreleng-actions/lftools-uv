@@ -122,7 +122,7 @@ class RestApi:
         if resp.text:
             try:
                 body: ApiBody
-                if _CONTENT_TYPE_JSON in resp.headers["Content-Type"]:
+                if _CONTENT_TYPE_JSON in resp.headers.get("Content-Type", ""):
                     remove_xssi_magic: str = resp.text.replace(")]}'", "")
                     body = json.loads(remove_xssi_magic)  # pyright: ignore[reportAny]
                 else:
