@@ -282,7 +282,7 @@ class Gerrit(client.RestApi):
 
         result: ApiResponse = self.post(access_str, data=payload)
         # Code for projects that don't allow self merge.
-        if config.get_setting(self.fqdn + _DOT_SECOND):
+        if config.has_section(self.fqdn + _DOT_SECOND):
             second_username: str = config.get_setting(self.fqdn + _DOT_SECOND, "username")
             second_password: str = config.get_setting(self.fqdn + _DOT_SECOND, "password")
             self.r.auth = (second_username, second_password)
