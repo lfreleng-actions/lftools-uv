@@ -15,6 +15,9 @@ import json
 
 import requests
 
+_CONTENT_TYPE_JSON = "application/json"
+
+
 # Type alias for parsed JSON response body.
 # REST APIs return heterogeneous JSON; Any is unavoidable at
 # this deserialization boundary.  Callers should narrow as needed.
@@ -88,7 +91,7 @@ class RestApi:
             self.r.headers.update(
                 {
                     "Content-Type": "application/json; charset=UTF-8",
-                    "Accept": "application/json",
+                    "Accept": _CONTENT_TYPE_JSON,
                 }
             )
 
@@ -96,7 +99,7 @@ class RestApi:
             self.token: str = self.creds["token"]
             self.r = requests.Session()
             self.r.headers.update({"Authorization": f"Token {self.token}"})
-            self.r.headers.update({"Content-Type": "application/json"})
+            self.r.headers.update({"Content-Type": _CONTENT_TYPE_JSON})
 
     def _request(
         self,
@@ -119,7 +122,7 @@ class RestApi:
         if resp.text:
             try:
                 body: ApiBody
-                if "application/json" in resp.headers["Content-Type"]:
+                if _CONTENT_TYPE_JSON in resp.headers["Content-Type"]:
                     remove_xssi_magic: str = resp.text.replace(")]}'", "")
                     body = json.loads(remove_xssi_magic)  # pyright: ignore[reportAny]
                 else:

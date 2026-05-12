@@ -24,6 +24,8 @@ from lftools_uv.jenkins.token import get_token
 
 log = logging.getLogger(__name__)
 
+_MSG_CREDS_NOT_SET = "Username or password not set."
+
 # Create the main Typer app for jenkins commands
 jenkins_app = typer.Typer(help="Query information about the Jenkins Server.")
 
@@ -343,6 +345,7 @@ import jenkins.model.*
 import hudson.*
 import hudson.model.*
 
+
 def jobTypes = [hudson.model.FreeStyleProject.class]
 
 def filter = {{job->
@@ -614,7 +617,7 @@ def token_change(
         password = ctx.obj["password"]
 
         if not username or not password:
-            log.error("Username or password not set.")
+            log.error(_MSG_CREDS_NOT_SET)
             raise typer.Exit(1)
 
         log.info(get_token(name, jenkins.url, username=username, password=password, change=True))
@@ -636,7 +639,7 @@ def token_init(
         password = ctx.obj["password"]
 
         if not username or not password:
-            log.error("Username or password not set.")
+            log.error(_MSG_CREDS_NOT_SET)
             raise typer.Exit(1)
 
         _require_jjb_ini(jenkins.config_file)
@@ -675,7 +678,7 @@ def token_print(ctx: typer.Context) -> None:
         password = ctx.obj["password"]
 
         if not username or not password:
-            log.error("Username or password not set.")
+            log.error(_MSG_CREDS_NOT_SET)
             raise typer.Exit(1)
 
         log.info(get_token("token", jenkins.url, username, password))
@@ -706,7 +709,7 @@ def token_reset(
         password = ctx.obj["password"]
 
         if not username or not password:
-            log.error("Username or password not set.")
+            log.error(_MSG_CREDS_NOT_SET)
             raise typer.Exit(1)
 
         _require_jjb_ini(jenkins.config_file)

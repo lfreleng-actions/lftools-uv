@@ -22,6 +22,10 @@ import lftools_uv.api.client as client
 from lftools_uv import config, helpers
 from lftools_uv.api.client import ApiResponse
 
+_DICT_STR_OBJECT_TYPE = dict[str, object]
+_LIST_OBJECT_TYPE = list[object]
+
+
 log: logging.Logger = logging.getLogger(__name__)
 
 
@@ -58,7 +62,7 @@ class Nexus3(client.RestApi):
         Returns an empty dict when *obj* is not a dict.
         """
         if isinstance(obj, dict):
-            return cast("dict[str, object]", obj)
+            return cast(_DICT_STR_OBJECT_TYPE, obj)
         return {}
 
     def _items_from_response(self, response: ApiResponse) -> list[dict[str, object]]:
@@ -74,7 +78,9 @@ class Nexus3(client.RestApi):
         body: dict[str, object] = self._json_body(response)
         items: object = body.get("items", [])
         if isinstance(items, list):
-            return [cast("dict[str, object]", item) for item in cast("list[object]", items) if isinstance(item, dict)]
+            return [
+                cast(_DICT_STR_OBJECT_TYPE, item) for item in cast(_LIST_OBJECT_TYPE, items) if isinstance(item, dict)
+            ]
         return []
 
     # -----------------------------------------------------------------------
@@ -160,7 +166,7 @@ class Nexus3(client.RestApi):
                 body: client.ApiBody = response[1]
                 if isinstance(body, dict):
                     return body
-            return cast("dict[str, object]", resp.json())
+            return cast(_DICT_STR_OBJECT_TYPE, resp.json())
         resp.raise_for_status()
         return f"Failed to read script {name}"
 
@@ -177,7 +183,7 @@ class Nexus3(client.RestApi):
                 body: client.ApiBody = response[1]
                 if isinstance(body, dict):
                     return body
-            return cast("dict[str, object]", resp.json())
+            return cast(_DICT_STR_OBJECT_TYPE, resp.json())
         resp.raise_for_status()
         return f"Failed to execute script {name}"
 
@@ -280,7 +286,7 @@ class Nexus3(client.RestApi):
             while token is not None:
                 items: object = result.get("items", [])
                 if isinstance(items, list):
-                    for raw_tag in cast("list[object]", items):
+                    for raw_tag in cast(_LIST_OBJECT_TYPE, items):
                         tag: dict[str, object] = self._as_dict(raw_tag)
                         if tag:
                             list_of_tags.append(str(tag.get("name", "")))
@@ -294,7 +300,7 @@ class Nexus3(client.RestApi):
         else:
             items_obj: object = body.get("items", [])
             if isinstance(items_obj, list):
-                for raw_tag in cast("list[object]", items_obj):
+                for raw_tag in cast(_LIST_OBJECT_TYPE, items_obj):
                     tag_dict: dict[str, object] = self._as_dict(raw_tag)
                     if tag_dict:
                         list_of_tags.append(str(tag_dict.get("name", "")))

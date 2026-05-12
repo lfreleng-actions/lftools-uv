@@ -18,6 +18,10 @@ from requests.exceptions import HTTPError
 
 import lftools_uv.deploy as deploy_sys
 
+_HELP_NEXUS_STAGING_ID = "Nexus staging profile ID"
+_HELP_NEXUS_URL = "Nexus server URL"
+
+
 log = logging.getLogger(__name__)
 
 deploy_app = typer.Typer(
@@ -38,7 +42,7 @@ def deploy_callback() -> None:
 
 @deploy_app.command(name="archives")
 def archives(
-    nexus_url: str = typer.Argument(..., envvar="NEXUS_URL", help="Nexus server URL"),
+    nexus_url: str = typer.Argument(..., envvar="NEXUS_URL", help=_HELP_NEXUS_URL),
     nexus_path: str = typer.Argument(..., envvar="NEXUS_PATH", help="Path on Nexus where files will be deployed"),
     workspace: str = typer.Argument(..., envvar="WORKSPACE", help="Workspace directory containing files to deploy"),
     pattern: list[str] = typer.Option([], "-p", "--pattern", help="Unix glob patterns for files to deploy"),
@@ -75,7 +79,7 @@ def copy_archives(
 
 @deploy_app.command(name="file")
 def file(
-    nexus_url: str = typer.Argument(..., envvar="NEXUS_URL", help="Nexus server URL"),
+    nexus_url: str = typer.Argument(..., envvar="NEXUS_URL", help=_HELP_NEXUS_URL),
     nexus_repo_id: str = typer.Argument(..., help="Nexus repository ID"),
     group_id: str = typer.Argument(..., help="Maven Group ID"),
     artifact_id: str = typer.Argument(..., help="Maven Artifact ID"),
@@ -97,7 +101,7 @@ def file(
 
 @deploy_app.command(name="logs")
 def logs(
-    nexus_url: str = typer.Argument(..., envvar="NEXUS_URL", help="Nexus server URL"),
+    nexus_url: str = typer.Argument(..., envvar="NEXUS_URL", help=_HELP_NEXUS_URL),
     nexus_path: str = typer.Argument(..., envvar="NEXUS_PATH", help="Path on Nexus where logs will be deployed"),
     build_url: str = typer.Argument(..., envvar="BUILD_URL", help="Build URL for log collection"),
 ) -> None:
@@ -127,7 +131,7 @@ def s3(
 
 @deploy_app.command(name="maven-file")
 def maven_file(
-    nexus_url: str = typer.Argument(..., envvar="NEXUS_URL", help="Nexus server URL"),
+    nexus_url: str = typer.Argument(..., envvar="NEXUS_URL", help=_HELP_NEXUS_URL),
     repo_id: str = typer.Argument(..., envvar="REPO_ID", help="Repository ID"),
     file_name: str = typer.Argument(..., envvar="FILE_NAME", help="File name to deploy"),
     # Maven Config
@@ -191,8 +195,8 @@ def nexus(
 
 @deploy_app.command(name="nexus-stage")
 def nexus_stage(
-    nexus_url: str = typer.Argument(..., envvar="NEXUS_URL", help="Nexus server URL"),
-    staging_profile_id: str = typer.Argument(..., envvar="STAGING_PROFILE_ID", help="Nexus staging profile ID"),
+    nexus_url: str = typer.Argument(..., envvar="NEXUS_URL", help=_HELP_NEXUS_URL),
+    staging_profile_id: str = typer.Argument(..., envvar="STAGING_PROFILE_ID", help=_HELP_NEXUS_STAGING_ID),
     deploy_dir: str = typer.Argument(..., envvar="DEPLOY_DIR", help="Directory containing Maven repository to deploy"),
 ) -> None:
     """Deploy a Maven repository to a Nexus staging repository.
@@ -205,8 +209,8 @@ def nexus_stage(
 
 @deploy_app.command(name="nexus-stage-repo-close")
 def nexus_stage_repo_close(
-    nexus_url: str = typer.Argument(..., envvar="NEXUS_URL", help="Nexus server URL"),
-    staging_profile_id: str = typer.Argument(..., envvar="STAGING_PROFILE_ID", help="Nexus staging profile ID"),
+    nexus_url: str = typer.Argument(..., envvar="NEXUS_URL", help=_HELP_NEXUS_URL),
+    staging_profile_id: str = typer.Argument(..., envvar="STAGING_PROFILE_ID", help=_HELP_NEXUS_STAGING_ID),
     staging_repo_id: str = typer.Argument(..., help="Nexus staging repository ID"),
 ) -> None:
     """Close a Nexus staging repo."""
@@ -215,8 +219,8 @@ def nexus_stage_repo_close(
 
 @deploy_app.command(name="nexus-stage-repo-create")
 def nexus_stage_repo_create(
-    nexus_url: str = typer.Argument(..., envvar="NEXUS_URL", help="Nexus server URL"),
-    staging_profile_id: str = typer.Argument(..., envvar="STAGING_PROFILE_ID", help="Nexus staging profile ID"),
+    nexus_url: str = typer.Argument(..., envvar="NEXUS_URL", help=_HELP_NEXUS_URL),
+    staging_profile_id: str = typer.Argument(..., envvar="STAGING_PROFILE_ID", help=_HELP_NEXUS_STAGING_ID),
 ) -> None:
     """Create a Nexus staging repo."""
     staging_repo_id = deploy_sys.nexus_stage_repo_create(nexus_url, staging_profile_id)
@@ -225,7 +229,7 @@ def nexus_stage_repo_create(
 
 @deploy_app.command(name="nexus-zip")
 def nexus_zip(
-    nexus_url: str = typer.Argument(..., envvar="NEXUS_URL", help="Nexus server URL"),
+    nexus_url: str = typer.Argument(..., envvar="NEXUS_URL", help=_HELP_NEXUS_URL),
     nexus_repo: str = typer.Argument(..., envvar="NEXUS_REPO", help="Nexus repository name"),
     nexus_path: str = typer.Argument(..., envvar="NEXUS_PATH", help="Path on Nexus where zip will be deployed"),
     deploy_zip: str = typer.Argument(..., envvar="DEPLOY_DIR", help="Path to zip file to deploy"),

@@ -24,6 +24,9 @@ from email_validator import EmailNotValidError, validate_email
 from lftools_uv.github_helper import helper_list, helper_user_github
 from lftools_uv.oauth2_helper import oauth_helper
 
+_BEARER_PREFIX = "Bearer "
+
+
 log = logging.getLogger(__name__)
 
 PARSE = urllib.parse.urljoin
@@ -41,7 +44,7 @@ def helper_check_group_exists(group: str) -> int:
     """Check group exists."""
     access_token, url = oauth_helper()
     url = PARSE(url, group)
-    headers = {"Authorization": "Bearer " + access_token}
+    headers = {"Authorization": _BEARER_PREFIX + access_token}
     response = requests.get(url, headers=headers)
     status_code = response.status_code
     return status_code
@@ -56,7 +59,7 @@ def helper_search_members(group: str) -> list[dict[str, str]] | None:
     else:
         access_token, url = oauth_helper()
         url = PARSE(url, group)
-        headers = {"Authorization": "Bearer " + access_token}
+        headers = {"Authorization": _BEARER_PREFIX + access_token}
         response = requests.get(url, headers=headers)
         try:
             check_response_code(response)
@@ -74,7 +77,7 @@ def helper_user(user: str, group: str, delete: bool | str) -> None:
     """Add and remove users from groups."""
     access_token, url = oauth_helper()
     url = PARSE(url, group)
-    headers = {"Authorization": "Bearer " + access_token}
+    headers = {"Authorization": _BEARER_PREFIX + access_token}
     data = {"username": user}
     if delete:
         # Use sys.stdout.write() to avoid CodeQL clear-text logging sink detection
@@ -98,7 +101,7 @@ def helper_invite(email: str, group: str) -> None:
     access_token, url = oauth_helper()
     prejoin = group + "/invite"
     url = PARSE(url, prejoin)
-    headers = {"Authorization": "Bearer " + access_token}
+    headers = {"Authorization": _BEARER_PREFIX + access_token}
     data = {"mail": email}
     # Use sys.stdout.write() to avoid CodeQL clear-text logging sink detection
     sys.stdout.write("Validating email address\n")
@@ -128,7 +131,7 @@ def helper_create_group(group: str) -> None:
     else:
         access_token, url = oauth_helper()
         url = f"{url}/"
-        headers = {"Authorization": "Bearer " + access_token}
+        headers = {"Authorization": _BEARER_PREFIX + access_token}
         data = {"title": group, "type": "group"}
         log.debug("Creating group with type: group")
         sys.stdout.write(f"Creating group {group}\n")

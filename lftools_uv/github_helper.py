@@ -25,6 +25,9 @@ from lftools_uv import config
 if TYPE_CHECKING:
     from github.PaginatedList import PaginatedList
 
+_YAML_LIST_ITEM_FMT = "  - '%s'"
+
+
 log: logging.Logger = logging.getLogger(__name__)
 
 
@@ -109,7 +112,7 @@ def helper_list(  # noqa: C901, PLR0912
             log.error(ghe)
             sys.exit(1)
         for member in admin_members:
-            log.info("  - '%s'", member.login)
+            log.info(_YAML_LIST_ITEM_FMT, member.login)
         log.info("#  All members for %s", organization)
         log.info("%s-members:", organization)
 
@@ -119,7 +122,7 @@ def helper_list(  # noqa: C901, PLR0912
             log.error(ghe)
             sys.exit(1)
         for member in all_members:
-            log.info("  - '%s'", member.login)
+            log.info(_YAML_LIST_ITEM_FMT, member.login)
         log.info("#  All members and all teams for %s", organization)
 
         try:
@@ -130,7 +133,7 @@ def helper_list(  # noqa: C901, PLR0912
         for org_team in get_teams_fn():
             log.info("%s:", org_team.name)
             for user in org_team.get_members():
-                log.info("  - '%s'", user.login)
+                log.info(_YAML_LIST_ITEM_FMT, user.login)
             log.info("")
 
     if teams:
@@ -156,7 +159,7 @@ def helper_list(  # noqa: C901, PLR0912
                 log.info("%s", t.name)
                 for user in t.get_members():
                     team_members.append(user.login)
-                    log.info("  - '%s'", user.login)
+                    log.info(_YAML_LIST_ITEM_FMT, user.login)
 
         return team_members
 

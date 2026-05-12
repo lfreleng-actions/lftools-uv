@@ -22,6 +22,9 @@ import requests
 from lftools_uv import config as lftools_cfg
 from lftools_uv.jenkins.token import get_token
 
+_MSG_CREDS_NOT_SET = "Username or password not set."
+
+
 log = logging.getLogger(__name__)
 
 
@@ -41,7 +44,7 @@ def change(ctx, name):
     password = ctx.obj["password"]
 
     if not username or not password:
-        log.error("Username or password not set.")
+        log.error(_MSG_CREDS_NOT_SET)
         sys.exit(1)
 
     log.info(get_token(name=name, url=jenkins.url, change=True, username=username, password=password))
@@ -58,7 +61,7 @@ def init(ctx, name, url):
     password = ctx.obj["password"]
 
     if not username or not password:
-        log.error("Username or password not set.")
+        log.error(_MSG_CREDS_NOT_SET)
         sys.exit(1)
 
     _require_jjb_ini(jenkins.config_file)
@@ -90,7 +93,7 @@ def print_token(ctx):
     password = ctx.obj["password"]
 
     if not username or not password:
-        log.error("Username or password not set.")
+        log.error(_MSG_CREDS_NOT_SET)
         sys.exit(1)
 
     log.info(get_token(name="token-created-by-lftools", url=jenkins.url, username=username, password=password))
@@ -116,7 +119,7 @@ def reset(ctx, servers):
     password = ctx.obj["password"]
 
     if not username or not password:
-        log.error("Username or password not set.")
+        log.error(_MSG_CREDS_NOT_SET)
         sys.exit(1)
 
     _require_jjb_ini(jenkins.config_file)

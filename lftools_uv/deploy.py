@@ -35,6 +35,11 @@ import requests
 from botocore.exceptions import ClientError
 from defusedxml.minidom import parseString
 
+_CONTENT_TYPE_TEXT = "text/plain"
+_CONTENT_TYPE_XML = "application/xml"
+_BANNER_HASHES = "#######################################################"
+
+
 log: logging.Logger = logging.getLogger(__name__)
 logging.getLogger("botocore").setLevel(logging.CRITICAL)
 
@@ -494,10 +499,13 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
     def _upload_to_s3(file: str) -> bool:
         mime_type: str | None = mimetypes.guess_type(file)[0]
         mime_encoding: str | None = mimetypes.guess_type(file)[1]
-        extra_args: dict[str, str | None] = {"ContentType": "text/plain"}
+        extra_args: dict[str, str | None] = {"ContentType": _CONTENT_TYPE_TEXT}
         text_html_extra_args: dict[str, str | None] = {"ContentType": "text/html", "ContentEncoding": mime_encoding}
-        text_plain_extra_args: dict[str, str | None] = {"ContentType": "text/plain", "ContentEncoding": mime_encoding}
-        app_xml_extra_args: dict[str, str | None] = {"ContentType": "application/xml", "ContentEncoding": mime_encoding}
+        text_plain_extra_args: dict[str, str | None] = {
+            "ContentType": _CONTENT_TYPE_TEXT,
+            "ContentEncoding": mime_encoding,
+        }
+        app_xml_extra_args: dict[str, str | None] = {"ContentType": _CONTENT_TYPE_XML, "ContentEncoding": mime_encoding}
         if file == "_tmpfile":
             for dir in (logs_dir, silo_dir, jenkins_node_dir):
                 try:
@@ -513,7 +521,7 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
                 log.error(e)
                 return False
             return True
-        elif mime_type is None or mime_type in "text/plain":
+        elif mime_type is None or mime_type in _CONTENT_TYPE_TEXT:
             extra_args = text_plain_extra_args
             try:
                 s3.Bucket(s3_bucket).upload_file(file, f"{s3_path}{file}", ExtraArgs=extra_args)
@@ -529,7 +537,7 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
                 log.error(e)
                 return False
             return True
-        elif mime_type in "application/xml":
+        elif mime_type in _CONTENT_TYPE_XML:
             extra_args = app_xml_extra_args
             try:
                 s3.Bucket(s3_bucket).upload_file(file, f"{s3_path}{file}", ExtraArgs=extra_args)
@@ -619,7 +627,7 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
         if os.path.isfile(file):
             file_list.append(file)
 
-    log.info("#######################################################")
+    log.info(_BANNER_HASHES)
     log.info("Deploying files from %s to %s/%s", work_dir, s3_bucket, s3_path)
 
     # Perform s3 upload
@@ -631,7 +639,7 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
             log.error("FAILURE: Uploading %s failed", file)
 
     log.info("Finished deploying from %s to %s/%s", work_dir, s3_bucket, s3_path)
-    log.info("#######################################################")
+    log.info(_BANNER_HASHES)
 
     # Cleanup
     s3.Object(s3_bucket, "{}{}".format(logs_dir, "_tmpfile")).delete()
@@ -707,7 +715,7 @@ def nexus_stage_repo_create(nexus_url: str, staging_profile_id: str) -> str:
         </promoteRequest>
     """
 
-    headers: dict[str, str] = {"Content-Type": "application/xml"}
+    headers: dict[str, str] = {"Content-Type": _CONTENT_TYPE_XML}
     resp: requests.Response = _request_post(nexus_url, xml, headers)
 
     log.debug("resp.status_code = %s", resp.status_code)
@@ -758,7 +766,7 @@ def nexus_stage_repo_close(nexus_url: str, staging_profile_id: str, staging_repo
         </promoteRequest>
     """
 
-    headers: dict[str, str] = {"Content-Type": "application/xml"}
+    headers: dict[str, str] = {"Content-Type": _CONTENT_TYPE_XML}
     resp: requests.Response = _request_post(nexus_url, xml, headers)
 
     log.debug("resp.status_code = %s", resp.status_code)
@@ -893,7 +901,7 @@ def deploy_nexus(nexus_repo_url: str, deploy_dir: str, snapshot: bool = False, w
 
             file_list.append(file)
 
-    log.info("#######################################################")
+    log.info(_BANNER_HASHES)
     log.info("Deploying directory %s to %s", deploy_dir, nexus_repo_url)
 
     failed_uploads: list[tuple[str, str]] = []
@@ -922,7 +930,7 @@ def deploy_nexus(nexus_repo_url: str, deploy_dir: str, snapshot: bool = False, w
         )
     else:
         log.info("Finished deploying %s to %s", deploy_dir, nexus_repo_url)
-    log.info("#######################################################")
+    log.info(_BANNER_HASHES)
 
     os.chdir(previous_dir)
 

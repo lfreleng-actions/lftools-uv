@@ -18,6 +18,11 @@ import typer
 from lftools_uv.api.endpoints import gerrit
 from lftools_uv.git.gerrit import Gerrit as git_gerrit
 
+_HELP_ISSUE_ID = "For projects that enforce an issue id for changesets"
+_HELP_GERRIT_FQDN = "Gerrit FQDN"
+_HELP_GERRIT_PROJECT = "Gerrit project name"
+
+
 log = logging.getLogger(__name__)
 
 # Create the Typer app for gerrit commands
@@ -26,12 +31,10 @@ gerrit_app = typer.Typer(help="GERRIT TOOLS.")
 
 @gerrit_app.command("addfile")
 def addfile(
-    gerrit_fqdn: str = typer.Argument(..., help="Gerrit FQDN"),
-    gerrit_project: str = typer.Argument(..., help="Gerrit project name"),
+    gerrit_fqdn: str = typer.Argument(..., help=_HELP_GERRIT_FQDN),
+    gerrit_project: str = typer.Argument(..., help=_HELP_GERRIT_PROJECT),
     filename: str = typer.Argument(..., help="Filename to add"),
-    issue_id: str | None = typer.Option(
-        None, "--issue-id", help="For projects that enforce an issue id for changesets"
-    ),
+    issue_id: str | None = typer.Option(None, "--issue-id", help=_HELP_ISSUE_ID),
     file_location: str | None = typer.Option(None, "--file-location", help="File path within the repository"),
 ) -> None:
     """Add a file for review to a Project.
@@ -54,12 +57,10 @@ def addfile(
 
 @gerrit_app.command("addinfojob")
 def addinfojob(
-    gerrit_fqdn: str = typer.Argument(..., help="Gerrit FQDN"),
-    gerrit_project: str = typer.Argument(..., help="Gerrit project name"),
+    gerrit_fqdn: str = typer.Argument(..., help=_HELP_GERRIT_FQDN),
+    gerrit_project: str = typer.Argument(..., help=_HELP_GERRIT_PROJECT),
     jjbrepo: str = typer.Argument(..., help="JJB repository name"),
-    issue_id: str | None = typer.Option(
-        None, "--issue-id", help="For projects that enforce an issue id for changesets"
-    ),
+    issue_id: str | None = typer.Option(None, "--issue-id", help=_HELP_ISSUE_ID),
     agent: str | None = typer.Option(None, "--agent", help="Specify the Jenkins agent label to run the job on"),
 ) -> None:
     """Add an INFO job for a new Project.
@@ -85,11 +86,9 @@ def addinfojob(
 
 @gerrit_app.command("addgitreview")
 def addgitreview(
-    gerrit_fqdn: str = typer.Argument(..., help="Gerrit FQDN"),
-    gerrit_project: str = typer.Argument(..., help="Gerrit project name"),
-    issue_id: str | None = typer.Option(
-        None, "--issue-id", help="For projects that enforce an issue id for changesets"
-    ),
+    gerrit_fqdn: str = typer.Argument(..., help=_HELP_GERRIT_FQDN),
+    gerrit_project: str = typer.Argument(..., help=_HELP_GERRIT_PROJECT),
+    issue_id: str | None = typer.Option(None, "--issue-id", help=_HELP_ISSUE_ID),
 ) -> None:
     """Add git review to a project.
 
@@ -107,8 +106,8 @@ def addgitreview(
 
 @gerrit_app.command("addgithubrights")
 def addgithubrights(
-    gerrit_fqdn: str = typer.Argument(..., help="Gerrit FQDN"),
-    gerrit_project: str = typer.Argument(..., help="Gerrit project name"),
+    gerrit_fqdn: str = typer.Argument(..., help=_HELP_GERRIT_FQDN),
+    gerrit_project: str = typer.Argument(..., help=_HELP_GERRIT_PROJECT),
 ) -> None:
     """Grant Github read for a project.
 
@@ -125,8 +124,8 @@ def addgithubrights(
 
 @gerrit_app.command("abandonchanges")
 def abandonchanges(
-    gerrit_fqdn: str = typer.Argument(..., help="Gerrit FQDN"),
-    gerrit_project: str = typer.Argument(..., help="Gerrit project name"),
+    gerrit_fqdn: str = typer.Argument(..., help=_HELP_GERRIT_FQDN),
+    gerrit_project: str = typer.Argument(..., help=_HELP_GERRIT_PROJECT),
 ) -> None:
     """Abandon all OPEN changes for a gerrit project.
 
@@ -144,8 +143,8 @@ def abandonchanges(
 
 @gerrit_app.command("createproject")
 def createproject(
-    gerrit_fqdn: str = typer.Argument(..., help="Gerrit FQDN"),
-    gerrit_project: str = typer.Argument(..., help="Gerrit project name"),
+    gerrit_fqdn: str = typer.Argument(..., help=_HELP_GERRIT_FQDN),
+    gerrit_project: str = typer.Argument(..., help=_HELP_GERRIT_PROJECT),
     ldap_group: str = typer.Argument(..., help="LDAP group name"),
     description: str = typer.Option(..., "--description", help="Project Description"),
     check: bool = typer.Option(False, "--check", help="just check if the project exists"),
@@ -172,7 +171,7 @@ def createproject(
 
 @gerrit_app.command("create-saml-group")
 def create_saml_group(
-    gerrit_fqdn: str = typer.Argument(..., help="Gerrit FQDN"),
+    gerrit_fqdn: str = typer.Argument(..., help=_HELP_GERRIT_FQDN),
     ldap_group: str = typer.Argument(..., help="LDAP group name"),
 ) -> None:
     """Create saml group based on ldap group."""
@@ -187,7 +186,7 @@ def create_saml_group(
 
 @gerrit_app.command("list-project-permissions")
 def list_project_permissions(
-    gerrit_fqdn: str = typer.Argument(..., help="Gerrit FQDN"),
+    gerrit_fqdn: str = typer.Argument(..., help=_HELP_GERRIT_FQDN),
     project: str = typer.Argument(..., help="Project name"),
 ) -> None:
     """List Owners of a Project."""
@@ -203,8 +202,8 @@ def list_project_permissions(
 
 @gerrit_app.command("list-project-inherits-from")
 def list_project_inherits_from(
-    gerrit_fqdn: str = typer.Argument(..., help="Gerrit FQDN"),
-    gerrit_project: str = typer.Argument(..., help="Gerrit project name"),
+    gerrit_fqdn: str = typer.Argument(..., help=_HELP_GERRIT_FQDN),
+    gerrit_project: str = typer.Argument(..., help=_HELP_GERRIT_PROJECT),
 ) -> None:
     """List who a project inherits from."""
     try:
@@ -218,12 +217,10 @@ def list_project_inherits_from(
 
 @gerrit_app.command("addmavenconfig")
 def addmavenconfig(
-    gerrit_fqdn: str = typer.Argument(..., help="Gerrit FQDN"),
-    gerrit_project: str = typer.Argument(..., help="Gerrit project name"),
+    gerrit_fqdn: str = typer.Argument(..., help=_HELP_GERRIT_FQDN),
+    gerrit_project: str = typer.Argument(..., help=_HELP_GERRIT_PROJECT),
     jjbrepo: str = typer.Argument(..., help="JJB repository name"),
-    issue_id: str | None = typer.Option(
-        None, "--issue-id", help="For projects that enforce an issue id for changesets"
-    ),
+    issue_id: str | None = typer.Option(None, "--issue-id", help=_HELP_ISSUE_ID),
     nexus3: str | None = typer.Option(None, "--nexus3", help="Specify a Nexus 3 server, e.g. nexus3.example.org"),
     nexus3_ports: str | None = typer.Option(
         None,

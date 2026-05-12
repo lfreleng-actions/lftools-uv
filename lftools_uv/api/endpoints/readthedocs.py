@@ -21,6 +21,9 @@ import lftools_uv.api.client as client
 from lftools_uv import config
 from lftools_uv.api.client import ApiResponse
 
+_LIST_OBJECT_TYPE = list[object]
+_DICT_STR_OBJECT_TYPE = dict[str, object]
+
 
 class ReadTheDocs(client.RestApi):
     """API endpoint wrapper for readthedocs.org.
@@ -58,9 +61,9 @@ class ReadTheDocs(client.RestApi):
         project_list: list[str] = []
 
         if isinstance(data, list):
-            for project in cast("list[object]", data):
+            for project in cast(_LIST_OBJECT_TYPE, data):
                 if isinstance(project, dict):
-                    project_dict = cast("dict[str, object]", project)
+                    project_dict = cast(_DICT_STR_OBJECT_TYPE, project)
                     if "slug" in project_dict:
                         slug: object = project_dict["slug"]
                         if isinstance(slug, str):
@@ -92,9 +95,9 @@ class ReadTheDocs(client.RestApi):
         # I feel like there must be a better way...but, this works. -DWTalton
         initial_versions: object = result["results"]
         if isinstance(initial_versions, list):
-            for version in cast("list[object]", initial_versions):
+            for version in cast(_LIST_OBJECT_TYPE, initial_versions):
                 if isinstance(version, dict):
-                    version_dict = cast("dict[str, object]", version)
+                    version_dict = cast(_DICT_STR_OBJECT_TYPE, version)
                     slug: object = version_dict["slug"]
                     if isinstance(slug, str):
                         versions.append(slug)
@@ -112,9 +115,9 @@ class ReadTheDocs(client.RestApi):
 
                 results_data: object = get_more_results["results"]
                 if isinstance(results_data, list):
-                    for version in cast("list[object]", results_data):
+                    for version in cast(_LIST_OBJECT_TYPE, results_data):
                         if isinstance(version, dict):
-                            version_dict = cast("dict[str, object]", version)
+                            version_dict = cast(_DICT_STR_OBJECT_TYPE, version)
                             slug = version_dict["slug"]
                             if isinstance(slug, str):
                                 versions.append(slug)
@@ -260,12 +263,12 @@ class ReadTheDocs(client.RestApi):
         subproject_list: list[str] = []
 
         if isinstance(data, list):
-            for subproject in cast("list[object]", data):
+            for subproject in cast(_LIST_OBJECT_TYPE, data):
                 if isinstance(subproject, dict):
-                    subproject_dict = cast("dict[str, object]", subproject)
+                    subproject_dict = cast(_DICT_STR_OBJECT_TYPE, subproject)
                     child: object = subproject_dict.get("child")
                     if isinstance(child, dict):
-                        child_dict = cast("dict[str, object]", child)
+                        child_dict = cast(_DICT_STR_OBJECT_TYPE, child)
                         slug: object = child_dict.get("slug")
                         if isinstance(slug, str):
                             subproject_list.append(slug)

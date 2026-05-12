@@ -23,6 +23,9 @@ import lftools_uv.api.client as client
 from lftools_uv import config
 from lftools_uv.api.client import ApiResponse
 
+_LIST_OBJECT_TYPE = list[object]
+
+
 log: logging.Logger = logging.getLogger(__name__)
 
 
@@ -80,7 +83,7 @@ class Nexus2(client.RestApi):
         if isinstance(body, dict):
             data: object = body.get("data", [])
             if isinstance(data, list):
-                typed_data: list[object] = cast("list[object]", data)
+                typed_data: list[object] = cast(_LIST_OBJECT_TYPE, data)
                 return [cast("dict[str, object]", item) for item in typed_data if isinstance(item, dict)]
         return []
 
@@ -271,7 +274,7 @@ class Nexus2(client.RestApi):
         if not isinstance(data_val, list):
             return []
 
-        typed_data: list[object] = cast("list[object]", data_val)
+        typed_data: list[object] = cast(_LIST_OBJECT_TYPE, data_val)
         role_list: list[list[object]] = []
         for raw_role in typed_data:
             role: dict[str, object] = self._as_dict(raw_role)
@@ -282,12 +285,12 @@ class Nexus2(client.RestApi):
             privs_string: str = ""
             roles_obj: object = role.get("roles")
             if isinstance(roles_obj, list):
-                for r in cast("list[object]", roles_obj):
+                for r in cast(_LIST_OBJECT_TYPE, roles_obj):
                     roles_string += str(r) + "\n"
 
             privs_obj: object = role.get("privileges")
             if isinstance(privs_obj, list):
-                for p in cast("list[object]", privs_obj):
+                for p in cast(_LIST_OBJECT_TYPE, privs_obj):
                     privs_string += str(p) + "\n"
 
             role_list.append([role["id"], role["name"], roles_string, privs_string])
@@ -361,7 +364,7 @@ class Nexus2(client.RestApi):
             role_list: list[list[object]] = []
             roles_obj: object = user.get("roles", [])
             if isinstance(roles_obj, list):
-                for raw_role in cast("list[object]", roles_obj):
+                for raw_role in cast(_LIST_OBJECT_TYPE, roles_obj):
                     role: dict[str, object] = self._as_dict(raw_role)
                     if role:
                         role_list.append([role["roleId"]])

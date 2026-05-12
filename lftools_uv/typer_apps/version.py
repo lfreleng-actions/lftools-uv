@@ -15,6 +15,10 @@ import subprocess
 
 import typer
 
+_MSG_VERSION_NOT_FOUND = "'version' command not found in PATH"
+_MSG_VERSION_NOT_FOUND_LONG = "Error: 'version' command not found in PATH. Please ensure it's installed."
+
+
 log = logging.getLogger(__name__)
 
 # Create the version subcommand group
@@ -84,8 +88,8 @@ def bump(
         typer.echo(f"Error: Version bump failed with exit code {e.returncode}", err=True)
         raise typer.Exit(e.returncode) from None
     except FileNotFoundError:
-        log.error("'version' command not found in PATH")
-        typer.echo("Error: 'version' command not found in PATH. Please ensure it's installed.", err=True)
+        log.error(_MSG_VERSION_NOT_FOUND)
+        typer.echo(_MSG_VERSION_NOT_FOUND_LONG, err=True)
         raise typer.Exit(127) from None
 
 
@@ -114,8 +118,8 @@ def release(
         typer.echo(f"Error: Version release failed with exit code {e.returncode}", err=True)
         raise typer.Exit(e.returncode) from None
     except FileNotFoundError:
-        log.error("'version' command not found in PATH")
-        typer.echo("Error: 'version' command not found in PATH. Please ensure it's installed.", err=True)
+        log.error(_MSG_VERSION_NOT_FOUND)
+        typer.echo(_MSG_VERSION_NOT_FOUND_LONG, err=True)
         raise typer.Exit(127) from None
 
 
@@ -154,8 +158,8 @@ def patch(
         typer.echo(f"Error: Version patch failed with exit code {e.returncode}", err=True)
         raise typer.Exit(e.returncode) from None
     except FileNotFoundError:
-        log.error("'version' command not found in PATH")
-        typer.echo("Error: 'version' command not found in PATH. Please ensure it's installed.", err=True)
+        log.error(_MSG_VERSION_NOT_FOUND)
+        typer.echo(_MSG_VERSION_NOT_FOUND_LONG, err=True)
         raise typer.Exit(127) from None
 
 

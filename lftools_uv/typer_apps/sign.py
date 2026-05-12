@@ -15,6 +15,10 @@ from pathlib import Path
 
 import typer
 
+_MSG_SIGN_NOT_FOUND = "'sign' command not found in PATH"
+_MSG_SIGN_NOT_FOUND_LONG = "Error: 'sign' command not found in PATH. Please ensure it's installed."
+
+
 log = logging.getLogger(__name__)
 
 # Create the sign subcommand group
@@ -58,8 +62,8 @@ def directory(
         typer.echo(f"Error: Signing failed with exit code {e.returncode}", err=True)
         raise typer.Exit(e.returncode) from None
     except FileNotFoundError:
-        log.error("'sign' command not found in PATH")
-        typer.echo("Error: 'sign' command not found in PATH. Please ensure it's installed.", err=True)
+        log.error(_MSG_SIGN_NOT_FOUND)
+        typer.echo(_MSG_SIGN_NOT_FOUND_LONG, err=True)
         raise typer.Exit(127) from None
 
 
@@ -84,8 +88,8 @@ def git_tag(
         typer.echo(f"Error: Git tag signing failed with exit code {e.returncode}", err=True)
         raise typer.Exit(e.returncode) from None
     except FileNotFoundError:
-        log.error("'sign' command not found in PATH")
-        typer.echo("Error: 'sign' command not found in PATH. Please ensure it's installed.", err=True)
+        log.error(_MSG_SIGN_NOT_FOUND)
+        typer.echo(_MSG_SIGN_NOT_FOUND_LONG, err=True)
         raise typer.Exit(127) from None
 
 
@@ -109,8 +113,8 @@ def nexus(
         typer.echo(f"Error: Nexus signing failed with exit code {e.returncode}", err=True)
         raise typer.Exit(e.returncode) from None
     except FileNotFoundError:
-        log.error("'sign' command not found in PATH")
-        typer.echo("Error: 'sign' command not found in PATH. Please ensure it's installed.", err=True)
+        log.error(_MSG_SIGN_NOT_FOUND)
+        typer.echo(_MSG_SIGN_NOT_FOUND_LONG, err=True)
         raise typer.Exit(127) from None
 
 

@@ -19,6 +19,9 @@ from github import Github, GithubException
 from lftools_uv import config
 from lftools_uv.github_helper import helper_list, helper_user_github, prvotes
 
+_HELP_GITHUB_ORG = "GitHub organization name"
+
+
 log = logging.getLogger(__name__)
 
 github_app = typer.Typer(name="github", help="GitHub tools.")
@@ -32,7 +35,7 @@ def github_callback() -> None:
 
 @github_app.command(name="submit-pr")
 def submit_pr(
-    organization: str = typer.Argument(..., help="GitHub organization name"),
+    organization: str = typer.Argument(..., help=_HELP_GITHUB_ORG),
     repo: str = typer.Argument(..., help="GitHub repository name"),
     pr: int = typer.Argument(..., help="Pull request number"),
 ) -> None:
@@ -62,7 +65,7 @@ def submit_pr(
 
 @github_app.command(name="votes")
 def votes(
-    organization: str = typer.Argument(..., help="GitHub organization name"),
+    organization: str = typer.Argument(..., help=_HELP_GITHUB_ORG),
     repo: str = typer.Argument(..., help="GitHub repository name"),
     pr: int = typer.Argument(..., help="Pull request number"),
 ) -> None:
@@ -73,7 +76,7 @@ def votes(
 
 @github_app.command(name="list")
 def list_github(
-    organization: str = typer.Argument(..., help="GitHub organization name"),
+    organization: str = typer.Argument(..., help=_HELP_GITHUB_ORG),
     audit: bool = typer.Option(False, "--audit", help="List members without 2fa"),
     repos: bool = typer.Option(False, "--repos", help="List all repos"),
     full: bool = typer.Option(False, "--full", help="All members and their respective teams"),
@@ -87,7 +90,7 @@ def list_github(
 
 @github_app.command(name="create-repo")
 def create_repo(
-    organization: str = typer.Argument(..., help="GitHub organization name"),
+    organization: str = typer.Argument(..., help=_HELP_GITHUB_ORG),
     repository: str = typer.Argument(..., help="Repository name to create"),
     description: str = typer.Argument(..., help="Repository description"),
     has_issues: bool = typer.Option(False, "--has-issues", help="Repo should have issues"),
@@ -118,7 +121,7 @@ def create_repo(
 
 @github_app.command(name="update-repo")
 def update_repo(
-    organization: str = typer.Argument(..., help="GitHub organization name"),
+    organization: str = typer.Argument(..., help=_HELP_GITHUB_ORG),
     repository: str = typer.Argument(..., help="Repository name to update"),
     has_issues: bool = typer.Option(False, "--has-issues", help="Repo should have issues"),
     has_projects: bool = typer.Option(False, "--has-projects", help="Repo should have projects"),
@@ -157,7 +160,7 @@ def update_repo(
 
 @github_app.command(name="create-team")
 def create_team(
-    organization: str = typer.Argument(..., help="GitHub organization name"),
+    organization: str = typer.Argument(..., help=_HELP_GITHUB_ORG),
     name: str = typer.Argument(..., help="Team name to create"),
     privacy: str = typer.Argument(..., help="Team privacy setting (closed/secret)"),
     repo: str | None = typer.Option(None, "--repo", help="Assign team to repo"),
@@ -192,7 +195,7 @@ def create_team(
 
 @github_app.command(name="user")
 def user(
-    organization: str = typer.Argument(..., help="GitHub organization name"),
+    organization: str = typer.Argument(..., help=_HELP_GITHUB_ORG),
     user: str = typer.Argument(..., help="GitHub username"),
     team: str = typer.Argument(..., help="Team name"),
     delete: bool = typer.Option(False, "--delete", help="Remove user from org"),
