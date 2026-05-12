@@ -46,6 +46,7 @@ import multiprocessing
 import os
 import re
 import time
+from functools import total_ordering
 from multiprocessing.dummy import Pool as ThreadPool
 
 import docker
@@ -360,6 +361,7 @@ class DockerTagClass(TagClass):
                 return
 
 
+@total_ordering
 class ProjectClass:
     """Main Project class.
 
@@ -394,9 +396,21 @@ class ProjectClass:
         self._populate_tags_to_copy()
         self.docker_client: docker.DockerClient = docker_client if docker_client is not None else docker.from_env()
 
-    def __lt__(self, other: ProjectClass) -> bool:
-        """Implement sort order base on Nexus3 repo name."""
+    def __lt__(self, other: object) -> bool:
+        """Implement sort order based on Nexus3 repo name."""
+        if not isinstance(other, ProjectClass):
+            return NotImplemented
         return self.nexus_repo_name < other.nexus_repo_name
+
+    def __eq__(self, other: object) -> bool:
+        """Equality based on Nexus3 repo name (consistent with __lt__)."""
+        if not isinstance(other, ProjectClass):
+            return NotImplemented
+        return self.nexus_repo_name == other.nexus_repo_name
+
+    def __hash__(self) -> int:
+        """Hash based on Nexus3 repo name (consistent with __eq__)."""
+        return hash(self.nexus_repo_name)
 
     def calc_nexus_project_name(self) -> str:
         """Get Nexus3 project name."""
