@@ -521,7 +521,7 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
                 log.error(e)
                 return False
             return True
-        elif mime_type is None or mime_type in _CONTENT_TYPE_TEXT:
+        elif mime_type is None or mime_type == _CONTENT_TYPE_TEXT:
             extra_args = text_plain_extra_args
             try:
                 s3.Bucket(s3_bucket).upload_file(file, f"{s3_path}{file}", ExtraArgs=extra_args)
@@ -529,7 +529,7 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
                 log.error(e)
                 return False
             return True
-        elif mime_type in "text/html":
+        elif mime_type == "text/html":
             extra_args = text_html_extra_args
             try:
                 s3.Bucket(s3_bucket).upload_file(file, f"{s3_path}{file}", ExtraArgs=extra_args)
@@ -537,7 +537,7 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
                 log.error(e)
                 return False
             return True
-        elif mime_type in _CONTENT_TYPE_XML:
+        elif mime_type == _CONTENT_TYPE_XML:
             extra_args = app_xml_extra_args
             try:
                 s3.Bucket(s3_bucket).upload_file(file, f"{s3_path}{file}", ExtraArgs=extra_args)
