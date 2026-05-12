@@ -521,46 +521,46 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
             for dir in (logs_dir, silo_dir, jenkins_node_dir):
                 try:
                     s3.Bucket(s3_bucket).upload_file(file, f"{dir}{file}")
-                except ClientError as e:
-                    log.error(e)
+                except ClientError:
+                    log.exception("Failed to upload _tmpfile marker to %s", dir)
                     return False
             return True
         if mime_type is None and mime_encoding is None:
             try:
                 s3.Bucket(s3_bucket).upload_file(file, f"{s3_path}{file}", ExtraArgs=extra_args)
-            except ClientError as e:
-                log.error(e)
+            except ClientError:
+                log.exception("Failed to upload %s", file)
                 return False
             return True
         elif mime_type is None or mime_type == _CONTENT_TYPE_TEXT:
             extra_args = text_plain_extra_args
             try:
                 s3.Bucket(s3_bucket).upload_file(file, f"{s3_path}{file}", ExtraArgs=extra_args)
-            except ClientError as e:
-                log.error(e)
+            except ClientError:
+                log.exception("Failed to upload %s as text/plain", file)
                 return False
             return True
         elif mime_type == "text/html":
             extra_args = text_html_extra_args
             try:
                 s3.Bucket(s3_bucket).upload_file(file, f"{s3_path}{file}", ExtraArgs=extra_args)
-            except ClientError as e:
-                log.error(e)
+            except ClientError:
+                log.exception("Failed to upload %s as text/html", file)
                 return False
             return True
         elif mime_type == _CONTENT_TYPE_XML:
             extra_args = app_xml_extra_args
             try:
                 s3.Bucket(s3_bucket).upload_file(file, f"{s3_path}{file}", ExtraArgs=extra_args)
-            except ClientError as e:
-                log.error(e)
+            except ClientError:
+                log.exception("Failed to upload %s as application/xml", file)
                 return False
             return True
         else:
             try:
                 s3.Bucket(s3_bucket).upload_file(file, f"{s3_path}{file}", ExtraArgs=extra_args)
-            except ClientError as e:
-                log.error(e)
+            except ClientError:
+                log.exception("Failed to upload %s", file)
                 return False
             return True
 
