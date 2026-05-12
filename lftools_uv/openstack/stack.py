@@ -104,8 +104,8 @@ def cost(os_cloud: str, stack_name: str, timeout: int = 60) -> None:
             log.warning("Failed to get cost for server %s: %s", server_id, e)
             log.warning("Returning 0 cost for this server")
             return 0.0
-        except Exception as e:
-            log.exception("Unexpected error getting cost for server %s: %s", server_id, e)
+        except Exception:
+            log.exception("Unexpected error getting cost for server %s", server_id)
             return 0.0
 
     def parse_iso8601_time(time: str) -> datetime:
@@ -154,8 +154,8 @@ def cost(os_cloud: str, stack_name: str, timeout: int = 60) -> None:
         for server in server_ids:
             total_cost += get_server_cost(server)
         print("total: " + str(total_cost))
-    except Exception as e:
-        log.exception("Error calculating stack cost: %s", e)
+    except Exception:
+        log.exception("Error calculating stack cost")
         log.warning("Returning 0 total cost due to error")
         print("total: 0.0")
 

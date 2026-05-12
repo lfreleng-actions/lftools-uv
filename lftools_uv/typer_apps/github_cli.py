@@ -58,8 +58,8 @@ def submit_pr(
         else:
             log.error("PR NOT MERGEABLE %s", pr_mergeable)
             raise typer.Exit(1)
-    except GithubException as e:
-        log.exception("GitHub API error: %s", e)
+    except GithubException:
+        log.exception("GitHub API error")
         raise typer.Exit(1) from None
 
 
@@ -114,8 +114,8 @@ def create_repo(
             has_wiki=has_wiki,
         )
         log.info("Repository '%s' created successfully in organization '%s'", repository, organization)
-    except GithubException as e:
-        log.exception("Failed to create repository: %s", e)
+    except GithubException:
+        log.exception("Failed to create repository")
         raise typer.Exit(1) from None
 
 
@@ -153,8 +153,8 @@ def update_repo(
             team_obj.remove_from_repos(repo_obj)
 
         log.info("Repository '%s' updated successfully", repository)
-    except GithubException as e:
-        log.exception("Failed to update repository: %s", e)
+    except GithubException:
+        log.exception("Failed to update repository")
         raise typer.Exit(1) from None
 
 
@@ -188,8 +188,8 @@ def create_team(
             team_obj.add_to_repos(repo_obj)
 
         log.info("Team '%s' created successfully in organization '%s'", name, organization)
-    except GithubException as e:
-        log.exception("Failed to create team: %s", e)
+    except GithubException:
+        log.exception("Failed to create team")
         raise typer.Exit(1) from None
 
 
@@ -206,6 +206,6 @@ def user(
         helper_user_github(None, organization, user, team, delete, admin)
         action = "removed from" if delete else "added to"
         log.info("User '%s' %s team '%s' successfully", user, action, team)
-    except Exception as e:
-        log.exception("Failed to modify user team membership: %s", e)
+    except Exception:
+        log.exception("Failed to modify user team membership")
         raise typer.Exit(1) from None

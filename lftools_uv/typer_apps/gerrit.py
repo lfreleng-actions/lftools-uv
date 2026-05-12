@@ -50,8 +50,8 @@ def addfile(
         g = gerrit.Gerrit(fqdn=gerrit_fqdn)
         data = g.add_file(gerrit_fqdn, gerrit_project, filename, issue_id or "", file_location or "")
         log.info(pformat(data))
-    except Exception as e:
-        log.exception(f"Failed to add file: {e}")
+    except Exception:
+        log.exception("Failed to add file")
         raise typer.Exit(1) from None
 
 
@@ -79,8 +79,8 @@ def addinfojob(
     try:
         git = git_gerrit(fqdn=gerrit_fqdn, project=jjbrepo)
         git.add_info_job(gerrit_fqdn, gerrit_project, issue_id, agent)
-    except Exception as e:
-        log.exception(f"Failed to add info job: {e}")
+    except Exception:
+        log.exception("Failed to add info job")
         raise typer.Exit(1) from None
 
 
@@ -99,8 +99,8 @@ def addgitreview(
     try:
         git = git_gerrit(fqdn=gerrit_fqdn, project=gerrit_project)
         git.add_git_review(gerrit_fqdn, gerrit_project, issue_id)
-    except Exception as e:
-        log.exception(f"Failed to add git review: {e}")
+    except Exception:
+        log.exception("Failed to add git review")
         raise typer.Exit(1) from None
 
 
@@ -117,8 +117,8 @@ def addgithubrights(
     try:
         g = gerrit.Gerrit(fqdn=gerrit_fqdn)
         g.add_github_rights(gerrit_fqdn, gerrit_project)
-    except Exception as e:
-        log.exception(f"Failed to add github rights: {e}")
+    except Exception:
+        log.exception("Failed to add github rights")
         raise typer.Exit(1) from None
 
 
@@ -136,8 +136,8 @@ def abandonchanges(
         g = gerrit.Gerrit(fqdn=gerrit_fqdn)
         data = g.abandon_changes(gerrit_fqdn, gerrit_project)
         log.info(pformat(data))
-    except Exception as e:
-        log.exception(f"Failed to abandon changes: {e}")
+    except Exception:
+        log.exception("Failed to abandon changes")
         raise typer.Exit(1) from None
 
 
@@ -164,8 +164,8 @@ def createproject(
         g = gerrit.Gerrit(fqdn=gerrit_fqdn)
         data = g.create_project(gerrit_fqdn, gerrit_project, ldap_group, description, check)
         log.info(pformat(data))
-    except Exception as e:
-        log.exception(f"Failed to create project: {e}")
+    except Exception:
+        log.exception("Failed to create project")
         raise typer.Exit(1) from None
 
 
@@ -179,8 +179,8 @@ def create_saml_group(
         g = gerrit.Gerrit(fqdn=gerrit_fqdn)
         data = g.create_saml_group(gerrit_fqdn, ldap_group)
         log.info(pformat(data))
-    except Exception as e:
-        log.exception(f"Failed to create SAML group: {e}")
+    except Exception:
+        log.exception("Failed to create SAML group")
         raise typer.Exit(1) from None
 
 
@@ -195,8 +195,8 @@ def list_project_permissions(
         data = g.list_project_permissions(project)
         for ldap_group in data:
             log.info(pformat(ldap_group))
-    except Exception as e:
-        log.exception(f"Failed to list project permissions: {e}")
+    except Exception:
+        log.exception("Failed to list project permissions")
         raise typer.Exit(1) from None
 
 
@@ -210,8 +210,8 @@ def list_project_inherits_from(
         g = gerrit.Gerrit(fqdn=gerrit_fqdn)
         data = g.list_project_inherits_from(gerrit_project)
         log.info(data)
-    except Exception as e:
-        log.exception(f"Failed to list project inheritance: {e}")
+    except Exception:
+        log.exception("Failed to list project inheritance")
         raise typer.Exit(1) from None
 
 
@@ -243,6 +243,6 @@ def addmavenconfig(
     try:
         git = git_gerrit(fqdn=gerrit_fqdn, project=jjbrepo)
         git.add_maven_config(gerrit_fqdn, gerrit_project, issue_id, nexus3 or "", nexus3_ports or "")
-    except Exception as e:
-        log.exception(f"Failed to add maven config: {e}")
+    except Exception:
+        log.exception("Failed to add maven config")
         raise typer.Exit(1) from None

@@ -65,7 +65,7 @@ def password_generator(
         password = helpers.generate_password(length)
         typer.echo(password)
     except Exception as e:
-        log.exception("Failed to generate password: %s", e)
+        log.exception("Failed to generate password")
         typer.echo(f"Error: Failed to generate password: {e}", err=True)
         raise typer.Exit(1) from None
 

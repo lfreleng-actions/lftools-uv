@@ -58,7 +58,7 @@ def search_members(
         for member in members:
             typer.echo(f"{member['username']} <{member['mail']}>")
     except Exception as e:
-        log.exception(f"Failed to search members for group {group}: {e}")
+        log.exception("Failed to search members for group %s", group)
         typer.echo(f"Error: Failed to search members for group {group}: {e}", err=True)
         raise typer.Exit(1) from None
 
@@ -85,7 +85,7 @@ def user_command(
         action = "removed from" if delete else "added to"
         typer.echo(f"✅ User {user} {action} group {group}")
     except Exception as e:
-        log.exception(f"Failed to manage user {user} in group {group}: {e}")
+        log.exception("Failed to manage user %s in group %s", user, group)
         typer.echo(f"Error: Failed to manage user {user} in group {group}: {e}", err=True)
         raise typer.Exit(1) from None
 
@@ -108,7 +108,7 @@ def invite_command(
         helper_invite(email, group)
         typer.echo(f"✅ Invitation sent to {email} for group {group}")
     except Exception as e:
-        log.exception(f"Failed to send invitation to {email} for group {group}: {e}")
+        log.exception("Failed to send invitation for group %s", group)
         typer.echo(f"Error: Failed to send invitation to {email} for group {group}: {e}", err=True)
         raise typer.Exit(1) from None
 
@@ -129,7 +129,7 @@ def create_group_command(
         helper_create_group(group)
         typer.echo(f"✅ Group {group} created successfully")
     except Exception as e:
-        log.exception(f"Failed to create group {group}: {e}")
+        log.exception("Failed to create group %s", group)
         typer.echo(f"Error: Failed to create group {group}: {e}", err=True)
         raise typer.Exit(1) from None
 
@@ -146,7 +146,7 @@ def match_ldap_info(
         helper_match_ldap_to_info(info_file, group, githuborg, noop)
         typer.echo("✅ LDAP to INFO matching completed")
     except Exception as e:
-        log.exception(f"Failed to match LDAP to INFO: {e}")
+        log.exception("Failed to match LDAP to INFO")
         typer.echo(f"Error: Failed to match LDAP to INFO: {e}", err=True)
         raise typer.Exit(1) from None
 

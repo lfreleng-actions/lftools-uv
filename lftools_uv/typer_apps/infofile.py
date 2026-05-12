@@ -64,7 +64,7 @@ def create_info_file(
         typer.echo(_MSG_REQUIRES_LEGACY_CLI)
         typer.echo("Use: lftools infofile create-info-file for full functionality.")
     except Exception as e:
-        log.exception(f"Failed to create info file: {e}")
+        log.exception("Failed to create info file")
         typer.echo(f"Error: Failed to create info file: {e}", err=True)
         raise typer.Exit(1) from None
 
@@ -96,7 +96,7 @@ def get_committers(
         typer.echo(_MSG_REQUIRES_LEGACY_CLI)
         typer.echo("Use: lftools infofile get-committers for full functionality.")
     except Exception as e:
-        log.exception(f"Failed to get committers: {e}")
+        log.exception("Failed to get committers")
         typer.echo(f"Error: Failed to get committers: {e}", err=True)
         raise typer.Exit(1) from None
 
@@ -118,7 +118,7 @@ def validate_info_file(
         typer.echo(_MSG_REQUIRES_LEGACY_CLI)
         typer.echo("Use: lftools infofile validate-info-file for full functionality.")
     except Exception as e:
-        log.exception(f"INFO file validation failed: {e}")
+        log.exception("INFO file validation failed")
         typer.echo(f"Error: INFO file validation failed: {e}", err=True)
         raise typer.Exit(1) from None
 
@@ -140,7 +140,7 @@ def check_committers(
         typer.echo(_MSG_REQUIRES_LEGACY_CLI)
         typer.echo("Use: lftools infofile check-committers for full functionality.")
     except Exception as e:
-        log.exception(f"Committers check failed: {e}")
+        log.exception("Committers check failed")
         typer.echo(f"Error: Committers check failed: {e}", err=True)
         raise typer.Exit(1) from None
 
@@ -162,7 +162,7 @@ def match_ldap(
         typer.echo(_MSG_REQUIRES_LEGACY_CLI)
         typer.echo("Use: lftools infofile match-ldap for full functionality.")
     except Exception as e:
-        log.exception(f"LDAP matching failed: {e}")
+        log.exception("LDAP matching failed")
         typer.echo(f"Error: LDAP matching failed: {e}", err=True)
         raise typer.Exit(1) from None
 

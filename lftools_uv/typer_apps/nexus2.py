@@ -69,8 +69,8 @@ def privilege_list(ctx: typer.Context) -> None:
         r = ctx.obj["nexus2"]
         data = r.privilege_list()
         log.info(tabulate(data, headers=["Name", "ID"]))
-    except Exception as e:
-        log.exception(f"Failed to list privileges: {e}")
+    except Exception:
+        log.exception("Failed to list privileges")
         raise typer.Exit(1) from None
 
 
@@ -86,8 +86,8 @@ def privilege_create(
         r = ctx.obj["nexus2"]
         data = r.privilege_create(name, description, repo)
         log.info(data)
-    except Exception as e:
-        log.exception(f"Failed to create privilege: {e}")
+    except Exception:
+        log.exception("Failed to create privilege")
         raise typer.Exit(1) from None
 
 
@@ -101,8 +101,8 @@ def privilege_delete(
         r = ctx.obj["nexus2"]
         data = r.privilege_delete(privilege_id)
         log.info(data)
-    except Exception as e:
-        log.exception(f"Failed to delete privilege: {e}")
+    except Exception:
+        log.exception("Failed to delete privilege")
         raise typer.Exit(1) from None
 
 
@@ -114,8 +114,8 @@ def repo_list(ctx: typer.Context) -> None:
         r = ctx.obj["nexus2"]
         data = r.repo_list()
         log.info(tabulate(data, headers=["Name", "Type", "Provider", "ID"]))
-    except Exception as e:
-        log.exception(f"Failed to list repositories: {e}")
+    except Exception:
+        log.exception("Failed to list repositories")
         raise typer.Exit(1) from None
 
 
@@ -134,8 +134,8 @@ def repo_create(
         r = ctx.obj["nexus2"]
         data = r.repo_create(repo_type, repo_id, repo_name, repo_provider, repo_policy, repo_upstream_url)
         log.info(data)
-    except Exception as e:
-        log.exception(f"Failed to create repository: {e}")
+    except Exception:
+        log.exception("Failed to create repository")
         raise typer.Exit(1) from None
 
 
@@ -149,8 +149,8 @@ def repo_delete(
         r = ctx.obj["nexus2"]
         data = r.repo_delete(repo_id)
         log.info(data)
-    except Exception as e:
-        log.exception(f"Failed to delete repository: {e}")
+    except Exception:
+        log.exception("Failed to delete repository")
         raise typer.Exit(1) from None
 
 
@@ -162,8 +162,8 @@ def role_list(ctx: typer.Context) -> None:
         r = ctx.obj["nexus2"]
         data = r.role_list()
         log.info(tabulate(data, headers=["ID", "Name", "Roles", "Privileges"], tablefmt="grid"))
-    except Exception as e:
-        log.exception(f"Failed to list roles: {e}")
+    except Exception:
+        log.exception("Failed to list roles")
         raise typer.Exit(1) from None
 
 
@@ -181,8 +181,8 @@ def role_create(
         r = ctx.obj["nexus2"]
         data = r.role_create(role_id, role_name, role_description, roles_list, privileges_list)
         log.info(data)
-    except Exception as e:
-        log.exception(f"Failed to create role: {e}")
+    except Exception:
+        log.exception("Failed to create role")
         raise typer.Exit(1) from None
 
 
@@ -196,8 +196,8 @@ def role_delete(
         r = ctx.obj["nexus2"]
         data = r.role_delete(role_id)
         log.info(data)
-    except Exception as e:
-        log.exception(f"Failed to delete role: {e}")
+    except Exception:
+        log.exception("Failed to delete role")
         raise typer.Exit(1) from None
 
 
@@ -209,8 +209,8 @@ def user_list(ctx: typer.Context) -> None:
         r = ctx.obj["nexus2"]
         data = r.user_list()
         log.info(tabulate(data, headers=["ID", "First Name", "Last Name", "Status", "Roles"]))
-    except Exception as e:
-        log.exception(f"Failed to list users: {e}")
+    except Exception:
+        log.exception("Failed to list users")
         raise typer.Exit(1) from None
 
 
@@ -229,8 +229,8 @@ def user_create(
         r = ctx.obj["nexus2"]
         data = r.user_create(username, firstname, lastname, email, roles, password)
         log.info(data)
-    except Exception as e:
-        log.exception(f"Failed to create user: {e}")
+    except Exception:
+        log.exception("Failed to create user")
         raise typer.Exit(1) from None
 
 
@@ -244,6 +244,6 @@ def user_delete(
         r = ctx.obj["nexus2"]
         data = r.user_delete(username)
         log.info(data)
-    except Exception as e:
-        log.exception(f"Failed to delete user: {e}")
+    except Exception:
+        log.exception("Failed to delete user")
         raise typer.Exit(1) from None

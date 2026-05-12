@@ -50,7 +50,7 @@ def verify_schema(
         check_schema_file(str(yamlfile), str(schemafile))
         typer.echo(f"✅ Schema validation passed for {yamlfile}")
     except Exception as e:
-        log.exception(f"Schema validation failed: {e}")
+        log.exception("Schema validation failed")
         typer.echo(f"❌ Schema validation failed: {e}", err=True)
         raise typer.Exit(1) from None
 

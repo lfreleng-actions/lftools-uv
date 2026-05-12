@@ -162,11 +162,11 @@ def maven_file(
         # TODO: Implement maven file deployment functionality
         typer.echo(f"Deploy Maven file {file_name} to {nexus_url}")
         typer.echo("Note: This functionality needs to be implemented")
-    except FileNotFoundError as e:
-        log.exception("Maven binary not found: %s", e)
+    except FileNotFoundError:
+        log.exception("Maven binary not found")
         raise typer.Exit(127) from None
-    except Exception as e:
-        log.exception("Maven deployment failed: %s", e)
+    except Exception:
+        log.exception("Maven deployment failed")
         raise typer.Exit(1) from None
 
 

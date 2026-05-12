@@ -78,7 +78,7 @@ def check_command(
             typer.echo(f"Error: {source} is not a valid file or directory", err=True)
             raise typer.Exit(1) from None
     except Exception as e:
-        log.exception(f"License check failed: {e}")
+        log.exception("License check failed")
         typer.echo(f"Error: License check failed: {e}", err=True)
         raise typer.Exit(1) from None
 
