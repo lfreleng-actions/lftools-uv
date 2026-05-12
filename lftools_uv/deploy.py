@@ -499,13 +499,24 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
     def _upload_to_s3(file: str) -> bool:
         mime_type: str | None = mimetypes.guess_type(file)[0]
         mime_encoding: str | None = mimetypes.guess_type(file)[1]
-        extra_args: dict[str, str | None] = {"ContentType": _CONTENT_TYPE_TEXT}
-        text_html_extra_args: dict[str, str | None] = {"ContentType": "text/html", "ContentEncoding": mime_encoding}
-        text_plain_extra_args: dict[str, str | None] = {
-            "ContentType": _CONTENT_TYPE_TEXT,
-            "ContentEncoding": mime_encoding,
-        }
-        app_xml_extra_args: dict[str, str | None] = {"ContentType": _CONTENT_TYPE_XML, "ContentEncoding": mime_encoding}
+
+        def _extra_args(content_type: str) -> dict[str, str]:
+            """Build an ExtraArgs dict, omitting ContentEncoding when None.
+
+            boto3's S3 transfer manager rejects ``None`` values for ``ExtraArgs``
+            entries with a ``ParamValidationError``; many file types
+            (e.g. plain ``.html`` / ``.xml`` without compression) have no
+            mime_encoding, so the key must be omitted entirely in that case.
+            """
+            args: dict[str, str] = {"ContentType": content_type}
+            if mime_encoding:
+                args["ContentEncoding"] = mime_encoding
+            return args
+
+        extra_args: dict[str, str] = {"ContentType": _CONTENT_TYPE_TEXT}
+        text_html_extra_args: dict[str, str] = _extra_args("text/html")
+        text_plain_extra_args: dict[str, str] = _extra_args(_CONTENT_TYPE_TEXT)
+        app_xml_extra_args: dict[str, str] = _extra_args(_CONTENT_TYPE_XML)
         if file == "_tmpfile":
             for dir in (logs_dir, silo_dir, jenkins_node_dir):
                 try:
