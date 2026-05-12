@@ -19,7 +19,7 @@ import subprocess
 import sys
 
 import click
-import ldap
+import ldap  # pyright: ignore[reportMissingImports]
 
 log = logging.getLogger(__name__)
 

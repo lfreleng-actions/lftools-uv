@@ -189,6 +189,13 @@ exclude = [
 [tool.basedpyright]
 typeCheckingMode = "standard"
 pythonVersion = "3.11"
+# Explicit venv pointer so editor LSPs (Zed, VS Code, Neovim, ...) resolve
+# project dependencies the same way `uv run basedpyright` does. Without this,
+# the LSP launches in a clean environment with no VIRTUAL_ENV set and falls
+# back to its bundled stubs, producing spurious "unknown attribute" errors
+# for every dynamically-typed library (notably boto3.resource(...)).
+venvPath = "."
+venv = ".venv"
 
 [tool.mypy]
 python_version = "3.11"

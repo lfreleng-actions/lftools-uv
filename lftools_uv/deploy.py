@@ -28,7 +28,7 @@ import sys
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import NoReturn
+from typing import Any, NoReturn
 
 import boto3
 import requests
@@ -557,7 +557,7 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
     work_dir: str = tempfile.mkdtemp(prefix="lftools-dl.")
     os.chdir(work_dir)
     s3_bucket = s3_bucket.lower()
-    s3 = boto3.resource("s3")
+    s3: Any = boto3.resource("s3")
     logs_dir: str = s3_path.split("/")[0] + "/"
     silo_dir: str = s3_path.split("/")[1] + "/"
     jenkins_node_dir: str = logs_dir + silo_dir + s3_path.split("/")[2] + "/"
