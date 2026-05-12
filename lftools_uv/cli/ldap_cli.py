@@ -107,7 +107,7 @@ def csv(ctx, ldap_server, ldap_group_base, ldap_user_base, groups):
                 log.exception(e.message["desc"])
             else:
                 log.exception(e)
-            sys.exit(0)
+            sys.exit(1)
 
     def eprint(*args, **kwargs):
         """Log error output (previously printed to stderr)."""
