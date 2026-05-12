@@ -16,7 +16,7 @@ __author__ = "Thanh Ha"
 
 import builtins
 import sys
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import openstack
@@ -97,7 +97,9 @@ def remove(os_cloud: str, volume_id: str, minutes: int = 0) -> None:
         print("ERROR: volume not found.")
         sys.exit(1)
 
-    if datetime.strptime(volume.created_at, "%Y-%m-%dT%H:%M:%S.%f") >= datetime.utcnow() - timedelta(minutes=minutes):
+    if datetime.strptime(volume.created_at, "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=UTC) >= datetime.now(
+        UTC
+    ) - timedelta(minutes=minutes):
         print(f'WARN: volume "{volume.name}" is not older than {minutes} minutes.')
     else:
         cloud.delete_volume(volume.id)

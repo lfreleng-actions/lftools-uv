@@ -20,7 +20,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import openstack
@@ -109,11 +109,11 @@ def cost(os_cloud: str, stack_name: str, timeout: int = 60) -> None:
             return 0.0
 
     def parse_iso8601_time(time: str) -> datetime:
-        return datetime.strptime(time, "%Y-%m-%dT%H:%M:%S.%f")
+        return datetime.strptime(time, "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=UTC)
 
     def get_server_info(server_id: str) -> tuple[str, float]:
         server = cloud.compute.find_server(server_id)  # pyright: ignore[reportAttributeAccessIssue]
-        diff = datetime.utcnow() - parse_iso8601_time(server.launched_at)  # pyright: ignore[reportOptionalMemberAccess]
+        diff = datetime.now(UTC) - parse_iso8601_time(server.launched_at)  # pyright: ignore[reportOptionalMemberAccess]
         return server.flavor["original_name"], diff.total_seconds()  # pyright: ignore[reportOptionalMemberAccess]
 
     def get_server_ids(stack_name: str) -> list[str]:
