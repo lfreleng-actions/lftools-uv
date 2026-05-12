@@ -14,6 +14,7 @@ import os
 import pytest
 import requests
 import responses
+from pytest_mock import MockerFixture
 
 import lftools_uv.nexus.release_docker_hub as rdh
 
@@ -905,3 +906,93 @@ def test_calculate_docker_project_name(mocker):
     assert test_proj.nexus_repo_name == "this/is/a-test_project"
     assert test_proj.docker_repo_name == "this-is-a-test_project"
     assert test_proj.calc_docker_project_name() == "onap/this-is-a-test_project"
+
+
+class TestProjectClassOrdering:
+    """Tests for ProjectClass equality, hashing, and ordering semantics.
+
+    ProjectClass is decorated with @functools.total_ordering and defines
+    __lt__, __eq__, and __hash__ keyed on nexus_repo_name. These tests pin
+    that contract so future refactors do not silently regress sort order,
+    set / dict membership, or cross-type comparison behaviour.
+    """
+
+    @staticmethod
+    def _make(repo: str, mocker: MockerFixture) -> rdh.ProjectClass:
+        """Build a ProjectClass without touching the network.
+
+        ProjectClass.__init__ instantiates NexusTagClass and DockerTagClass,
+        which both perform real ``requests.get(...)`` calls in their own
+        ``__init__`` methods. Patch those classes (and ``docker.from_env``)
+        so the constructor stays purely in-process and these tests neither
+        depend on external services nor become flaky offline. The patched
+        instances expose an empty ``valid`` list so ``_populate_tags_to_copy``
+        is a no-op.
+        """
+        mocker.patch("docker.from_env")
+        nexus_mock = mocker.patch("lftools_uv.nexus.release_docker_hub.NexusTagClass")
+        nexus_mock.return_value.valid = []
+        docker_mock = mocker.patch("lftools_uv.nexus.release_docker_hub.DockerTagClass")
+        docker_mock.return_value.valid = []
+        rdh.initialize("onap")
+        return rdh.ProjectClass(["onap", repo, ""])
+
+    def test_equal_when_same_nexus_repo_name(self, mocker):
+        a = self._make("foo/bar", mocker)
+        b = self._make("foo/bar", mocker)
+        assert a == b
+        assert not (a != b)
+
+    def test_unequal_when_different_nexus_repo_name(self, mocker):
+        a = self._make("foo/bar", mocker)
+        b = self._make("foo/baz", mocker)
+        assert a != b
+        assert not (a == b)
+
+    def test_eq_with_non_projectclass_returns_notimplemented(self, mocker):
+        a = self._make("foo/bar", mocker)
+        # Python falls back to identity comparison when both __eq__ return
+        # NotImplemented, so a == "foo/bar" must be False (not raise).
+        assert (a == "foo/bar") is False
+        assert (a == 42) is False
+        assert (a == None) is False  # noqa: E711
+
+    def test_lt_with_non_projectclass_returns_notimplemented(self, mocker):
+        a = self._make("foo/bar", mocker)
+        # Comparing a ProjectClass with a non-ProjectClass should raise
+        # TypeError (Python's standard outcome when both sides return
+        # NotImplemented), not AttributeError from naive attribute access.
+        with pytest.raises(TypeError):
+            _ = a < "foo/bar"
+        with pytest.raises(TypeError):
+            _ = a < 42
+
+    def test_hash_consistent_with_equality(self, mocker):
+        a = self._make("foo/bar", mocker)
+        b = self._make("foo/bar", mocker)
+        assert a == b
+        assert hash(a) == hash(b)
+
+    def test_usable_as_set_member(self, mocker):
+        a = self._make("foo/bar", mocker)
+        b = self._make("foo/bar", mocker)
+        c = self._make("foo/baz", mocker)
+        # a and b are equal -> the set should collapse them to one entry.
+        assert len({a, b, c}) == 2
+
+    def test_sortable_by_nexus_repo_name(self, mocker):
+        c = self._make("foo/c", mocker)
+        a = self._make("foo/a", mocker)
+        b = self._make("foo/b", mocker)
+        ordered = sorted([c, a, b])
+        assert [p.nexus_repo_name for p in ordered] == ["foo/a", "foo/b", "foo/c"]
+
+    def test_total_ordering_provides_le_gt_ge(self, mocker):
+        a = self._make("foo/a", mocker)
+        b = self._make("foo/b", mocker)
+        # @functools.total_ordering should synthesise these from __lt__ + __eq__.
+        assert a <= b
+        assert a <= self._make("foo/a", mocker)
+        assert b > a
+        assert b >= a
+        assert b >= self._make("foo/b", mocker)
