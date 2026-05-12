@@ -143,10 +143,9 @@ class Gerrit(client.RestApi):
 
         with open(filename) as my_file:  # noqa: PTH123
             file_content: str = my_file.read()
-        my_file_size: os.stat_result = os.stat(filename)
         headers: dict[str, str] = {
             "Content-Type": _CONTENT_TYPE_TEXT,
-            "Content-length": f"{my_file_size}",
+            "Content-length": str(len(file_content.encode("utf-8"))),
         }
         self.r.headers.update(headers)
         access_str = f"changes/{changeid}/edit/{basename}"
