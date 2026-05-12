@@ -145,7 +145,6 @@ class Gerrit(client.RestApi):
             file_content: str = my_file.read()
         headers: dict[str, str] = {
             "Content-Type": _CONTENT_TYPE_TEXT,
-            "Content-length": str(len(file_content.encode("utf-8"))),
         }
         self.r.headers.update(headers)
         access_str = f"changes/{changeid}/edit/{basename}"
@@ -224,10 +223,8 @@ class Gerrit(client.RestApi):
     build-node: {buildnode}
     jobs:
       - gerrit-info-yaml-verify\n"""
-        my_inline_file_size: int = len(my_inline_file.encode("utf-8"))
         headers: dict[str, str] = {
             "Content-Type": _CONTENT_TYPE_TEXT,
-            "Content-length": f"{my_inline_file_size}",
         }
         self.r.headers.update(headers)
         access_str = f"changes/{changeid}/edit/jjb%2F{gerrit_project_dashed}%2F{gerrit_project_dashed}.yaml"
@@ -393,10 +390,8 @@ class Gerrit(client.RestApi):
         project={gerrit_project}
         defaultbranch=master
         """
-        my_inline_file_size: int = len(my_inline_file.encode("utf-8"))
         headers: dict[str, str] = {
             "Content-Type": _CONTENT_TYPE_TEXT,
-            "Content-length": f"{my_inline_file_size}",
         }
         self.r.headers.update(headers)
         access_str = f"changes/{changeid}/edit/{filename}"
