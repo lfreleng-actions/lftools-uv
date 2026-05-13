@@ -13,7 +13,7 @@
 __author__ = "Anil Belur"
 
 import sys
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import openstack
 import openstack.connection
@@ -92,7 +92,9 @@ def remove(os_cloud, server_name, minutes=0):
         print("ERROR: Server not found.")
         sys.exit(1)
 
-    if datetime.strptime(server.created_at, "%Y-%m-%dT%H:%M:%SZ") >= datetime.utcnow() - timedelta(minutes=minutes):
+    if datetime.strptime(server.created_at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC) >= datetime.now(UTC) - timedelta(
+        minutes=minutes
+    ):
         print(f'WARN: Server "{server.name}" is not older than {minutes} minutes.')
     else:
         cloud.delete_server(server.name)

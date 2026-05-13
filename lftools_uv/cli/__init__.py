@@ -138,8 +138,8 @@ def main():
             from lftools_uv.cli_app import app as typer_app
 
             typer_app()
-        except ImportError as e:
-            log.error("Failed to import Typer CLI: %s", e)
+        except ImportError:
+            log.exception("Failed to import Typer CLI")
             log.info("Falling back to legacy Click CLI")
             cli(obj={})
         except Exception as e:

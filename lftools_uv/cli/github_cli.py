@@ -20,6 +20,9 @@ from github import Github, GithubException
 from lftools_uv import config
 from lftools_uv.github_helper import helper_list, helper_user_github, prvotes
 
+_GITHUB_PREFIX = "github."
+
+
 log = logging.getLogger(__name__)
 
 
@@ -37,8 +40,8 @@ def github_cli(ctx):
 @click.pass_context
 def submit_pr(ctx, organization, repo, pr):
     """Submit a pr if mergeable."""
-    if config.get_setting("github." + organization, "token"):
-        token = config.get_setting("github." + organization, "token")
+    if config.get_setting(_GITHUB_PREFIX + organization, "token"):
+        token = config.get_setting(_GITHUB_PREFIX + organization, "token")
     else:
         token = config.get_setting("github", "token")
 
@@ -47,7 +50,7 @@ def submit_pr(ctx, organization, repo, pr):
     try:
         org = g.get_organization(orgName)
     except GithubException as ghe:
-        log.error(ghe)
+        log.exception(ghe)
         sys.exit(1)
 
     repo = org.get_repo(repo)
@@ -100,8 +103,8 @@ def createrepo(ctx, organization, repository, description, has_issues, has_proje
     By default has_issues has_wiki and has_projects is set to false.
     See --help to create a repo with these enabled.
     """
-    if config.get_setting("github." + organization, "token"):
-        token = config.get_setting("github." + organization, "token")
+    if config.get_setting(_GITHUB_PREFIX + organization, "token"):
+        token = config.get_setting(_GITHUB_PREFIX + organization, "token")
     else:
         token = config.get_setting("github", "token")
 
@@ -114,7 +117,7 @@ def createrepo(ctx, organization, repository, description, has_issues, has_proje
     try:
         org = g.get_organization(orgName)
     except GithubException as ghe:
-        log.error(ghe)
+        log.exception(ghe)
         sys.exit(1)
     repos = org.get_repos()
     for repo in repos:
@@ -133,7 +136,7 @@ def createrepo(ctx, organization, repository, description, has_issues, has_proje
             private=False,
         )
     except GithubException as ghe:
-        log.error(ghe)
+        log.exception(ghe)
 
 
 @click.command(name="update-repo")
@@ -151,8 +154,8 @@ def updaterepo(ctx, organization, repository, has_issues, has_projects, has_wiki
     By default has_issues has_wiki and has_projects is set to false.
     See --help to use this command to enable these options.
     """
-    if config.get_setting("github." + organization, "token"):
-        token = config.get_setting("github." + organization, "token")
+    if config.get_setting(_GITHUB_PREFIX + organization, "token"):
+        token = config.get_setting(_GITHUB_PREFIX + organization, "token")
     else:
         token = config.get_setting("github", "token")
     g = Github(token)
@@ -165,7 +168,7 @@ def updaterepo(ctx, organization, repository, has_issues, has_projects, has_wiki
     try:
         org = g.get_organization(orgName)
     except GithubException as ghe:
-        log.error(ghe)
+        log.exception(ghe)
         sys.exit(1)
 
     repos = org.get_repos()
@@ -211,8 +214,8 @@ def createteam(ctx, organization, name, repo, privacy):
     Privacy should be set to closed
     This allows us to control group membership.
     """
-    if config.get_setting("github." + organization, "token"):
-        token = config.get_setting("github." + organization, "token")
+    if config.get_setting(_GITHUB_PREFIX + organization, "token"):
+        token = config.get_setting(_GITHUB_PREFIX + organization, "token")
     else:
         token = config.get_setting("github", "token")
 
@@ -222,7 +225,7 @@ def createteam(ctx, organization, name, repo, privacy):
     try:
         org = g.get_organization(orgName)
     except GithubException as ghe:
-        log.error(ghe)
+        log.exception(ghe)
         sys.exit(1)
 
     repos = []
@@ -230,7 +233,7 @@ def createteam(ctx, organization, name, repo, privacy):
         try:
             get_repos = org.get_repos
         except GithubException as ghe:
-            log.error(ghe)
+            log.exception(ghe)
             sys.exit(1)
 
         my_repos = [repo]
@@ -246,7 +249,7 @@ def createteam(ctx, organization, name, repo, privacy):
     try:
         teams = org.get_teams
     except GithubException as ghe:
-        log.error(ghe)
+        log.exception(ghe)
         sys.exit(1)
 
     for team in teams():
@@ -258,13 +261,13 @@ def createteam(ctx, organization, name, repo, privacy):
         try:
             org.create_team(name=name, repo_names=repos, privacy=privacy)
         except GithubException as ghe:
-            log.error(ghe)
+            log.exception(ghe)
 
     if not repo:
         try:
             org.create_team(name=name, privacy=privacy)
         except GithubException as ghe:
-            log.error(ghe)
+            log.exception(ghe)
 
 
 @click.command(name="user")

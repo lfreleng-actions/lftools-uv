@@ -25,6 +25,12 @@ import lftools_uv.api.client as client
 from lftools_uv import config
 from lftools_uv.api.client import ApiResponse
 
+_DOT_SECOND = ".second"
+_CHANGES_PATH = "changes/"
+_CONTENT_TYPE_TEXT = "text/plain"
+_CONTENT_TYPE_JSON_UTF8 = "application/json; charset=UTF-8"
+
+
 log: logging.Logger = logging.getLogger(__name__)
 
 
@@ -129,7 +135,7 @@ class Gerrit(client.RestApi):
             basename = file_location
         log.info(payload)
 
-        access_str: str = "changes/"
+        access_str: str = _CHANGES_PATH
         response: ApiResponse = self.post(access_str, data=payload)
         result: dict[str, object] = self._json_body(response)
         log.info(result.get("id"))
@@ -137,10 +143,8 @@ class Gerrit(client.RestApi):
 
         with open(filename) as my_file:  # noqa: PTH123
             file_content: str = my_file.read()
-        my_file_size: os.stat_result = os.stat(filename)
         headers: dict[str, str] = {
-            "Content-Type": "text/plain",
-            "Content-length": f"{my_file_size}",
+            "Content-Type": _CONTENT_TYPE_TEXT,
         }
         self.r.headers.update(headers)
         access_str = f"changes/{changeid}/edit/{basename}"
@@ -148,7 +152,7 @@ class Gerrit(client.RestApi):
         log.info(edit_result)
 
         access_str = f"changes/{changeid}/edit:publish"
-        headers = {"Content-Type": "application/json; charset=UTF-8"}
+        headers = {"Content-Type": _CONTENT_TYPE_JSON_UTF8}
         self.r.headers.update(headers)
         publish_payload: str = json.dumps(
             {
@@ -189,7 +193,7 @@ class Gerrit(client.RestApi):
         if not reviewid:
             payload: str = self.create_change(filename, jjbrepo, issue_id, signed_off_by)
             log.info(payload)
-            access_str: str = "changes/"
+            access_str: str = _CHANGES_PATH
             response: ApiResponse = self.post(access_str, data=payload)
             result: dict[str, object] = self._json_body(response)
             log.info(result)
@@ -219,10 +223,8 @@ class Gerrit(client.RestApi):
     build-node: {buildnode}
     jobs:
       - gerrit-info-yaml-verify\n"""
-        my_inline_file_size: int = len(my_inline_file.encode("utf-8"))
         headers: dict[str, str] = {
-            "Content-Type": "text/plain",
-            "Content-length": f"{my_inline_file_size}",
+            "Content-Type": _CONTENT_TYPE_TEXT,
         }
         self.r.headers.update(headers)
         access_str = f"changes/{changeid}/edit/jjb%2F{gerrit_project_dashed}%2F{gerrit_project_dashed}.yaml"
@@ -232,7 +234,7 @@ class Gerrit(client.RestApi):
         log.info(edit_result)
 
         access_str = f"changes/{changeid}/edit:publish"
-        headers = {"Content-Type": "application/json; charset=UTF-8"}
+        headers = {"Content-Type": _CONTENT_TYPE_JSON_UTF8}
         self.r.headers.update(headers)
         publish_payload: str = json.dumps(
             {
@@ -261,7 +263,7 @@ class Gerrit(client.RestApi):
         )
         access_str: str = f"changes/{changeid}/revisions/2/review"
         headers: dict[str, str] = {
-            "Content-Type": "application/json; charset=UTF-8",
+            "Content-Type": _CONTENT_TYPE_JSON_UTF8,
         }
         self.r.headers.update(headers)
         payload: str = json.dumps(
@@ -277,9 +279,9 @@ class Gerrit(client.RestApi):
 
         result: ApiResponse = self.post(access_str, data=payload)
         # Code for projects that don't allow self merge.
-        if config.get_setting(self.fqdn + ".second"):
-            second_username: str = config.get_setting(self.fqdn + ".second", "username")
-            second_password: str = config.get_setting(self.fqdn + ".second", "password")
+        if config.has_section(self.fqdn + _DOT_SECOND):
+            second_username: str = config.get_setting(self.fqdn + _DOT_SECOND, "username")
+            second_password: str = config.get_setting(self.fqdn + _DOT_SECOND, "password")
             self.r.auth = (second_username, second_password)
             result = self.post(access_str, data=payload)
             self.r.auth = (self.username, self.password)
@@ -297,7 +299,7 @@ class Gerrit(client.RestApi):
         access_str: str = f"changes/{changeid}/submit"
         log.info(access_str)
         headers: dict[str, str] = {
-            "Content-Type": "application/json; charset=UTF-8",
+            "Content-Type": _CONTENT_TYPE_JSON_UTF8,
         }
         self.r.headers.update(headers)
         result: ApiResponse = self.post(access_str, data=payload)
@@ -309,7 +311,7 @@ class Gerrit(client.RestApi):
         access_str: str = f"changes/?q=project:{gerrit_project_encoded}"
         log.info(access_str)
         headers: dict[str, str] = {
-            "Content-Type": "application/json; charset=UTF-8",
+            "Content-Type": _CONTENT_TYPE_JSON_UTF8,
         }
         self.r.headers.update(headers)
         response: ApiResponse = self.get(access_str)
@@ -373,7 +375,7 @@ class Gerrit(client.RestApi):
         payload: str = self.create_change(filename, gerrit_project, issue_id, signed_off_by)
         log.info(payload)
 
-        access_str: str = "changes/"
+        access_str: str = _CHANGES_PATH
         response: ApiResponse = self.post(access_str, data=payload)
         result: dict[str, object] = self._json_body(response)
         log.info(result)
@@ -388,10 +390,8 @@ class Gerrit(client.RestApi):
         project={gerrit_project}
         defaultbranch=master
         """
-        my_inline_file_size: int = len(my_inline_file.encode("utf-8"))
         headers: dict[str, str] = {
-            "Content-Type": "text/plain",
-            "Content-length": f"{my_inline_file_size}",
+            "Content-Type": _CONTENT_TYPE_TEXT,
         }
         self.r.headers.update(headers)
         access_str = f"changes/{changeid}/edit/{filename}"
@@ -405,7 +405,7 @@ class Gerrit(client.RestApi):
 
         else:
             access_str = f"changes/{changeid}/edit:publish"
-            headers = {"Content-Type": "application/json; charset=UTF-8"}
+            headers = {"Content-Type": _CONTENT_TYPE_JSON_UTF8}
             self.r.headers.update(headers)
             publish_payload: str = json.dumps(
                 {

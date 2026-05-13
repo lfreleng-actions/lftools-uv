@@ -38,7 +38,7 @@ def get_setting(ctx, section, option):
     try:
         result = config.get_setting(section, option)
     except (configparser.NoOptionError, configparser.NoSectionError) as e:
-        log.error(e)
+        log.exception(e)
         sys.exit(1)
 
     if isinstance(result, list):

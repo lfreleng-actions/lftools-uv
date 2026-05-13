@@ -19,7 +19,7 @@ import subprocess
 import sys
 
 import click
-import ldap
+import ldap  # pyright: ignore[reportMissingImports]
 
 log = logging.getLogger(__name__)
 
@@ -104,10 +104,10 @@ def csv(ctx, ldap_server, ldap_group_base, ldap_user_base, groups):
             ldap_object.simple_bind_s()
         except ldap.LDAPError as e:  # pyright: ignore[reportAttributeAccessIssue]
             if type(e.message) is dict and "desc" in e.message:
-                log.error(e.message["desc"])
+                log.exception(e.message["desc"])
             else:
-                log.error(e)
-            sys.exit(0)
+                log.exception(e)
+            sys.exit(1)
 
     def eprint(*args, **kwargs):
         """Log error output (previously printed to stderr)."""

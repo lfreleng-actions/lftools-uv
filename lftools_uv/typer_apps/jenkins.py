@@ -24,6 +24,8 @@ from lftools_uv.jenkins.token import get_token
 
 log = logging.getLogger(__name__)
 
+_MSG_CREDS_NOT_SET = "Username or password not set."
+
 # Create the main Typer app for jenkins commands
 jenkins_app = typer.Typer(help="Query information about the Jenkins Server.")
 
@@ -77,8 +79,8 @@ def jenkins_callback(
         state = ctx.obj.get("state")
         if state:
             state.jenkins = jenkins_client
-    except Exception as e:
-        log.error(f"Failed to initialize Jenkins client: {e}")
+    except Exception:
+        log.exception("Failed to initialize Jenkins client")
         # For help requests, don't fail - just continue without initializing client
         if ctx.obj is None:
             ctx.obj = {}
@@ -109,8 +111,8 @@ for (c in creds) {
 """
         result = jenkins.server.run_script(groovy_script)
         log.info(result)
-    except Exception as e:
-        log.error(f"Failed to get credentials: {e}")
+    except Exception:
+        log.exception("Failed to get credentials")
         raise typer.Exit(1) from None
 
 
@@ -138,8 +140,8 @@ for (c in creds) {
 """
         result = jenkins.server.run_script(groovy_script)
         log.info(result)
-    except Exception as e:
-        log.error(f"Failed to get secrets: {e}")
+    except Exception:
+        log.exception("Failed to get secrets")
         raise typer.Exit(1) from None
 
 
@@ -171,8 +173,8 @@ for (c in creds) {
 """
         result = jenkins.server.run_script(groovy_script)
         log.info(result)
-    except Exception as e:
-        log.error(f"Failed to get private keys: {e}")
+    except Exception:
+        log.exception("Failed to get private keys")
         raise typer.Exit(1) from None
 
 
@@ -189,8 +191,8 @@ def groovy(ctx: typer.Context, groovy_file: str = typer.Argument(..., help="Path
     except FileNotFoundError:
         log.error(f"Groovy file not found: {groovy_file}")
         raise typer.Exit(1) from None
-    except Exception as e:
-        log.error(f"Failed to run groovy script: {e}")
+    except Exception:
+        log.exception("Failed to run groovy script")
         raise typer.Exit(1) from None
 
 
@@ -215,15 +217,15 @@ def quiet_down(
         jenkins.server.quiet_down()
     except HTTPError as m:
         if m.code == 405:
-            log.error(
+            log.exception(
                 f"\n[{m}]\nJenkins {version} does not support Quiet Down without a CSRF Token. (CVE-2017-04-26)\nPlease file a bug with 'python-jenkins'"
             )
             raise typer.Exit(1) from None
         else:
-            log.error(f"HTTP error: {m}")
+            log.exception("HTTP error: %s", m)
             raise typer.Exit(1) from None
-    except Exception as e:
-        log.error(f"Failed to quiet down Jenkins: {e}")
+    except Exception:
+        log.exception("Failed to quiet down Jenkins")
         raise typer.Exit(1) from None
 
 
@@ -295,8 +297,8 @@ for (node in Jenkins.instance.computers) {
         else:
             result = jenkins.server.run_script(groovy_script)
         log.info(result)
-    except Exception as e:
-        log.error(f"Failed to remove offline nodes: {e}")
+    except Exception:
+        log.exception("Failed to remove offline nodes")
         raise typer.Exit(1) from None
 
 
@@ -310,8 +312,8 @@ def builds_running(ctx: typer.Context) -> None:
 
         for build in running_builds:
             log.info("- %s on %s", build["name"], build["node"])
-    except Exception as e:
-        log.error(f"Failed to get running builds: {e}")
+    except Exception:
+        log.exception("Failed to get running builds")
         raise typer.Exit(1) from None
 
 
@@ -331,8 +333,8 @@ def builds_queued(ctx: typer.Context) -> None:
             if build.get("blocked"):
                 status_flags.append("[Blocked]")
             log.info(" - %s%s", build["task"]["name"], (" " + " ".join(status_flags)) if status_flags else "")
-    except Exception as e:
-        log.error(f"Failed to get queued builds: {e}")
+    except Exception:
+        log.exception("Failed to get queued builds")
         raise typer.Exit(1) from None
 
 
@@ -342,6 +344,7 @@ import jenkins.*
 import jenkins.model.*
 import hudson.*
 import hudson.model.*
+
 
 def jobTypes = [hudson.model.FreeStyleProject.class]
 
@@ -366,8 +369,8 @@ def jobs_enable(ctx: typer.Context, regex: str = typer.Argument(..., help="Regex
         jenkins = ctx.obj["jenkins"]
         result = jenkins.server.run_script(enable_disable_jobs.format(regex, "enable"))
         log.info(result)
-    except Exception as e:
-        log.error(f"Failed to enable jobs: {e}")
+    except Exception:
+        log.exception("Failed to enable jobs")
         raise typer.Exit(1) from None
 
 
@@ -378,8 +381,8 @@ def jobs_disable(ctx: typer.Context, regex: str = typer.Argument(..., help="Rege
         jenkins = ctx.obj["jenkins"]
         result = jenkins.server.run_script(enable_disable_jobs.format(regex, "disable"))
         log.info(result)
-    except Exception as e:
-        log.error(f"Failed to disable jobs: {e}")
+    except Exception:
+        log.exception("Failed to disable jobs")
         raise typer.Exit(1) from None
 
 
@@ -400,8 +403,8 @@ def nodes_list(ctx: typer.Context) -> None:
 
         for node in node_list:
             log.info("%s [%s]", node["name"], offline_str(node["offline"]))
-    except Exception as e:
-        log.error(f"Failed to list nodes: {e}")
+    except Exception:
+        log.exception("Failed to list nodes")
         raise typer.Exit(1) from None
 
 
@@ -431,8 +434,8 @@ def plugins_list(ctx: typer.Context) -> None:
             _, plugin_name = key
             plugin = plugins[plugin_name]
             print_plugin(plugin)
-    except Exception as e:
-        log.error(f"Failed to list plugins: {e}")
+    except Exception:
+        log.exception("Failed to list plugins")
         raise typer.Exit(1) from None
 
 
@@ -447,8 +450,8 @@ def plugins_pinned(ctx: typer.Context) -> None:
             plugin = plugins[plugin_name]
             if plugin["pinned"]:
                 print_plugin(plugin)
-    except Exception as e:
-        log.error(f"Failed to list pinned plugins: {e}")
+    except Exception:
+        log.exception("Failed to list pinned plugins")
         raise typer.Exit(1) from None
 
 
@@ -463,8 +466,8 @@ def plugins_dynamic(ctx: typer.Context) -> None:
             plugin = plugins[plugin_name]
             if plugin["supportsDynamicLoad"] == "YES":
                 print_plugin(plugin)
-    except Exception as e:
-        log.error(f"Failed to list dynamic plugins: {e}")
+    except Exception:
+        log.exception("Failed to list dynamic plugins")
         raise typer.Exit(1) from None
 
 
@@ -479,8 +482,8 @@ def plugins_needs_update(ctx: typer.Context) -> None:
             plugin = plugins[plugin_name]
             if plugin["hasUpdate"]:
                 print_plugin(plugin)
-    except Exception as e:
-        log.error(f"Failed to list plugins needing updates: {e}")
+    except Exception:
+        log.exception("Failed to list plugins needing updates")
         raise typer.Exit(1) from None
 
 
@@ -495,8 +498,8 @@ def plugins_enabled(ctx: typer.Context) -> None:
             plugin = plugins[plugin_name]
             if plugin["enabled"]:
                 print_plugin(plugin)
-    except Exception as e:
-        log.error(f"Failed to list enabled plugins: {e}")
+    except Exception:
+        log.exception("Failed to list enabled plugins")
         raise typer.Exit(1) from None
 
 
@@ -515,8 +518,8 @@ def plugins_disabled(ctx: typer.Context) -> None:
             plugin = plugins[plugin_name]
             if not plugin["enabled"]:
                 print_plugin(plugin)
-    except Exception as e:
-        log.error(f"Failed to list disabled plugins: {e}")
+    except Exception:
+        log.exception("Failed to list disabled plugins")
         raise typer.Exit(1) from None
 
 
@@ -531,8 +534,8 @@ def plugins_active(ctx: typer.Context) -> None:
             plugin = plugins[plugin_name]
             if plugin["active"]:
                 print_plugin(plugin)
-    except Exception as e:
-        log.error(f"Failed to list active plugins: {e}")
+    except Exception:
+        log.exception("Failed to list active plugins")
         raise typer.Exit(1) from None
 
 
@@ -590,8 +593,8 @@ def plugins_sec(ctx: typer.Context) -> None:
                         lastversion = version.get("lastVersion")
                     if name == key and secdict[key] == lastversion:
                         log.info("%s:%s\t%s:%s\t%s", key, secdict[key], key, activedict[key], url)
-    except Exception as e:
-        log.error(f"Failed to check plugin security: {e}")
+    except Exception:
+        log.exception("Failed to check plugin security")
         raise typer.Exit(1) from None
 
 
@@ -614,12 +617,12 @@ def token_change(
         password = ctx.obj["password"]
 
         if not username or not password:
-            log.error("Username or password not set.")
+            log.error(_MSG_CREDS_NOT_SET)
             raise typer.Exit(1)
 
         log.info(get_token(name, jenkins.url, username=username, password=password, change=True))
-    except Exception as e:
-        log.error(f"Failed to change token: {e}")
+    except Exception:
+        log.exception("Failed to change token")
         raise typer.Exit(1) from None
 
 
@@ -636,7 +639,7 @@ def token_init(
         password = ctx.obj["password"]
 
         if not username or not password:
-            log.error("Username or password not set.")
+            log.error(_MSG_CREDS_NOT_SET)
             raise typer.Exit(1)
 
         _require_jjb_ini(jenkins.config_file)
@@ -648,7 +651,7 @@ def token_init(
         try:
             config.add_section(name)
         except configparser.DuplicateSectionError as e:
-            log.error(e)
+            log.exception(e)
             raise typer.Exit(1) from None
 
         config.set(name, "url", url)
@@ -661,8 +664,8 @@ def token_init(
 
         with open(jenkins.config_file, "w") as configfile:
             config.write(configfile)
-    except Exception as e:
-        log.error(f"Failed to initialize token: {e}")
+    except Exception:
+        log.exception("Failed to initialize token")
         raise typer.Exit(1) from None
 
 
@@ -675,12 +678,12 @@ def token_print(ctx: typer.Context) -> None:
         password = ctx.obj["password"]
 
         if not username or not password:
-            log.error("Username or password not set.")
+            log.error(_MSG_CREDS_NOT_SET)
             raise typer.Exit(1)
 
         log.info(get_token("token", jenkins.url, username, password))
-    except Exception as e:
-        log.error(f"Failed to print token: {e}")
+    except Exception:
+        log.exception("Failed to print token")
         raise typer.Exit(1) from None
 
 
@@ -706,7 +709,7 @@ def token_reset(
         password = ctx.obj["password"]
 
         if not username or not password:
-            log.error("Username or password not set.")
+            log.error(_MSG_CREDS_NOT_SET)
             raise typer.Exit(1)
 
         _require_jjb_ini(jenkins.config_file)
@@ -752,6 +755,6 @@ def token_reset(
         log.info("Update configurations complete.")
         log.info(f"Success: {success}")
         log.info(f"Failed: {fail}")
-    except Exception as e:
-        log.error(f"Failed to reset tokens: {e}")
+    except Exception:
+        log.exception("Failed to reset tokens")
         raise typer.Exit(1) from None

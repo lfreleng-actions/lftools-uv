@@ -13,6 +13,10 @@ import logging
 
 import typer
 
+_HELP_INFO_YAML_PATH = "Path to INFO.yaml file"
+_MSG_REQUIRES_LEGACY_CLI = "Note: This command requires the original lftools CLI implementation."
+
+
 # Import functions that we'll wrap - these are Click-based functions
 # We'll create simplified wrappers for now
 
@@ -57,10 +61,10 @@ def create_info_file(
         # For now, provide guidance on using the original command
         typer.echo(f"Creating INFO file for project: {gerrit_project}")
         typer.echo(f"Gerrit URL: {gerrit_url}")
-        typer.echo("Note: This command requires the original lftools CLI implementation.")
+        typer.echo(_MSG_REQUIRES_LEGACY_CLI)
         typer.echo("Use: lftools infofile create-info-file for full functionality.")
     except Exception as e:
-        log.error(f"Failed to create info file: {e}")
+        log.exception("Failed to create info file")
         typer.echo(f"Error: Failed to create info file: {e}", err=True)
         raise typer.Exit(1) from None
 
@@ -70,7 +74,7 @@ def get_committers(
     gerrit_url: str = typer.Argument(..., help="Gerrit URL"),
     gerrit_project: str = typer.Argument(..., help="Gerrit project path"),
     ldap_group: str = typer.Argument(..., help="LDAP group name"),
-    info_file: str = typer.Argument(..., help="Path to INFO.yaml file"),
+    info_file: str = typer.Argument(..., help=_HELP_INFO_YAML_PATH),
     directory: str = typer.Option("r", "--directory", help="Custom gerrit directory"),
 ) -> None:
     """Get committers from LDAP and update INFO file.
@@ -89,10 +93,10 @@ def get_committers(
         typer.echo(f"Getting committers for project: {gerrit_project}")
         typer.echo(f"LDAP group: {ldap_group}")
         typer.echo(f"INFO file: {info_file}")
-        typer.echo("Note: This command requires the original lftools CLI implementation.")
+        typer.echo(_MSG_REQUIRES_LEGACY_CLI)
         typer.echo("Use: lftools infofile get-committers for full functionality.")
     except Exception as e:
-        log.error(f"Failed to get committers: {e}")
+        log.exception("Failed to get committers")
         typer.echo(f"Error: Failed to get committers: {e}", err=True)
         raise typer.Exit(1) from None
 
@@ -111,17 +115,17 @@ def validate_info_file(
     """
     try:
         typer.echo(f"Validating INFO file: {info_file}")
-        typer.echo("Note: This command requires the original lftools CLI implementation.")
+        typer.echo(_MSG_REQUIRES_LEGACY_CLI)
         typer.echo("Use: lftools infofile validate-info-file for full functionality.")
     except Exception as e:
-        log.error(f"INFO file validation failed: {e}")
+        log.exception("INFO file validation failed")
         typer.echo(f"Error: INFO file validation failed: {e}", err=True)
         raise typer.Exit(1) from None
 
 
 @infofile_app.command("check-committers")
 def check_committers(
-    info_file: str = typer.Argument(..., help="Path to INFO.yaml file"),
+    info_file: str = typer.Argument(..., help=_HELP_INFO_YAML_PATH),
 ) -> None:
     """Check committers in INFO file against LDAP.
 
@@ -133,17 +137,17 @@ def check_committers(
     """
     try:
         typer.echo(f"Checking committers in INFO file: {info_file}")
-        typer.echo("Note: This command requires the original lftools CLI implementation.")
+        typer.echo(_MSG_REQUIRES_LEGACY_CLI)
         typer.echo("Use: lftools infofile check-committers for full functionality.")
     except Exception as e:
-        log.error(f"Committers check failed: {e}")
+        log.exception("Committers check failed")
         typer.echo(f"Error: Committers check failed: {e}", err=True)
         raise typer.Exit(1) from None
 
 
 @infofile_app.command("match-ldap")
 def match_ldap(
-    info_file: str = typer.Argument(..., help="Path to INFO.yaml file"),
+    info_file: str = typer.Argument(..., help=_HELP_INFO_YAML_PATH),
 ) -> None:
     """Match LDAP information to INFO file.
 
@@ -155,10 +159,10 @@ def match_ldap(
     """
     try:
         typer.echo(f"Matching LDAP information for INFO file: {info_file}")
-        typer.echo("Note: This command requires the original lftools CLI implementation.")
+        typer.echo(_MSG_REQUIRES_LEGACY_CLI)
         typer.echo("Use: lftools infofile match-ldap for full functionality.")
     except Exception as e:
-        log.error(f"LDAP matching failed: {e}")
+        log.exception("LDAP matching failed")
         typer.echo(f"Error: LDAP matching failed: {e}", err=True)
         raise typer.Exit(1) from None
 

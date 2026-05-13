@@ -52,7 +52,7 @@ def project_list() -> None:
         else:
             typer.echo("No projects found")
     except Exception as e:
-        log.error(f"Failed to get project list: {e}")
+        log.exception("Failed to get project list")
         typer.echo(f"Error: Failed to get project list: {e}", err=True)
         raise typer.Exit(1) from None
 
@@ -83,7 +83,7 @@ def project_details(
             typer.echo(f"Project '{project_slug}' not found")
             raise typer.Exit(1)
     except Exception as e:
-        log.error(f"Failed to get project details: {e}")
+        log.exception("Failed to get project details")
         typer.echo(f"Error: Failed to get project details: {e}", err=True)
         raise typer.Exit(1) from None
 
@@ -124,7 +124,7 @@ def project_create(
             typer.echo(f"Failed to create project '{name}'")
             raise typer.Exit(1)
     except Exception as e:
-        log.error(f"Failed to create project: {e}")
+        log.exception("Failed to create project")
         typer.echo(f"Error: Failed to create project: {e}", err=True)
         raise typer.Exit(1) from None
 
@@ -169,7 +169,7 @@ def project_update(
             typer.echo(f"Failed to update project '{project_slug}' (HTTP {status_code})")
             raise typer.Exit(1)
     except Exception as e:
-        log.error(f"Failed to update project: {e}")
+        log.exception("Failed to update project")
         typer.echo(f"Error: Failed to update project: {e}", err=True)
         raise typer.Exit(1) from None
 

@@ -158,7 +158,7 @@ def quiet_down(ctx, n):
             jenkins.server.quiet_down()
         except HTTPError as m:
             if m.code == 405:
-                log.error(
+                log.exception(
                     f"\n[{m}]\nJenkins {version} does not support Quiet Down without a CSRF Token. (CVE-2017-04-26)\nPlease file a bug with 'python-jenkins'"
                 )
             else:

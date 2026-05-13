@@ -53,7 +53,7 @@ def get_branches(path=getcwd(), invert=False):
         else:
             return False
     except subprocess.CalledProcessError as e:
-        log.error(e)
+        log.exception(e)
         exit(1)
 
 
@@ -89,7 +89,7 @@ def check(path=getcwd(), signoffs_dir="dco_signoffs"):
                     log.info(f"{commit}")
                 exit(1)
     except subprocess.CalledProcessError as e:
-        log.error(e)
+        log.exception(e)
         exit(1)
 
 
@@ -139,5 +139,5 @@ def match(path=getcwd(), signoffs_dir="dco_signoffs"):
 
         exit(exit_code)
     except subprocess.CalledProcessError as e:
-        log.error(e)
+        log.exception(e)
         exit(1)

@@ -18,6 +18,11 @@ import typer
 from lftools_uv.api.endpoints import gerrit
 from lftools_uv.git.gerrit import Gerrit as git_gerrit
 
+_HELP_ISSUE_ID = "For projects that enforce an issue id for changesets"
+_HELP_GERRIT_FQDN = "Gerrit FQDN"
+_HELP_GERRIT_PROJECT = "Gerrit project name"
+
+
 log = logging.getLogger(__name__)
 
 # Create the Typer app for gerrit commands
@@ -26,12 +31,10 @@ gerrit_app = typer.Typer(help="GERRIT TOOLS.")
 
 @gerrit_app.command("addfile")
 def addfile(
-    gerrit_fqdn: str = typer.Argument(..., help="Gerrit FQDN"),
-    gerrit_project: str = typer.Argument(..., help="Gerrit project name"),
+    gerrit_fqdn: str = typer.Argument(..., help=_HELP_GERRIT_FQDN),
+    gerrit_project: str = typer.Argument(..., help=_HELP_GERRIT_PROJECT),
     filename: str = typer.Argument(..., help="Filename to add"),
-    issue_id: str | None = typer.Option(
-        None, "--issue-id", help="For projects that enforce an issue id for changesets"
-    ),
+    issue_id: str | None = typer.Option(None, "--issue-id", help=_HELP_ISSUE_ID),
     file_location: str | None = typer.Option(None, "--file-location", help="File path within the repository"),
 ) -> None:
     """Add a file for review to a Project.
@@ -47,19 +50,17 @@ def addfile(
         g = gerrit.Gerrit(fqdn=gerrit_fqdn)
         data = g.add_file(gerrit_fqdn, gerrit_project, filename, issue_id or "", file_location or "")
         log.info(pformat(data))
-    except Exception as e:
-        log.error(f"Failed to add file: {e}")
+    except Exception:
+        log.exception("Failed to add file")
         raise typer.Exit(1) from None
 
 
 @gerrit_app.command("addinfojob")
 def addinfojob(
-    gerrit_fqdn: str = typer.Argument(..., help="Gerrit FQDN"),
-    gerrit_project: str = typer.Argument(..., help="Gerrit project name"),
+    gerrit_fqdn: str = typer.Argument(..., help=_HELP_GERRIT_FQDN),
+    gerrit_project: str = typer.Argument(..., help=_HELP_GERRIT_PROJECT),
     jjbrepo: str = typer.Argument(..., help="JJB repository name"),
-    issue_id: str | None = typer.Option(
-        None, "--issue-id", help="For projects that enforce an issue id for changesets"
-    ),
+    issue_id: str | None = typer.Option(None, "--issue-id", help=_HELP_ISSUE_ID),
     agent: str | None = typer.Option(None, "--agent", help="Specify the Jenkins agent label to run the job on"),
 ) -> None:
     """Add an INFO job for a new Project.
@@ -78,18 +79,16 @@ def addinfojob(
     try:
         git = git_gerrit(fqdn=gerrit_fqdn, project=jjbrepo)
         git.add_info_job(gerrit_fqdn, gerrit_project, issue_id, agent)
-    except Exception as e:
-        log.error(f"Failed to add info job: {e}")
+    except Exception:
+        log.exception("Failed to add info job")
         raise typer.Exit(1) from None
 
 
 @gerrit_app.command("addgitreview")
 def addgitreview(
-    gerrit_fqdn: str = typer.Argument(..., help="Gerrit FQDN"),
-    gerrit_project: str = typer.Argument(..., help="Gerrit project name"),
-    issue_id: str | None = typer.Option(
-        None, "--issue-id", help="For projects that enforce an issue id for changesets"
-    ),
+    gerrit_fqdn: str = typer.Argument(..., help=_HELP_GERRIT_FQDN),
+    gerrit_project: str = typer.Argument(..., help=_HELP_GERRIT_PROJECT),
+    issue_id: str | None = typer.Option(None, "--issue-id", help=_HELP_ISSUE_ID),
 ) -> None:
     """Add git review to a project.
 
@@ -100,15 +99,15 @@ def addgitreview(
     try:
         git = git_gerrit(fqdn=gerrit_fqdn, project=gerrit_project)
         git.add_git_review(gerrit_fqdn, gerrit_project, issue_id)
-    except Exception as e:
-        log.error(f"Failed to add git review: {e}")
+    except Exception:
+        log.exception("Failed to add git review")
         raise typer.Exit(1) from None
 
 
 @gerrit_app.command("addgithubrights")
 def addgithubrights(
-    gerrit_fqdn: str = typer.Argument(..., help="Gerrit FQDN"),
-    gerrit_project: str = typer.Argument(..., help="Gerrit project name"),
+    gerrit_fqdn: str = typer.Argument(..., help=_HELP_GERRIT_FQDN),
+    gerrit_project: str = typer.Argument(..., help=_HELP_GERRIT_PROJECT),
 ) -> None:
     """Grant Github read for a project.
 
@@ -118,15 +117,15 @@ def addgithubrights(
     try:
         g = gerrit.Gerrit(fqdn=gerrit_fqdn)
         g.add_github_rights(gerrit_fqdn, gerrit_project)
-    except Exception as e:
-        log.error(f"Failed to add github rights: {e}")
+    except Exception:
+        log.exception("Failed to add github rights")
         raise typer.Exit(1) from None
 
 
 @gerrit_app.command("abandonchanges")
 def abandonchanges(
-    gerrit_fqdn: str = typer.Argument(..., help="Gerrit FQDN"),
-    gerrit_project: str = typer.Argument(..., help="Gerrit project name"),
+    gerrit_fqdn: str = typer.Argument(..., help=_HELP_GERRIT_FQDN),
+    gerrit_project: str = typer.Argument(..., help=_HELP_GERRIT_PROJECT),
 ) -> None:
     """Abandon all OPEN changes for a gerrit project.
 
@@ -137,15 +136,15 @@ def abandonchanges(
         g = gerrit.Gerrit(fqdn=gerrit_fqdn)
         data = g.abandon_changes(gerrit_fqdn, gerrit_project)
         log.info(pformat(data))
-    except Exception as e:
-        log.error(f"Failed to abandon changes: {e}")
+    except Exception:
+        log.exception("Failed to abandon changes")
         raise typer.Exit(1) from None
 
 
 @gerrit_app.command("createproject")
 def createproject(
-    gerrit_fqdn: str = typer.Argument(..., help="Gerrit FQDN"),
-    gerrit_project: str = typer.Argument(..., help="Gerrit project name"),
+    gerrit_fqdn: str = typer.Argument(..., help=_HELP_GERRIT_FQDN),
+    gerrit_project: str = typer.Argument(..., help=_HELP_GERRIT_PROJECT),
     ldap_group: str = typer.Argument(..., help="LDAP group name"),
     description: str = typer.Option(..., "--description", help="Project Description"),
     check: bool = typer.Option(False, "--check", help="just check if the project exists"),
@@ -165,14 +164,14 @@ def createproject(
         g = gerrit.Gerrit(fqdn=gerrit_fqdn)
         data = g.create_project(gerrit_fqdn, gerrit_project, ldap_group, description, check)
         log.info(pformat(data))
-    except Exception as e:
-        log.error(f"Failed to create project: {e}")
+    except Exception:
+        log.exception("Failed to create project")
         raise typer.Exit(1) from None
 
 
 @gerrit_app.command("create-saml-group")
 def create_saml_group(
-    gerrit_fqdn: str = typer.Argument(..., help="Gerrit FQDN"),
+    gerrit_fqdn: str = typer.Argument(..., help=_HELP_GERRIT_FQDN),
     ldap_group: str = typer.Argument(..., help="LDAP group name"),
 ) -> None:
     """Create saml group based on ldap group."""
@@ -180,14 +179,14 @@ def create_saml_group(
         g = gerrit.Gerrit(fqdn=gerrit_fqdn)
         data = g.create_saml_group(gerrit_fqdn, ldap_group)
         log.info(pformat(data))
-    except Exception as e:
-        log.error(f"Failed to create SAML group: {e}")
+    except Exception:
+        log.exception("Failed to create SAML group")
         raise typer.Exit(1) from None
 
 
 @gerrit_app.command("list-project-permissions")
 def list_project_permissions(
-    gerrit_fqdn: str = typer.Argument(..., help="Gerrit FQDN"),
+    gerrit_fqdn: str = typer.Argument(..., help=_HELP_GERRIT_FQDN),
     project: str = typer.Argument(..., help="Project name"),
 ) -> None:
     """List Owners of a Project."""
@@ -196,34 +195,32 @@ def list_project_permissions(
         data = g.list_project_permissions(project)
         for ldap_group in data:
             log.info(pformat(ldap_group))
-    except Exception as e:
-        log.error(f"Failed to list project permissions: {e}")
+    except Exception:
+        log.exception("Failed to list project permissions")
         raise typer.Exit(1) from None
 
 
 @gerrit_app.command("list-project-inherits-from")
 def list_project_inherits_from(
-    gerrit_fqdn: str = typer.Argument(..., help="Gerrit FQDN"),
-    gerrit_project: str = typer.Argument(..., help="Gerrit project name"),
+    gerrit_fqdn: str = typer.Argument(..., help=_HELP_GERRIT_FQDN),
+    gerrit_project: str = typer.Argument(..., help=_HELP_GERRIT_PROJECT),
 ) -> None:
     """List who a project inherits from."""
     try:
         g = gerrit.Gerrit(fqdn=gerrit_fqdn)
         data = g.list_project_inherits_from(gerrit_project)
         log.info(data)
-    except Exception as e:
-        log.error(f"Failed to list project inheritance: {e}")
+    except Exception:
+        log.exception("Failed to list project inheritance")
         raise typer.Exit(1) from None
 
 
 @gerrit_app.command("addmavenconfig")
 def addmavenconfig(
-    gerrit_fqdn: str = typer.Argument(..., help="Gerrit FQDN"),
-    gerrit_project: str = typer.Argument(..., help="Gerrit project name"),
+    gerrit_fqdn: str = typer.Argument(..., help=_HELP_GERRIT_FQDN),
+    gerrit_project: str = typer.Argument(..., help=_HELP_GERRIT_PROJECT),
     jjbrepo: str = typer.Argument(..., help="JJB repository name"),
-    issue_id: str | None = typer.Option(
-        None, "--issue-id", help="For projects that enforce an issue id for changesets"
-    ),
+    issue_id: str | None = typer.Option(None, "--issue-id", help=_HELP_ISSUE_ID),
     nexus3: str | None = typer.Option(None, "--nexus3", help="Specify a Nexus 3 server, e.g. nexus3.example.org"),
     nexus3_ports: str | None = typer.Option(
         None,
@@ -246,6 +243,6 @@ def addmavenconfig(
     try:
         git = git_gerrit(fqdn=gerrit_fqdn, project=jjbrepo)
         git.add_maven_config(gerrit_fqdn, gerrit_project, issue_id, nexus3 or "", nexus3_ports or "")
-    except Exception as e:
-        log.error(f"Failed to add maven config: {e}")
+    except Exception:
+        log.exception("Failed to add maven config")
         raise typer.Exit(1) from None

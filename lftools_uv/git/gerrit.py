@@ -26,6 +26,9 @@ from jinja2 import Environment, PackageLoader, select_autoescape
 
 from lftools_uv import config
 
+_LFTOOLS_UV_GIT = "lftools_uv.git"
+
+
 log = logging.getLogger(__name__)
 
 
@@ -165,7 +168,7 @@ class Gerrit:
                 buildnode = "centos7-builder-2c-1g"
 
         jinja_env = Environment(
-            loader=PackageLoader("lftools_uv.git"), autoescape=select_autoescape(), keep_trailing_newline=True
+            loader=PackageLoader(_LFTOOLS_UV_GIT), autoescape=select_autoescape(), keep_trailing_newline=True
         )
         template = jinja_env.get_template("project.yaml")
         content = template.render(
@@ -193,7 +196,7 @@ class Gerrit:
         filename = ".gitreview"
 
         jinja_env = Environment(
-            loader=PackageLoader("lftools_uv.git"), autoescape=select_autoescape(), keep_trailing_newline=True
+            loader=PackageLoader(_LFTOOLS_UV_GIT), autoescape=select_autoescape(), keep_trailing_newline=True
         )
         template = jinja_env.get_template("gitreview")
         content = template.render(fqdn=fqdn, project_name=gerrit_project, default_branch=self.default_branch)
@@ -251,7 +254,7 @@ class Gerrit:
                 log.error("Invalid nexus3_ports designated.")
 
         jinja_env = Environment(
-            loader=PackageLoader("lftools_uv.git"), autoescape=select_autoescape(), keep_trailing_newline=True
+            loader=PackageLoader(_LFTOOLS_UV_GIT), autoescape=select_autoescape(), keep_trailing_newline=True
         )
         template = jinja_env.get_template(params_path)
         config_params_content = template.render(project_dashed=project_dashed)

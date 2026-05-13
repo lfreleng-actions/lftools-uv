@@ -15,6 +15,10 @@ from pathlib import Path
 
 import typer
 
+_MSG_SIGN_NOT_FOUND = "'sign' command not found in PATH"
+_MSG_SIGN_NOT_FOUND_LONG = "Error: 'sign' command not found in PATH. Please ensure it's installed."
+
+
 log = logging.getLogger(__name__)
 
 # Create the sign subcommand group
@@ -54,12 +58,12 @@ def directory(
         subprocess.run(["sign", "dir", str(directory), mode], check=True, capture_output=False)
         typer.echo(f"✅ Successfully signed files in {directory} using {mode} mode")
     except subprocess.CalledProcessError as e:
-        log.error(f"Signing failed with exit code {e.returncode}")
+        log.exception("Signing failed with exit code %s", e.returncode)
         typer.echo(f"Error: Signing failed with exit code {e.returncode}", err=True)
         raise typer.Exit(e.returncode) from None
     except FileNotFoundError:
-        log.error("'sign' command not found in PATH")
-        typer.echo("Error: 'sign' command not found in PATH. Please ensure it's installed.", err=True)
+        log.error(_MSG_SIGN_NOT_FOUND)
+        typer.echo(_MSG_SIGN_NOT_FOUND_LONG, err=True)
         raise typer.Exit(127) from None
 
 
@@ -80,12 +84,12 @@ def git_tag(
         subprocess.run(["sign", "git-tag", tag], check=True, capture_output=False)
         typer.echo(f"✅ Successfully signed git tag: {tag}")
     except subprocess.CalledProcessError as e:
-        log.error(f"Git tag signing failed with exit code {e.returncode}")
+        log.exception("Git tag signing failed with exit code %s", e.returncode)
         typer.echo(f"Error: Git tag signing failed with exit code {e.returncode}", err=True)
         raise typer.Exit(e.returncode) from None
     except FileNotFoundError:
-        log.error("'sign' command not found in PATH")
-        typer.echo("Error: 'sign' command not found in PATH. Please ensure it's installed.", err=True)
+        log.error(_MSG_SIGN_NOT_FOUND)
+        typer.echo(_MSG_SIGN_NOT_FOUND_LONG, err=True)
         raise typer.Exit(127) from None
 
 
@@ -105,12 +109,12 @@ def nexus(
         subprocess.run(["sign", "nexus", nexus_repo_url], check=True, capture_output=False)
         typer.echo(f"✅ Successfully signed Nexus artifacts at: {nexus_repo_url}")
     except subprocess.CalledProcessError as e:
-        log.error(f"Nexus signing failed with exit code {e.returncode}")
+        log.exception("Nexus signing failed with exit code %s", e.returncode)
         typer.echo(f"Error: Nexus signing failed with exit code {e.returncode}", err=True)
         raise typer.Exit(e.returncode) from None
     except FileNotFoundError:
-        log.error("'sign' command not found in PATH")
-        typer.echo("Error: 'sign' command not found in PATH. Please ensure it's installed.", err=True)
+        log.error(_MSG_SIGN_NOT_FOUND)
+        typer.echo(_MSG_SIGN_NOT_FOUND_LONG, err=True)
         raise typer.Exit(127) from None
 
 

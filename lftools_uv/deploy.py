@@ -28,12 +28,17 @@ import sys
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import NoReturn
+from typing import Any, NoReturn
 
 import boto3
 import requests
 from botocore.exceptions import ClientError
 from defusedxml.minidom import parseString
+
+_CONTENT_TYPE_TEXT = "text/plain"
+_CONTENT_TYPE_XML = "application/xml"
+_BANNER_HASHES = "#######################################################"
+
 
 log: logging.Logger = logging.getLogger(__name__)
 logging.getLogger("botocore").setLevel(logging.CRITICAL)
@@ -494,54 +499,68 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
     def _upload_to_s3(file: str) -> bool:
         mime_type: str | None = mimetypes.guess_type(file)[0]
         mime_encoding: str | None = mimetypes.guess_type(file)[1]
-        extra_args: dict[str, str | None] = {"ContentType": "text/plain"}
-        text_html_extra_args: dict[str, str | None] = {"ContentType": "text/html", "ContentEncoding": mime_encoding}
-        text_plain_extra_args: dict[str, str | None] = {"ContentType": "text/plain", "ContentEncoding": mime_encoding}
-        app_xml_extra_args: dict[str, str | None] = {"ContentType": "application/xml", "ContentEncoding": mime_encoding}
+
+        def _extra_args(content_type: str) -> dict[str, str]:
+            """Build an ExtraArgs dict, omitting ContentEncoding when None.
+
+            boto3's S3 transfer manager rejects ``None`` values for ``ExtraArgs``
+            entries with a ``ParamValidationError``; many file types
+            (e.g. plain ``.html`` / ``.xml`` without compression) have no
+            mime_encoding, so the key must be omitted entirely in that case.
+            """
+            args: dict[str, str] = {"ContentType": content_type}
+            if mime_encoding:
+                args["ContentEncoding"] = mime_encoding
+            return args
+
+        extra_args: dict[str, str] = {"ContentType": _CONTENT_TYPE_TEXT}
+        text_html_extra_args: dict[str, str] = _extra_args("text/html")
+        text_plain_extra_args: dict[str, str] = _extra_args(_CONTENT_TYPE_TEXT)
+        app_xml_extra_args: dict[str, str] = _extra_args(_CONTENT_TYPE_XML)
         if file == "_tmpfile":
-            for dir in (logs_dir, silo_dir, jenkins_node_dir):
+            for prefix in (logs_dir, silo_dir, jenkins_node_dir):
                 try:
-                    s3.Bucket(s3_bucket).upload_file(file, f"{dir}{file}")
-                except ClientError as e:
-                    log.error(e)
+                    s3.Bucket(s3_bucket).upload_file(file, f"{prefix}{file}")
+                except ClientError:
+                    log.exception("Failed to upload _tmpfile marker to %s", prefix)
                     return False
-                return True
+            return True
         if mime_type is None and mime_encoding is None:
             try:
                 s3.Bucket(s3_bucket).upload_file(file, f"{s3_path}{file}", ExtraArgs=extra_args)
-            except ClientError as e:
-                log.error(e)
+            except ClientError:
+                log.exception("Failed to upload %s", file)
                 return False
             return True
-        elif mime_type is None or mime_type in "text/plain":
+        elif mime_type is None or mime_type == _CONTENT_TYPE_TEXT:
             extra_args = text_plain_extra_args
             try:
                 s3.Bucket(s3_bucket).upload_file(file, f"{s3_path}{file}", ExtraArgs=extra_args)
-            except ClientError as e:
-                log.error(e)
+            except ClientError:
+                log.exception("Failed to upload %s as text/plain", file)
                 return False
             return True
-        elif mime_type in "text/html":
+        elif mime_type == "text/html":
             extra_args = text_html_extra_args
             try:
                 s3.Bucket(s3_bucket).upload_file(file, f"{s3_path}{file}", ExtraArgs=extra_args)
-            except ClientError as e:
-                log.error(e)
+            except ClientError:
+                log.exception("Failed to upload %s as text/html", file)
                 return False
             return True
-        elif mime_type in "application/xml":
+        elif mime_type == _CONTENT_TYPE_XML:
             extra_args = app_xml_extra_args
             try:
                 s3.Bucket(s3_bucket).upload_file(file, f"{s3_path}{file}", ExtraArgs=extra_args)
-            except ClientError as e:
-                log.error(e)
+            except ClientError:
+                log.exception("Failed to upload %s as application/xml", file)
                 return False
             return True
         else:
             try:
                 s3.Bucket(s3_bucket).upload_file(file, f"{s3_path}{file}", ExtraArgs=extra_args)
-            except ClientError as e:
-                log.error(e)
+            except ClientError:
+                log.exception("Failed to upload %s", file)
                 return False
             return True
 
@@ -549,7 +568,7 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
     work_dir: str = tempfile.mkdtemp(prefix="lftools-dl.")
     os.chdir(work_dir)
     s3_bucket = s3_bucket.lower()
-    s3 = boto3.resource("s3")
+    s3: Any = boto3.resource("s3")
     logs_dir: str = s3_path.split("/")[0] + "/"
     silo_dir: str = s3_path.split("/")[1] + "/"
     jenkins_node_dir: str = logs_dir + silo_dir + s3_path.split("/")[2] + "/"
@@ -619,7 +638,7 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
         if os.path.isfile(file):
             file_list.append(file)
 
-    log.info("#######################################################")
+    log.info(_BANNER_HASHES)
     log.info("Deploying files from %s to %s/%s", work_dir, s3_bucket, s3_path)
 
     # Perform s3 upload
@@ -631,7 +650,7 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
             log.error("FAILURE: Uploading %s failed", file)
 
     log.info("Finished deploying from %s to %s/%s", work_dir, s3_bucket, s3_path)
-    log.info("#######################################################")
+    log.info(_BANNER_HASHES)
 
     # Cleanup
     s3.Object(s3_bucket, "{}{}".format(logs_dir, "_tmpfile")).delete()
@@ -707,7 +726,7 @@ def nexus_stage_repo_create(nexus_url: str, staging_profile_id: str) -> str:
         </promoteRequest>
     """
 
-    headers: dict[str, str] = {"Content-Type": "application/xml"}
+    headers: dict[str, str] = {"Content-Type": _CONTENT_TYPE_XML}
     resp: requests.Response = _request_post(nexus_url, xml, headers)
 
     log.debug("resp.status_code = %s", resp.status_code)
@@ -758,7 +777,7 @@ def nexus_stage_repo_close(nexus_url: str, staging_profile_id: str, staging_repo
         </promoteRequest>
     """
 
-    headers: dict[str, str] = {"Content-Type": "application/xml"}
+    headers: dict[str, str] = {"Content-Type": _CONTENT_TYPE_XML}
     resp: requests.Response = _request_post(nexus_url, xml, headers)
 
     log.debug("resp.status_code = %s", resp.status_code)
@@ -893,7 +912,7 @@ def deploy_nexus(nexus_repo_url: str, deploy_dir: str, snapshot: bool = False, w
 
             file_list.append(file)
 
-    log.info("#######################################################")
+    log.info(_BANNER_HASHES)
     log.info("Deploying directory %s to %s", deploy_dir, nexus_repo_url)
 
     failed_uploads: list[tuple[str, str]] = []
@@ -922,7 +941,7 @@ def deploy_nexus(nexus_repo_url: str, deploy_dir: str, snapshot: bool = False, w
         )
     else:
         log.info("Finished deploying %s to %s", deploy_dir, nexus_repo_url)
-    log.info("#######################################################")
+    log.info(_BANNER_HASHES)
 
     os.chdir(previous_dir)
 
