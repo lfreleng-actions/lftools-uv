@@ -1104,7 +1104,12 @@ test = [
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
+    { name = "pytest-click" },
     { name = "pytest-cov" },
+    { name = "pytest-datafiles" },
+    { name = "pytest-mock" },
+    { name = "pytest-responses" },
+    { name = "responses" },
 ]
 
 [package.metadata]
@@ -1202,7 +1207,12 @@ provides-extras = ["all", "dev", "docs", "ldap", "openstack", "test"]
 [package.metadata.requires-dev]
 dev = [
     { name = "pytest", specifier = ">=8.3.5" },
+    { name = "pytest-click", specifier = ">=1.1.0" },
     { name = "pytest-cov", specifier = ">=5.0.0" },
+    { name = "pytest-datafiles", specifier = ">=3.0.0" },
+    { name = "pytest-mock", specifier = ">=3.14.0" },
+    { name = "pytest-responses", specifier = ">=0.5.1" },
+    { name = "responses", specifier = ">=0.25.0" },
 ]
 
 [[package]]
