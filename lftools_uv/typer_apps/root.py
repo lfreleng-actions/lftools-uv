@@ -38,6 +38,7 @@ from lftools_uv.typer_apps.schema import get_schema_app
 from lftools_uv.typer_apps.sign import get_sign_app
 from lftools_uv.typer_apps.utils import get_utils_app
 from lftools_uv.typer_apps.version import get_version_app
+from lftools_uv.typer_apps.zulip import zulip_app
 
 log = logging.getLogger(__name__)
 
@@ -148,6 +149,7 @@ app.add_typer(get_license_app(), name="license")
 app.add_typer(get_sign_app(), name="sign")
 app.add_typer(get_infofile_app(), name="infofile")
 app.add_typer(get_rtd_app(), name="rtd")
+app.add_typer(zulip_app, name="zulip")
 
 
 def get_app() -> typer.Typer:
