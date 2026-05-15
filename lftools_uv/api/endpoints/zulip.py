@@ -539,14 +539,14 @@ def _resolve_single_group_token(token: str, groups: list[dict[str, Any]]) -> dic
     """Resolve a single comma-item token to a group dict.
 
     Supports the ``id:NUM`` prefix and the system-role display-name
-    mapping. Raises :class:`ZulipAmbiguityError`,
-    :class:`ZulipNotFoundError`, or :class:`ZulipValidationError` as
-    appropriate.
-    """
-    token = token.strip()
-    if not token:
-        raise ZulipValidationError("Empty group token in comma-separated value")
+    mapping. The caller is expected to have stripped and filtered the
+    input so ``token`` is always non-empty.
 
+    Raises :class:`ZulipAmbiguityError`, :class:`ZulipNotFoundError`,
+    or :class:`ZulipValidationError` as appropriate.
+    """
+    # ``resolve_groups`` filters empty/whitespace tokens before calling
+    # this helper, so by construction ``token`` is non-empty here.
     if token.lower().startswith("id:"):
         suffix = token[3:].strip()
         try:
@@ -610,6 +610,11 @@ def resolve_groups(
     checks on private channel create/update), the helper raises
     :class:`ZulipLockoutError` if the resolved set is exactly the single
     ``Nobody`` system group.
+
+    Empty / whitespace-only segments inside the comma-separated value
+    are tolerated and stripped (so ``"design, , foo"`` is equivalent
+    to ``"design, foo"``). A spec containing only empty segments is
+    still rejected with :class:`ZulipValidationError`.
     """
     tokens = [t for t in (part.strip() for part in spec.split(",")) if t]
     if not tokens:

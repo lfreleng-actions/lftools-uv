@@ -268,6 +268,14 @@ def test_resolve_groups_empty_spec_rejected() -> None:
         _ = resolve_groups(client, "  ,  ")
 
 
+def test_resolve_groups_tolerates_extra_commas() -> None:
+    """Empty inner segments are stripped (lenient parsing, documented)."""
+    client = _groups_client(GROUPS)
+    resolved, value = resolve_groups(client, "design, , id:11")
+    assert [g["id"] for g in resolved] == [30, 11]
+    assert value == {"direct_members": [], "direct_subgroups": [30, 11]}
+
+
 # ---------------------------------------------------------------------------
 # T019 — User resolution
 # ---------------------------------------------------------------------------

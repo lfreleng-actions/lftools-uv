@@ -17,7 +17,12 @@ from __future__ import annotations
 import pytest
 from typer.testing import CliRunner
 
-from lftools_uv.typer_apps.zulip import MISSING_EXTRA_MESSAGE, zulip_app
+from lftools_uv.typer_apps.zulip import (
+    MISSING_EXTRA_MESSAGE,
+    bulk_mutation_result,
+    mutation_result,
+    zulip_app,
+)
 
 
 def test_zulip_app_registered() -> None:
@@ -49,3 +54,75 @@ def test_zulip_help_works_without_extra(monkeypatch: pytest.MonkeyPatch) -> None
     result = runner.invoke(zulip_app, ["--help"])
     assert result.exit_code == 0
     assert "zulip" in result.stdout.lower()
+
+
+# ---------------------------------------------------------------------------
+# Output-shape helpers
+# ---------------------------------------------------------------------------
+
+
+def test_mutation_result_minimal_payload() -> None:
+    """``mutation_result`` always returns the four canonical fields."""
+    payload = mutation_result(
+        status="success",
+        operation="create",
+        channel_id=42,
+        channel_name="general",
+    )
+    assert payload == {
+        "status": "success",
+        "channel_id": 42,
+        "channel_name": "general",
+        "operation": "create",
+    }
+
+
+def test_mutation_result_merges_extra_fields() -> None:
+    """Operation-specific extras (e.g. ``type``) merge into the result."""
+    payload = mutation_result(
+        status="success",
+        operation="create",
+        channel_id=42,
+        channel_name="general",
+        extra={"type": "public"},
+    )
+    assert payload["type"] == "public"
+    assert payload["status"] == "success"
+
+
+def test_bulk_mutation_result_success_status() -> None:
+    """Bulk results with only successes derive ``status == 'success'``."""
+    payload = bulk_mutation_result(
+        operation="subscribe",
+        channel_id=42,
+        channel_name="general",
+        results=[{"user": "a", "status": "subscribed"}],
+        errors=[],
+    )
+    assert payload["status"] == "success"
+    assert payload["results"] == [{"user": "a", "status": "subscribed"}]
+    assert payload["errors"] == []
+
+
+def test_bulk_mutation_result_partial_status() -> None:
+    """A mix of results and errors derives ``status == 'partial'``."""
+    payload = bulk_mutation_result(
+        operation="subscribe",
+        channel_id=42,
+        channel_name="general",
+        results=[{"user": "a", "status": "subscribed"}],
+        errors=[{"user": "b", "error": "not found"}],
+    )
+    assert payload["status"] == "partial"
+
+
+def test_bulk_mutation_result_error_status() -> None:
+    """All-error bulk results derive ``status == 'error'``."""
+    payload = bulk_mutation_result(
+        operation="subscribe",
+        channel_id=42,
+        channel_name="general",
+        results=[],
+        errors=[{"user": "b", "error": "not found"}],
+    )
+    assert payload["status"] == "error"
