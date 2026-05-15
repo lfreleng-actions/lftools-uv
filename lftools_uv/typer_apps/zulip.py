@@ -60,16 +60,13 @@ zulip_app = typer.Typer(
 def zuliprc_callback(value: Path | None) -> Path | None:
     """Validate the ``--zuliprc`` flag value.
 
-    Stores the resolved path on the Typer context object for later use
-    by the API layer. ``None`` is passed through unchanged so the
-    default resolution chain (cwd, lftools.ini, ``~/.zuliprc``) applies.
+    Returns the supplied path (or ``None``) unchanged so that the API
+    layer can apply the FR-011 precedence chain via
+    :func:`lftools_uv.api.endpoints.zulip.resolve_config`. The
+    existence check is intentionally deferred to ``resolve_config`` so
+    that callers see a single, consistent error message regardless of
+    whether the path came from the flag or the default search order.
     """
-    if value is None:
-        return None
-    if not value.exists():
-        # Defer the error to the command body so callers can format the
-        # message consistently with other failures via ``emit_error``.
-        return value
     return value
 
 
@@ -174,6 +171,11 @@ def zulip_callback(ctx: typer.Context) -> None:
     immediately with the canonical FR-022 error so that every
     subcommand presents the same guidance to the user.
     """
+    # Allow ``--help`` (including nested subcommand help) to render even
+    # when the optional extra is missing. Typer sets resilient_parsing
+    # while it is walking the command tree for help discovery.
+    if ctx.resilient_parsing:
+        return
     if ctx.invoked_subcommand is None:
         # Help / no-args path — let Typer print help without raising.
         return

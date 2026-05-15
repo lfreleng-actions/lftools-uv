@@ -28,11 +28,14 @@ from lftools_uv.api.endpoints.zulip import (
     FEATURE_LEVELS,
     SYSTEM_ROLE_GROUPS,
     ZulipAmbiguityError,
+    ZulipConfig,
+    ZulipConfigError,
     ZulipFeatureLevelError,
     ZulipLockoutError,
     ZulipNotFoundError,
     ZulipValidationError,
     check_feature_level,
+    get_client,
     get_server_feature_level,
     resolve_channel,
     resolve_groups,
@@ -345,3 +348,27 @@ def test_resolve_users_id_mode_requires_numeric() -> None:
     client = _members_client(MEMBERS)
     with pytest.raises(ZulipValidationError):
         _ = resolve_users(client, ["not-a-number"], mode="id")
+
+
+# ---------------------------------------------------------------------------
+# Client factory — credential validation
+# ---------------------------------------------------------------------------
+
+
+def test_get_client_rejects_incomplete_credentials() -> None:
+    """``get_client`` errors clearly when synthesized creds are incomplete."""
+    config = ZulipConfig(email="bot@example.com", source="lftools.ini[zulip]")
+    with pytest.raises(ZulipConfigError, match="missing api_key, site"):
+        _ = get_client(config=config)
+
+
+def test_get_client_rejects_both_inputs() -> None:
+    """``zuliprc`` and ``config`` are mutually exclusive inputs."""
+    config = ZulipConfig(
+        email="bot@example.com",
+        api_key="k",
+        site="https://z",
+        source="lftools.ini[zulip]",
+    )
+    with pytest.raises(ZulipValidationError):
+        _ = get_client(zuliprc=mock.MagicMock(), config=config)
