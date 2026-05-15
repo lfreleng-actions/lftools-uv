@@ -32,12 +32,12 @@ SPDX-FileCopyrightText: 2026 The Linux Foundation
 
 **Purpose**: Project initialization, dependency addition, and basic file structure
 
-- [ ] T001 Add `zulip` as optional dependency under `[project.optional-dependencies]` in pyproject.toml (installed via `lftools-uv[zulip]`) and run `uv lock`
-- [ ] T002 [P] Create empty module file lftools_uv/api/endpoints/zulip.py with license header and module docstring
-- [ ] T003 [P] Create empty module file lftools_uv/typer_apps/zulip.py with license header, Typer app instantiation, and module docstring
-- [ ] T004 [P] Create empty test files tests/unit/test_zulip_api.py, tests/unit/test_zulip_cli.py, and tests/unit/test_zulip_config.py with license headers
-- [ ] T005 Register the zulip Typer sub-app in lftools_uv/typer_apps/root.py (add `app.add_typer(zulip_app, name="zulip")`)
-- [ ] T006 [P] Implement optional dependency guard in lftools_uv/typer_apps/zulip.py — detect missing `zulip` package at import time, register command group in CLI help regardless, show user-friendly error on invocation if extra not installed (FR-022). Canonical error message:
+- [x] T001 Add `zulip` as optional dependency under `[project.optional-dependencies]` in pyproject.toml (installed via `lftools-uv[zulip]`) and run `uv lock`
+- [x] T002 [P] Create empty module file lftools_uv/api/endpoints/zulip.py with license header and module docstring
+- [x] T003 [P] Create empty module file lftools_uv/typer_apps/zulip.py with license header, Typer app instantiation, and module docstring
+- [x] T004 [P] Create empty test files tests/unit/test_zulip_api.py, tests/unit/test_zulip_cli.py, and tests/unit/test_zulip_config.py with license headers
+- [x] T005 Register the zulip Typer sub-app in lftools_uv/typer_apps/root.py (add `app.add_typer(zulip_app, name="zulip")`)
+- [x] T006 [P] Implement optional dependency guard in lftools_uv/typer_apps/zulip.py — detect missing `zulip` package at import time, register command group in CLI help regardless, show user-friendly error on invocation if extra not installed (FR-022). Canonical error message:
 
   ```text
   Zulip support requires the zulip extra. Install with:
@@ -52,19 +52,19 @@ SPDX-FileCopyrightText: 2026 The Linux Foundation
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T007 Implement ZulipConfig resolution logic in lftools_uv/api/endpoints/zulip.py — resolve config from `--zuliprc` flag > `./zuliprc` > lftools.ini `[zulip]` section > `~/.zuliprc` per FR-011/FR-012 precedence
-- [ ] T008 Implement Zulip client factory function in lftools_uv/api/endpoints/zulip.py — instantiate `zulip.Client` from resolved config, expose `get_client(zuliprc: Path | None) -> zulip.Client`
-- [ ] T009 Implement server feature-level detection in lftools_uv/api/endpoints/zulip.py — call `GET /api/v1/server_settings`, cache `zulip_feature_level`, expose `check_feature_level(client, required_level, feature_name)` that raises a domain error with FR-019 canonical message format
-- [ ] T010 [P] Define domain exception classes in lftools_uv/api/endpoints/zulip.py — `ZulipConfigError`, `ZulipAPIError`, `ZulipFeatureLevelError`, `ZulipAmbiguityError`, `ZulipLockoutError`
-- [ ] T011 [P] Implement shared CLI output helpers in lftools_uv/typer_apps/zulip.py — `--zuliprc` callback, `--json` flag handling, table formatting with `tabulate`, error display with non-zero exit, `MutationResult` JSON formatter
-- [ ] T012 [P] Implement channel target resolution helper in lftools_uv/api/endpoints/zulip.py — resolve channel by name (case-insensitive) or `--channel-id`, search active-only by default, include-archived if flag set, produce helpful "not found" error with `--include-archived` suggestion per FR-018
-- [ ] T013 [P] Implement group resolution helper in lftools_uv/api/endpoints/zulip.py — parse comma-separated group names/IDs from `--allow-group` and `--can-remove-subscribers-group` values, resolve each to numeric group ID, handle `id:NUM` prefix, handle system role group display-name-to-API-name mapping, build group-setting value (simple int or complex form), handle ambiguity errors
-- [ ] T014 [P] Implement user resolution helper in lftools_uv/api/endpoints/zulip.py — resolve user by email, user_id, or full_name per `--by-email`/`--by-id`/`--by-name` flags, detect ambiguous `--by-name` matches and raise `ZulipAmbiguityError` with listing of matching users
-- [ ] T015 Write unit tests for config resolution in tests/unit/test_zulip_config.py — test all four precedence levels, missing config error, malformed file error
-- [ ] T016 [P] Write unit tests for feature-level detection in tests/unit/test_zulip_api.py — test passing/failing feature level checks, canonical error message format
-- [ ] T017 [P] Write unit tests for channel target resolution in tests/unit/test_zulip_api.py — test name match (case-insensitive), ID match, not-found with suggestion, include-archived behavior
-- [ ] T018 [P] Write unit tests for group resolution in tests/unit/test_zulip_api.py — test single name, multiple names, id: prefix, system role groups, ambiguity error, Nobody detection
-- [ ] T019 [P] Write unit tests for user resolution in tests/unit/test_zulip_api.py — test by-email, by-id, by-name, ambiguity error with listing
+- [x] T007 Implement ZulipConfig resolution logic in lftools_uv/api/endpoints/zulip.py — resolve config from `--zuliprc` flag > `./zuliprc` > lftools.ini `[zulip]` section > `~/.zuliprc` per FR-011/FR-012 precedence
+- [x] T008 Implement Zulip client factory function in lftools_uv/api/endpoints/zulip.py — instantiate `zulip.Client` from resolved config, expose `get_client(zuliprc: Path | None) -> zulip.Client`
+- [x] T009 Implement server feature-level detection in lftools_uv/api/endpoints/zulip.py — call `GET /api/v1/server_settings`, cache `zulip_feature_level`, expose `check_feature_level(client, required_level, feature_name)` that raises a domain error with FR-019 canonical message format
+- [x] T010 [P] Define domain exception classes in lftools_uv/api/endpoints/zulip.py — `ZulipConfigError`, `ZulipAPIError`, `ZulipFeatureLevelError`, `ZulipAmbiguityError`, `ZulipLockoutError`
+- [x] T011 [P] Implement shared CLI output helpers in lftools_uv/typer_apps/zulip.py — `--zuliprc` callback, `--json` flag handling, table formatting with `tabulate`, error display with non-zero exit, `MutationResult` JSON formatter
+- [x] T012 [P] Implement channel target resolution helper in lftools_uv/api/endpoints/zulip.py — resolve channel by name (case-insensitive) or `--channel-id`, search active-only by default, include-archived if flag set, produce helpful "not found" error with `--include-archived` suggestion per FR-018
+- [x] T013 [P] Implement group resolution helper in lftools_uv/api/endpoints/zulip.py — parse comma-separated group names/IDs from `--allow-group` and `--can-remove-subscribers-group` values, resolve each to numeric group ID, handle `id:NUM` prefix, handle system role group display-name-to-API-name mapping, build group-setting value (simple int or complex form), handle ambiguity errors
+- [x] T014 [P] Implement user resolution helper in lftools_uv/api/endpoints/zulip.py — resolve user by email, user_id, or full_name per `--by-email`/`--by-id`/`--by-name` flags, detect ambiguous `--by-name` matches and raise `ZulipAmbiguityError` with listing of matching users
+- [x] T015 Write unit tests for config resolution in tests/unit/test_zulip_config.py — test all four precedence levels, missing config error, malformed file error
+- [x] T016 [P] Write unit tests for feature-level detection in tests/unit/test_zulip_api.py — test passing/failing feature level checks, canonical error message format
+- [x] T017 [P] Write unit tests for channel target resolution in tests/unit/test_zulip_api.py — test name match (case-insensitive), ID match, not-found with suggestion, include-archived behavior
+- [x] T018 [P] Write unit tests for group resolution in tests/unit/test_zulip_api.py — test single name, multiple names, id: prefix, system role groups, ambiguity error, Nobody detection
+- [x] T019 [P] Write unit tests for user resolution in tests/unit/test_zulip_api.py — test by-email, by-id, by-name, ambiguity error with listing
 
 **Checkpoint**: Foundation ready — user story implementation can now begin
 
