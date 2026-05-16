@@ -9,7 +9,10 @@
 ##############################################################################
 """Unit tests for the Zulip Typer CLI layer.
 
-Tests are populated by subsequent tasks in the implementation plan.
+Covers the foundation helpers (``MISSING_EXTRA_MESSAGE`` guard,
+``--help`` resilient-parsing short-circuit, ``mutation_result`` and
+``bulk_mutation_result`` output shaping). Per-command tests live
+alongside the user-story slices that introduce them.
 """
 
 from __future__ import annotations
