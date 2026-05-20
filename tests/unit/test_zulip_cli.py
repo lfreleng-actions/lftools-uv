@@ -2325,6 +2325,10 @@ def test_channel_archive_already_archived_noop_with_include_archived() -> None:
     )
     assert result.exit_code == 0, result.output
     assert json.loads(result.output) == payload
+    # Ensure --include-archived is forwarded to the API layer.
+    archive_mock = result.archive_mock
+    _, kwargs = archive_mock.call_args
+    assert kwargs.get("include_archived") is True
 
 
 def test_channel_archive_channel_not_found() -> None:
