@@ -1527,15 +1527,31 @@ ChannelType = Literal["public", "private", "web-public"]
 TopicPolicy = Literal["allow", "deny", "follow-default"]
 
 
-def _subscriber_count(client: Any, stream_id: int) -> int:
-    """Return the number of subscribers to ``stream_id`` via the members endpoint.
+def _subscriber_count(
+    client: Any,
+    stream_id: int,
+    *,
+    channel: dict[str, Any] | None = None,
+) -> int:
+    """Return the number of subscribers to ``stream_id``.
 
-    Uses ``GET /api/v1/streams/{stream_id}/members``. The response includes
-    a ``subscribers`` list of user IDs; the length is returned. Used by
-    :func:`update_channel` to decide whether the lockout-prevention rule
-    applies when converting a channel to private (FR-004 / spec scenario
-    13/14).
+    Fast path: when the already-resolved ``channel`` dict carries a
+    ``subscriber_count`` integer (exposed by recent Zulip servers), use
+    it directly to avoid an extra round-trip.
+
+    Slow path: fall back to ``GET /api/v1/streams/{stream_id}/members``
+    and count the returned ``subscribers`` list. This is materially
+    more expensive on large channels because it fetches the full
+    subscriber-ID list just to answer a yes/no question.
+
+    Used by :func:`update_channel` to decide whether the lockout-
+    prevention rule applies when converting a channel to private
+    (FR-004 / spec scenario 13/14).
     """
+    if channel is not None:
+        hint = channel.get("subscriber_count")
+        if isinstance(hint, int) and hint >= 0:
+            return hint
     try:
         response = client.call_endpoint(
             url=f"streams/{stream_id}/members",
@@ -1638,9 +1654,12 @@ def update_channel(
             settings_response = client.get_server_settings()
         except Exception as exc:  # pragma: no cover - network errors
             raise ZulipAPIError(f"Failed to query server settings: {exc}") from exc
-        spectator = None
-        if isinstance(settings_response, dict):
-            spectator = settings_response.get("realm_enable_spectator_access")
+        if not isinstance(settings_response, dict) or settings_response.get("result") != "success":
+            raise ZulipAPIError(f"Unexpected server-settings response: {settings_response!r}")
+        # ``realm_enable_spectator_access`` is present on recent Zulip
+        # servers; defensively allow the transition when the field is
+        # absent (older servers leave enforcement to the API itself).
+        spectator = settings_response.get("realm_enable_spectator_access")
         if spectator is False:
             raise ZulipFeatureLevelError(
                 required=FEATURE_LEVELS["web-public"],
@@ -1715,7 +1734,7 @@ def update_channel(
 
         if not has_subs_to_add and not allow_group_satisfies:
             # Inspect current subscriber count; if zero, refuse.
-            current = _subscriber_count(client, stream_id)
+            current = _subscriber_count(client, stream_id, channel=channel)
             if current == 0:
                 raise ZulipLockoutError(
                     "Converting channel to private with no existing subscribers "
