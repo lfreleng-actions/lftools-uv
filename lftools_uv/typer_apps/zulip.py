@@ -33,6 +33,7 @@ import typer
 from tabulate import tabulate
 
 from lftools_uv.api.endpoints.zulip import (
+    ZulipAmbiguityError,
     ZulipError,
     get_client,
     list_channels,
@@ -325,7 +326,7 @@ def user_list(
 
 group_app = typer.Typer(
     name="group",
-    help="List and inspect Zulip user groups.",
+    help="List Zulip user groups.",
     no_args_is_help=True,
 )
 zulip_app.add_typer(group_app, name="group")
@@ -361,6 +362,16 @@ def group_list(
             group_name=group_name,
             group_id=group_id,
         )
+    except ZulipAmbiguityError as exc:
+        # Render the per-spec listing of matches with IDs in addition to
+        # the headline message so the user can pick one for --group-id.
+        emit_error(str(exc))
+        for match in exc.matches:
+            typer.echo(
+                f"  - {match.get('name', '<unknown>')} (group_id={match.get('group_id')})",
+                err=True,
+            )
+        raise typer.Exit(code=1) from exc
     except ZulipError as exc:
         raise handle_zulip_error(exc) from exc
 

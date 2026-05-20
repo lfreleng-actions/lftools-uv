@@ -822,3 +822,35 @@ def test_list_groups_uses_known_system_role_mapping() -> None:
             # Display name (lowercased) must round-trip via SYSTEM_ROLE_GROUPS.
             display = group["name"].casefold()
             assert display in SYSTEM_ROLE_GROUPS
+
+
+def test_list_groups_rejects_malformed_entry() -> None:
+    """A non-dict entry in the user_groups payload raises ZulipAPIError."""
+    client = mock.MagicMock()
+    client.call_endpoint.return_value = {
+        "result": "success",
+        "user_groups": [{"id": 1, "name": "ok"}, "not-a-dict"],
+    }
+    with pytest.raises(ZulipAPIError):
+        _ = list_groups(client)
+
+
+def test_list_groups_rejects_missing_id() -> None:
+    """A group object lacking a numeric ``id`` raises ZulipAPIError."""
+    client = mock.MagicMock()
+    client.call_endpoint.return_value = {
+        "result": "success",
+        "user_groups": [{"name": "no-id"}],
+    }
+    with pytest.raises(ZulipAPIError, match="numeric 'id'"):
+        _ = list_groups(client)
+
+
+def test_system_role_display_names_round_trip() -> None:
+    """SYSTEM_ROLE_DISPLAY_NAMES is consistent with SYSTEM_ROLE_GROUPS."""
+    from lftools_uv.api.endpoints.zulip import SYSTEM_ROLE_DISPLAY_NAMES
+
+    assert set(SYSTEM_ROLE_DISPLAY_NAMES.keys()) == set(SYSTEM_ROLE_GROUPS.values())
+    # Every display name folds back to a key in SYSTEM_ROLE_GROUPS.
+    for display in SYSTEM_ROLE_DISPLAY_NAMES.values():
+        assert display.casefold() in SYSTEM_ROLE_GROUPS

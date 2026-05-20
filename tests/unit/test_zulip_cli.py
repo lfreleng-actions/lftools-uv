@@ -594,7 +594,12 @@ def test_group_list_accepts_global_zuliprc() -> None:
 
 
 def test_group_list_ambiguity_error_display() -> None:
-    """A ``ZulipAmbiguityError`` from the API surfaces with exit code 1."""
+    """A ``ZulipAmbiguityError`` from the API surfaces with exit code 1.
+
+    The per-spec contract requires that the matches list (group IDs +
+    names) is rendered to stderr so the user can pick one for
+    ``--group-id``.
+    """
     exc = ZulipAmbiguityError(
         "Group name 'design' matched 2 groups",
         matches=[
@@ -605,6 +610,9 @@ def test_group_list_ambiguity_error_display() -> None:
     result, _ = _invoke_group_list(["--group-name", "design"], list_groups_exc=exc)
     assert result.exit_code == 1
     assert "design" in result.stderr.lower()
+    # Matches list rendered with both ids.
+    assert "11" in result.stderr
+    assert "12" in result.stderr
 
 
 def test_group_list_config_error_display() -> None:

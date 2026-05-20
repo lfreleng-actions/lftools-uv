@@ -522,6 +522,23 @@ SYSTEM_ROLE_GROUPS: dict[str, str] = {
 }
 
 
+#: Reverse of :data:`SYSTEM_ROLE_GROUPS`: maps the Zulip ``role:`` API name
+#: to the human-facing display name presented in ``group list`` output and
+#: accepted by ``--allow-group``/``--can-remove-subscribers-group``.
+#:
+#: Derived from :data:`SYSTEM_ROLE_GROUPS` to avoid drift — display names
+#: are Title Case versions of the lowercase keys, with the historical
+#: ``Full Members`` two-word form preserved.
+def _build_system_role_display_names() -> dict[str, str]:
+    overrides = {"full members": "Full Members"}
+    return {
+        api_name: overrides.get(display.lower(), display.title()) for display, api_name in SYSTEM_ROLE_GROUPS.items()
+    }
+
+
+SYSTEM_ROLE_DISPLAY_NAMES: dict[str, str] = _build_system_role_display_names()
+
+
 def _fetch_groups(client: Any) -> list[dict[str, Any]]:
     """Return the raw user_groups listing from the Zulip server."""
     try:
@@ -762,21 +779,32 @@ def _normalize_group(raw: dict[str, Any]) -> dict[str, Any]:
     Maps system role groups to their display names per
     :data:`SYSTEM_ROLE_DISPLAY_NAMES`; custom group names pass through
     unchanged. ``member_count`` is derived from the ``members`` array
-    length when the server omits an explicit count.
+    length.
+
+    Raises :class:`ZulipAPIError` when required fields are missing or
+    have unexpected types — keeping the behaviour consistent with
+    :func:`resolve_groups`, which already validates ``id`` is an int.
     """
+    raw_id = raw.get("id")
+    if not isinstance(raw_id, int):
+        raise ZulipAPIError(f"Group object missing numeric 'id': {raw!r}")
+    api_name = raw.get("name")
+    if not isinstance(api_name, str) or not api_name:
+        raise ZulipAPIError(f"Group object missing string 'name': {raw!r}")
+    members = raw.get("members", [])
+    if not isinstance(members, list):
+        raise ZulipAPIError(f"Group object has non-list 'members': {raw!r}")
     is_system = bool(raw.get("is_system_group", False))
-    api_name = str(raw.get("name", ""))
     if is_system:
         display = SYSTEM_ROLE_DISPLAY_NAMES.get(api_name, api_name)
     else:
         display = api_name
-    members = raw.get("members", [])
-    member_count = len(members) if isinstance(members, list) else 0
+    description = raw.get("description", "") or ""
     return {
-        "group_id": raw.get("id"),
+        "group_id": raw_id,
         "name": display,
-        "description": str(raw.get("description", "") or ""),
-        "member_count": member_count,
+        "description": str(description),
+        "member_count": len(members),
         "type": "system" if is_system else "custom",
     }
 
@@ -802,16 +830,20 @@ def list_groups(
     :class:`ZulipAmbiguityError` with the matches listed.
     """
     if group_name is not None and group_id is not None:
-        raise ZulipValidationError("list_groups: --group-name and --group-id are mutually exclusive")
+        raise ZulipValidationError("list_groups: 'group_name' and 'group_id' are mutually exclusive")
     raw_groups = _fetch_groups(client)
-    groups = [_normalize_group(raw) for raw in raw_groups]
+    normalized: list[dict[str, Any]] = []
+    for raw in raw_groups:
+        if not isinstance(raw, dict):
+            raise ZulipAPIError(f"Malformed user_groups entry (not a dict): {raw!r}")
+        normalized.append(_normalize_group(raw))
 
     if group_id is not None:
-        return [g for g in groups if g["group_id"] == group_id]
+        return [g for g in normalized if g["group_id"] == group_id]
 
     if group_name is not None:
         target = group_name.casefold()
-        matches = [g for g in groups if str(g["name"]).casefold() == target]
+        matches = [g for g in normalized if str(g["name"]).casefold() == target]
         if len(matches) > 1:
             raise ZulipAmbiguityError(
                 f"Group name {group_name!r} matched {len(matches)} groups; use --group-id to disambiguate",
@@ -819,4 +851,4 @@ def list_groups(
             )
         return matches
 
-    return groups
+    return normalized
