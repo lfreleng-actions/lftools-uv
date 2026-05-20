@@ -33,6 +33,7 @@ import typer
 from tabulate import tabulate
 
 from lftools_uv.api.endpoints.zulip import (
+    IdMode,
     ZulipAmbiguityError,
     ZulipError,
     get_client,
@@ -866,7 +867,7 @@ def channel_unsubscribe(
     if len(chosen) != 1:
         emit_error("Exactly one of --by-email/--by-id/--by-name is required")
         raise typer.Exit(code=1)
-    id_mode = chosen[0]
+    id_mode = cast(IdMode, chosen[0])
 
     # Split positional targets into channel + users.
     if channel_id is not None:
@@ -890,7 +891,7 @@ def channel_unsubscribe(
             users,
             channel=channel_name,
             channel_id=channel_id,
-            id_mode=id_mode,  # type: ignore[arg-type]
+            id_mode=id_mode,
             include_archived=include_archived,
         )
     except ZulipError as exc:
