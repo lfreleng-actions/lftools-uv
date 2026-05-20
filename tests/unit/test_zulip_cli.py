@@ -25,13 +25,17 @@ import pytest
 from typer.testing import CliRunner
 
 import lftools_uv.typer_apps.zulip as zulip_mod
-from lftools_uv.api.endpoints.zulip import ZulipConfigError
+from lftools_uv.api.endpoints.zulip import (
+    ZulipAmbiguityError,
+    ZulipConfigError,
+)
 from lftools_uv.typer_apps.zulip import (
     MISSING_EXTRA_MESSAGE,
     bulk_mutation_result,
     mutation_result,
     zulip_app,
 )
+from tests.test_utils import clean_cli_output
 
 
 def test_zulip_app_registered() -> None:
@@ -627,8 +631,6 @@ def test_group_list_config_error_display() -> None:
 
 def test_group_list_help_renders() -> None:
     """``zulip group list --help`` produces usable help text."""
-    import re as _re
-
     runner = CliRunner()
     result = runner.invoke(
         zulip_app,
@@ -636,7 +638,6 @@ def test_group_list_help_renders() -> None:
         env={"COLUMNS": "200", "NO_COLOR": "1", "TERM": "dumb"},
     )
     assert result.exit_code == 0
-    # Strip any residual ANSI escape sequences before substring assertions.
-    cleaned = _re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", result.stdout)
+    cleaned = clean_cli_output(result.stdout)
     assert "--group-name" in cleaned
     assert "--group-id" in cleaned
