@@ -118,13 +118,13 @@ SPDX-FileCopyrightText: 2026 The Linux Foundation
 
 ### Tests for User Story 3
 
-- [ ] T028 [P] [US3] Write CLI tests for `group list` in tests/unit/test_zulip_cli.py — test table output, `--json` output, `--group-name` filter, `--group-id` filter, ambiguity error display, config error
-- [ ] T029 [P] [US3] Write API tests for `list_groups()` in tests/unit/test_zulip_api.py — mock Zulip user_groups API, test custom/system group parsing, filtering, ambiguity detection
+- [x] T028 [P] [US3] Write CLI tests for `group list` in tests/unit/test_zulip_cli.py — test table output, `--json` output, `--group-name` filter, `--group-id` filter, ambiguity error display, config error
+- [x] T029 [P] [US3] Write API tests for `list_groups()` in tests/unit/test_zulip_api.py — mock Zulip user_groups API, test custom/system group parsing, filtering, ambiguity detection
 
 ### Implementation for User Story 3
 
-- [ ] T030 [US3] Implement `list_groups(client, group_name=None, group_id=None)` in lftools_uv/api/endpoints/zulip.py — call Zulip user_groups API, parse response into list of group dicts with group_id, name, description, member_count, type (custom/system), handle system role group display name mapping, handle ambiguous name filter
-- [ ] T031 [US3] Implement `group list` CLI command in lftools_uv/typer_apps/zulip.py — create `group` sub-app, add `list` command with `--group-name`, `--group-id`, and `--json` flags, format table output
+- [x] T030 [US3] Implement `list_groups(client, group_name=None, group_id=None)` in lftools_uv/api/endpoints/zulip.py — call Zulip user_groups API, parse response into list of group dicts with group_id, name, description, member_count, type (custom/system), handle system role group display name mapping, handle ambiguous name filter
+- [x] T031 [US3] Implement `group list` CLI command in lftools_uv/typer_apps/zulip.py — create `group` sub-app, add `list` command with `--group-name`, `--group-id`, and `--json` flags, format table output
 
 **Checkpoint**: User Story 3 is fully functional — `lftools-uv zulip group list` works independently
 
