@@ -2428,7 +2428,7 @@ def test_channel_unarchive_requires_yes(monkeypatch: pytest.MonkeyPatch) -> None
         zulip_app,
         ["channel", "unarchive", "restored-project", "--include-archived"],
     )
-    assert result.exit_code != 0
+    assert result.exit_code == 1
     assert "--yes" in (result.stdout + (result.stderr or ""))
     unarchive_mock.assert_not_called()
 
@@ -2524,7 +2524,7 @@ def test_channel_unarchive_rejects_both_targets(
         zulip_app,
         ["channel", "unarchive", "restored-project", "--channel-id", "99", "--yes"],
     )
-    assert result.exit_code != 0
+    assert result.exit_code == 1
     unarchive_mock.assert_not_called()
 
 
@@ -2535,5 +2535,5 @@ def test_channel_unarchive_requires_some_target(
     unarchive_mock = _stub_unarchive(monkeypatch)
     runner = CliRunner()
     result = runner.invoke(zulip_app, ["channel", "unarchive", "--yes"])
-    assert result.exit_code != 0
+    assert result.exit_code == 1
     unarchive_mock.assert_not_called()
