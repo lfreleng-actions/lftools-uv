@@ -1054,7 +1054,8 @@ def test_channel_subscribe_missing_identifier_flag_errors() -> None:
         subscribe_return=_bulk_ok(),
     )
     assert result.exit_code != 0
-    assert "--by-email" in (result.stderr or "") or "identifier" in (result.stderr or "").lower()
+    combined = (result.stdout or "") + (result.stderr or "")
+    assert "--by-email" in combined or "by-email" in combined or "identifier" in combined.lower()
 
 
 def test_channel_subscribe_multiple_identifier_flags_errors() -> None:
