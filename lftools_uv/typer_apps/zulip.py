@@ -39,6 +39,7 @@ from lftools_uv.api.endpoints.zulip import (
     list_channels,
     list_groups,
     list_users,
+    subscribe_users,
     zulip_available,
 )
 
@@ -596,3 +597,80 @@ def group_list(
         for group in groups
     ]
     emit_table(rows, headers=headers)
+
+# T036 — `channel subscribe` CLI (US5)
+# ---------------------------------------------------------------------------
+
+
+def _resolve_id_mode(by_email: bool, by_id: bool, by_name: bool) -> Literal["email", "id", "name"]:
+    """Return the canonical id_mode string for the identifier flags."""
+    chosen = [name for name, val in (("email", by_email), ("id", by_id), ("name", by_name)) if val]
+    if len(chosen) == 0:
+        raise typer.BadParameter("Specify exactly one of --by-email, --by-id, or --by-name")
+    if len(chosen) > 1:
+        raise typer.BadParameter("--by-email, --by-id, and --by-name are mutually exclusive")
+    return cast(Literal["email", "id", "name"], chosen[0])
+
+
+@channel_app.command("subscribe")
+def channel_subscribe(
+    ctx: typer.Context,
+    targets: list[str] = typer.Argument(
+        ...,
+        metavar="[CHANNEL] USER [USER...]",
+        help=(
+            "Channel name (when --channel-id is absent) followed by one or "
+            "more user identifiers. When --channel-id is provided, all "
+            "positional arguments are user identifiers."
+        ),
+    ),
+    channel_id: int | None = typer.Option(
+        None,
+        "--channel-id",
+        help="Target channel by numeric ID (mutually exclusive with positional channel).",
+    ),
+    by_email: bool = typer.Option(False, "--by-email", help="Identify users by email."),
+    by_id: bool = typer.Option(False, "--by-id", help="Identify users by numeric user ID."),
+    by_name: bool = typer.Option(False, "--by-name", help="Identify users by full name."),
+    include_archived: bool = typer.Option(False, "--include-archived", help="Permit operating on archived channels."),
+) -> None:
+    """Subscribe users to a channel (FR-005, US5)."""
+    id_mode = _resolve_id_mode(by_email, by_id, by_name)
+
+    channel_arg: str | int
+    if channel_id is not None:
+        if not targets:
+            raise typer.BadParameter("At least one USER positional argument is required.")
+        channel_arg = channel_id
+        user_idents = list(targets)
+    else:
+        if len(targets) < 2:
+            raise typer.BadParameter("Provide [CHANNEL] followed by at least one USER, or use --channel-id.")
+        channel_arg = targets[0]
+        user_idents = list(targets[1:])
+
+    options = ctx.obj or {}
+    try:
+        client = get_client(zuliprc=options.get("zuliprc"))
+        result = subscribe_users(
+            client,
+            channel_arg,
+            user_idents,
+            id_mode=id_mode,
+            include_archived=include_archived,
+        )
+    except ZulipError as exc:
+        raise handle_zulip_error(exc) from exc
+
+    if options.get("json_output"):
+        emit_json(result)
+    else:
+        rows = [(r["user"], r["status"]) for r in result.get("results", [])]
+        for err in result.get("errors", []):
+            rows.append((err["user"], f"error: {err.get('error', 'unknown')}"))
+        emit_table(rows, headers=["user", "status"])
+        if result.get("errors"):
+            emit_error(f"{len(result['errors'])} user(s) could not be subscribed to '{result.get('channel_name')}'.")
+
+    if result.get("status") != "success":
+        raise typer.Exit(code=1)

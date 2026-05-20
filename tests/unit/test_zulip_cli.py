@@ -955,3 +955,223 @@ def test_channel_create_help_renders(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "--allow-group" in cleaned
     assert "--announce" in cleaned
     assert "--topic-policy" in cleaned
+
+
+# ---------------------------------------------------------------------------
+# T036 — `channel subscribe` CLI (US5)
+# ---------------------------------------------------------------------------
+
+
+def _invoke_subscribe(args, subscribe_return=None, subscribe_side_effect=None):
+    """Invoke ``zulip channel subscribe`` with API helpers patched."""
+    runner = CliRunner()
+    command_args = list(args)
+    global_args: list[str] = []
+    if "--json" in command_args:
+        command_args.remove("--json")
+        global_args.append("--json")
+    with (
+        mock.patch("lftools_uv.typer_apps.zulip.get_client") as get_client,
+        mock.patch("lftools_uv.typer_apps.zulip.subscribe_users") as subscribe,
+        mock.patch("lftools_uv.typer_apps.zulip.zulip_available", return_value=True),
+    ):
+        get_client.return_value = mock.MagicMock()
+        if subscribe_side_effect is not None:
+            subscribe.side_effect = subscribe_side_effect
+        else:
+            subscribe.return_value = subscribe_return
+        result = runner.invoke(zulip_app, [*global_args, "channel", "subscribe", *command_args])
+    return result, subscribe
+
+
+def _bulk_ok(channel_id=42, channel_name="general", users=("bob@example.com",)):
+    return {
+        "status": "success",
+        "channel_id": channel_id,
+        "channel_name": channel_name,
+        "operation": "subscribe",
+        "results": [{"user": u, "status": "subscribed"} for u in users],
+        "errors": [],
+    }
+
+
+def test_channel_subscribe_single_email_success() -> None:
+    """`channel subscribe general bob@example.com --by-email` succeeds."""
+    result, sub = _invoke_subscribe(
+        ["general", "bob@example.com", "--by-email"],
+        subscribe_return=_bulk_ok(),
+    )
+    assert result.exit_code == 0, result.stderr
+    # subscribe_users was called with channel='general' and one user.
+    args, kwargs = sub.call_args
+    # Allow either positional or keyword passing.
+    call = {**dict(zip(["client", "channel", "users", "id_mode"], args, strict=False)), **kwargs}
+    assert call["channel"] == "general"
+    assert list(call["users"]) == ["bob@example.com"]
+    assert call["id_mode"] == "email"
+
+
+def test_channel_subscribe_bulk_users() -> None:
+    """Multiple positional users are all passed to subscribe_users."""
+    result, sub = _invoke_subscribe(
+        ["general", "a@x.com", "b@x.com", "c@x.com", "--by-email"],
+        subscribe_return=_bulk_ok(users=("a@x.com", "b@x.com", "c@x.com")),
+    )
+    assert result.exit_code == 0, result.stderr
+    args, kwargs = sub.call_args
+    call = {**dict(zip(["client", "channel", "users", "id_mode"], args, strict=False)), **kwargs}
+    assert list(call["users"]) == ["a@x.com", "b@x.com", "c@x.com"]
+
+
+def test_channel_subscribe_by_id_flag() -> None:
+    """`--by-id` is forwarded as id_mode='id'."""
+    result, sub = _invoke_subscribe(
+        ["general", "200", "--by-id"],
+        subscribe_return=_bulk_ok(),
+    )
+    assert result.exit_code == 0, result.stderr
+    args, kwargs = sub.call_args
+    call = {**dict(zip(["client", "channel", "users", "id_mode"], args, strict=False)), **kwargs}
+    assert call["id_mode"] == "id"
+
+
+def test_channel_subscribe_by_name_flag() -> None:
+    """`--by-name` is forwarded as id_mode='name'."""
+    result, sub = _invoke_subscribe(
+        ["general", "Bob Jones", "--by-name"],
+        subscribe_return=_bulk_ok(),
+    )
+    assert result.exit_code == 0, result.stderr
+    args, kwargs = sub.call_args
+    call = {**dict(zip(["client", "channel", "users", "id_mode"], args, strict=False)), **kwargs}
+    assert call["id_mode"] == "name"
+
+
+def test_channel_subscribe_missing_identifier_flag_errors() -> None:
+    """Omitting all of --by-email/--by-id/--by-name is a usage error."""
+    result, _ = _invoke_subscribe(
+        ["general", "bob@example.com"],
+        subscribe_return=_bulk_ok(),
+    )
+    assert result.exit_code != 0
+    assert "--by-email" in (result.stderr or "") or "identifier" in (result.stderr or "").lower()
+
+
+def test_channel_subscribe_multiple_identifier_flags_errors() -> None:
+    """Specifying more than one of the identifier flags is a usage error."""
+    result, _ = _invoke_subscribe(
+        ["general", "bob@example.com", "--by-email", "--by-id"],
+        subscribe_return=_bulk_ok(),
+    )
+    assert result.exit_code != 0
+
+
+def test_channel_subscribe_ambiguity_error_exits_1() -> None:
+    """A ZulipAmbiguityError from the API surfaces as exit-code 1."""
+    import lftools_uv.api.endpoints.zulip as zulip_api
+
+    result, _ = _invoke_subscribe(
+        ["general", "Alice Smith", "--by-name"],
+        subscribe_side_effect=zulip_api.ZulipAmbiguityError(
+            "User name 'Alice Smith' matched 2 users; use --by-email or --by-id to disambiguate"
+        ),
+    )
+    assert result.exit_code == 1
+    assert "Alice Smith" in (result.stderr or "")
+
+
+def test_channel_subscribe_already_subscribed_noop_exit_0() -> None:
+    """An all-already-subscribed result still exits 0."""
+    result, _ = _invoke_subscribe(
+        ["general", "bob@example.com", "--by-email"],
+        subscribe_return={
+            "status": "success",
+            "channel_id": 42,
+            "channel_name": "general",
+            "operation": "subscribe",
+            "results": [{"user": "bob@example.com", "status": "already_subscribed"}],
+            "errors": [],
+        },
+    )
+    assert result.exit_code == 0, result.stderr
+
+
+def test_channel_subscribe_partial_exits_1() -> None:
+    """Partial results (some errors) exit with code 1."""
+    result, _ = _invoke_subscribe(
+        ["general", "a@x.com", "b@x.com", "--by-email"],
+        subscribe_return={
+            "status": "partial",
+            "channel_id": 42,
+            "channel_name": "general",
+            "operation": "subscribe",
+            "results": [{"user": "a@x.com", "status": "subscribed"}],
+            "errors": [{"user": "b@x.com", "error": "unauthorized"}],
+        },
+    )
+    assert result.exit_code == 1
+
+
+def test_channel_subscribe_json_bulk_output() -> None:
+    """`--json` emits the bulk-mutation payload verbatim."""
+    payload = _bulk_ok(users=("a@x.com", "b@x.com"))
+    result, _ = _invoke_subscribe(
+        ["general", "a@x.com", "b@x.com", "--by-email", "--json"],
+        subscribe_return=payload,
+    )
+    assert result.exit_code == 0, result.stderr
+    parsed = json.loads(result.stdout)
+    assert parsed["operation"] == "subscribe"
+    assert parsed["channel_name"] == "general"
+    assert {r["user"] for r in parsed["results"]} == {"a@x.com", "b@x.com"}
+
+
+def test_channel_subscribe_channel_id_flag_uses_id() -> None:
+    """`--channel-id` passes the int ID; all positionals are USERs."""
+    result, sub = _invoke_subscribe(
+        ["--channel-id", "42", "bob@example.com", "--by-email"],
+        subscribe_return=_bulk_ok(),
+    )
+    assert result.exit_code == 0, result.stderr
+    args, kwargs = sub.call_args
+    call = {**dict(zip(["client", "channel", "users", "id_mode"], args, strict=False)), **kwargs}
+    assert call["channel"] == 42
+    assert list(call["users"]) == ["bob@example.com"]
+
+
+def test_channel_subscribe_numeric_channel_name_treated_as_name() -> None:
+    """A positional channel like '123' is forwarded as a NAME string, not an id."""
+    result, sub = _invoke_subscribe(
+        ["123", "bob@example.com", "--by-email"],
+        subscribe_return=_bulk_ok(channel_id=99, channel_name="123"),
+    )
+    assert result.exit_code == 0, result.stderr
+    args, kwargs = sub.call_args
+    call = {**dict(zip(["client", "channel", "users", "id_mode"], args, strict=False)), **kwargs}
+    # CLI must NOT coerce the positional to int; the API layer accepts only
+    # ints for id-mode resolution.
+    assert call["channel"] == "123"
+    assert isinstance(call["channel"], str)
+
+
+def test_channel_subscribe_no_channel_no_id_errors() -> None:
+    """When neither positional channel nor --channel-id is given, error."""
+    # Only one positional → with no --channel-id, that positional becomes
+    # the channel name and there are zero USER args.
+    result, _ = _invoke_subscribe(
+        ["general", "--by-email"],
+        subscribe_return=_bulk_ok(),
+    )
+    assert result.exit_code != 0
+
+
+def test_channel_subscribe_channel_id_and_positional_channel_errors() -> None:
+    """Providing both --channel-id and treating a positional as channel errors.
+
+    With --channel-id, ALL positionals are USER values, so passing too few
+    positionals (e.g. zero USERs) is the failure path we must surface."""
+    result, _ = _invoke_subscribe(
+        ["--channel-id", "42", "--by-email"],
+        subscribe_return=_bulk_ok(),
+    )
+    assert result.exit_code != 0
