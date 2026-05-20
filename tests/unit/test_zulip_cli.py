@@ -1205,3 +1205,60 @@ def test_channel_subscribe_include_archived_default_false() -> None:
     assert result.exit_code == 0, result.stderr
     _, kwargs = sub.call_args
     assert kwargs.get("include_archived") is False
+
+
+def test_channel_subscribe_json_channel_not_found() -> None:
+    """`--json` with an unknown channel emits a structured error payload.
+
+    Contract: ``status='error'``, ``channel_id=null`` (when channel was
+    looked up by name), ``channel_name=<requested>``, empty ``results``,
+    and a single descriptive ``errors`` entry. Exits 1.
+    """
+    import lftools_uv.api.endpoints.zulip as zulip_api
+
+    result, _ = _invoke_subscribe(
+        ["unknown-channel", "bob@example.com", "--by-email", "--json"],
+        subscribe_side_effect=zulip_api.ZulipNotFoundError("Channel 'unknown-channel' not found"),
+    )
+    assert result.exit_code == 1
+    payload = _json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["channel_id"] is None
+    assert payload["channel_name"] == "unknown-channel"
+    assert payload["operation"] == "subscribe"
+    assert payload["results"] == []
+    assert len(payload["errors"]) == 1
+    assert "unknown-channel" in payload["errors"][0]["error"]
+
+
+def test_channel_subscribe_json_channel_id_not_found() -> None:
+    """`--json` with an unknown numeric channel-id reflects the id back."""
+    import lftools_uv.api.endpoints.zulip as zulip_api
+
+    result, _ = _invoke_subscribe(
+        ["--channel-id", "9999", "bob@example.com", "--by-email", "--json"],
+        subscribe_side_effect=zulip_api.ZulipNotFoundError("No channel with id 9999"),
+    )
+    assert result.exit_code == 1
+    payload = _json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["channel_id"] == 9999
+    assert payload["operation"] == "subscribe"
+
+
+def test_channel_subscribe_exit_code_one_on_no_identifier() -> None:
+    """Per contract, missing identifier flag exits 1 (not Click's default 2)."""
+    result, _ = _invoke_subscribe(
+        ["general", "bob@example.com"],
+        subscribe_return=_bulk_ok(),
+    )
+    assert result.exit_code == 1
+
+
+def test_channel_subscribe_exit_code_one_on_missing_users() -> None:
+    """Per contract, channel-only-no-USERs exits 1 (not Click's default 2)."""
+    result, _ = _invoke_subscribe(
+        ["general", "--by-email"],
+        subscribe_return=_bulk_ok(),
+    )
+    assert result.exit_code == 1

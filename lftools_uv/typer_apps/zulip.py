@@ -606,9 +606,11 @@ def _resolve_id_mode(by_email: bool, by_id: bool, by_name: bool) -> Literal["ema
     """Return the canonical id_mode string for the identifier flags."""
     chosen = [name for name, val in (("email", by_email), ("id", by_id), ("name", by_name)) if val]
     if len(chosen) == 0:
-        raise typer.BadParameter("Specify exactly one of --by-email, --by-id, or --by-name")
+        emit_error("Specify exactly one of --by-email, --by-id, or --by-name")
+        raise typer.Exit(code=1)
     if len(chosen) > 1:
-        raise typer.BadParameter("--by-email, --by-id, and --by-name are mutually exclusive")
+        emit_error("--by-email, --by-id, and --by-name are mutually exclusive")
+        raise typer.Exit(code=1)
     return cast(Literal["email", "id", "name"], chosen[0])
 
 
@@ -649,7 +651,13 @@ def channel_subscribe(
         user_idents = list(targets)
     else:
         if len(targets) < 2:
-            raise typer.BadParameter("Provide [CHANNEL] followed by at least one USER, or use --channel-id.")
+            # Contract says exit code 0/1, not 2 — use Exit(1) rather than
+            # typer.BadParameter (which would exit 2 via Click).
+            emit_error("Provide [CHANNEL] followed by at least one USER, or use --channel-id.")
+            raise typer.Exit(code=1)
+        # Preserve the channel positional as a STRING — even if it looks
+        # numeric (e.g. literally the channel named "123"). Callers that
+        # want id-based resolution must use --channel-id.
         channel_arg = targets[0]
         user_idents = list(targets[1:])
 
@@ -664,6 +672,21 @@ def channel_subscribe(
             include_archived=include_archived,
         )
     except ZulipError as exc:
+        # When --json is requested, emit a structured bulk-mutation error
+        # payload (channel_id=null, status="error", errors=[...]) so that
+        # callers can still parse the response programmatically. Otherwise
+        # fall back to the human-readable formatter.
+        if options.get("json_output"):
+            channel_name_str = channel_arg if isinstance(channel_arg, str) else None
+            error_payload = bulk_mutation_result(
+                operation="subscribe",
+                channel_id=channel_arg if isinstance(channel_arg, int) else None,
+                channel_name=channel_name_str or "",
+                results=[],
+                errors=[{"error": str(exc)}],
+            )
+            emit_json(error_payload)
+            raise typer.Exit(code=1) from exc
         raise handle_zulip_error(exc) from exc
 
     if options.get("json_output"):
