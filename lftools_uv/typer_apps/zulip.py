@@ -1272,7 +1272,7 @@ def channel_archive(
     ctx: typer.Context,
     channel: str | None = typer.Argument(
         None,
-        metavar="[CHANNEL]",
+        metavar="CHANNEL",
         help="Channel name (mutually exclusive with --channel-id).",
     ),
     channel_id: int | None = typer.Option(
