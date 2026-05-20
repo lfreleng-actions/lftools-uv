@@ -78,13 +78,13 @@ SPDX-FileCopyrightText: 2026 The Linux Foundation
 
 ### Tests for User Story 1
 
-- [ ] T020 [P] [US1] Write CLI tests for `channel list` in tests/unit/test_zulip_cli.py — test table output, `--json` output, `--include-archived` flag, config error display, empty channel list
-- [ ] T021 [P] [US1] Write API tests for `list_channels()` in tests/unit/test_zulip_api.py — mock Zulip API response, test active-only filtering, include-archived, response parsing
+- [x] T020 [P] [US1] Write CLI tests for `channel list` in tests/unit/test_zulip_cli.py — test table output, `--json` output, `--include-archived` flag, config error display, empty channel list
+- [x] T021 [P] [US1] Write API tests for `list_channels()` in tests/unit/test_zulip_api.py — mock Zulip API response, test active-only filtering, include-archived, response parsing
 
 ### Implementation for User Story 1
 
-- [ ] T022 [US1] Implement `list_channels(client, include_archived=False)` in lftools_uv/api/endpoints/zulip.py — call Zulip streams API, parse response into list of channel dicts with stream_id, name, description, type, subscriber_count, is_archived
-- [ ] T023 [US1] Implement `channel list` CLI command in lftools_uv/typer_apps/zulip.py — create `channel` sub-app, add `list` command with `--include-archived` and `--json` flags, format table output with tabulate, handle errors
+- [x] T022 [US1] Implement `list_channels(client, include_archived=False)` in lftools_uv/api/endpoints/zulip.py — call Zulip streams API, parse response into list of channel dicts with stream_id, name, description, type, subscriber_count, is_archived
+- [x] T023 [US1] Implement `channel list` CLI command in lftools_uv/typer_apps/zulip.py — create `channel` sub-app, add `list` command with `--include-archived` and `--json` flags, format table output with tabulate, handle errors
 
 **Checkpoint**: User Story 1 is fully functional — `lftools-uv zulip channel list` works independently
 
