@@ -315,6 +315,118 @@ def test_channel_list_config_error_surfaces(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 # ---------------------------------------------------------------------------
+# T044 — `channel subscribers` CLI (US7)
+# ---------------------------------------------------------------------------
+
+
+def _patch_subscribers(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    return_value: list[dict[str, object]] | None = None,
+    side_effect: BaseException | None = None,
+) -> mock.MagicMock:
+    """Replace ``list_subscribers`` and ``get_client`` with mocks."""
+    fake_list = mock.MagicMock()
+    if side_effect is not None:
+        fake_list.side_effect = side_effect
+    else:
+        fake_list.return_value = return_value or []
+
+    monkeypatch.setattr(zulip_mod, "list_subscribers", fake_list, raising=False)
+    monkeypatch.setattr(zulip_mod, "get_client", lambda *a, **kw: mock.MagicMock(), raising=False)
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
+    return fake_list
+
+
+def test_channel_subscribers_table_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default human output renders a table of name/email/user_id."""
+    fake = _patch_subscribers(
+        monkeypatch,
+        return_value=[
+            {"user_id": 10, "full_name": "Alice Smith", "email": "alice@example.com"},
+            {"user_id": 20, "full_name": "Bob Jones", "email": "bob@example.com"},
+        ],
+    )
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "subscribers", "general"])
+    assert result.exit_code == 0, result.stdout
+    assert "Alice Smith" in result.stdout
+    assert "alice@example.com" in result.stdout
+    assert "Bob Jones" in result.stdout
+    # Positional name was forwarded as the ``name`` kwarg.
+    _, kwargs = fake.call_args
+    assert kwargs.get("name") == "general"
+    assert kwargs.get("channel_id") is None
+    assert kwargs.get("include_archived") is False
+
+
+def test_channel_subscribers_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--json`` emits the contract-specified ``subscribers`` payload."""
+    _patch_subscribers(
+        monkeypatch,
+        return_value=[
+            {"user_id": 10, "full_name": "Alice Smith", "email": "alice@example.com"},
+        ],
+    )
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["--json", "channel", "subscribers", "general"])
+    assert result.exit_code == 0, result.stdout
+    payload = _json.loads(result.stdout)
+    assert payload == {
+        "subscribers": [
+            {"user_id": 10, "full_name": "Alice Smith", "email": "alice@example.com"},
+        ]
+    }
+
+
+def test_channel_subscribers_channel_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A ``ZulipNotFoundError`` is translated to a CLI error exit."""
+    _patch_subscribers(
+        monkeypatch,
+        side_effect=ZulipNotFoundError("Channel 'ghost' not found"),
+    )
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "subscribers", "ghost"])
+    assert result.exit_code == 1
+    assert "Channel 'ghost' not found" in result.stderr
+
+
+def test_channel_subscribers_channel_id_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--channel-id`` resolves by numeric ID instead of name."""
+    fake = _patch_subscribers(
+        monkeypatch,
+        return_value=[{"user_id": 10, "full_name": "Alice", "email": "a@x"}],
+    )
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "subscribers", "--channel-id", "42"])
+    assert result.exit_code == 0, result.stdout
+    _, kwargs = fake.call_args
+    assert kwargs.get("channel_id") == 42
+    assert kwargs.get("name") is None
+
+
+def test_channel_subscribers_include_archived(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--include-archived`` propagates to ``list_subscribers``."""
+    fake = _patch_subscribers(monkeypatch, return_value=[])
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "subscribers", "old", "--include-archived"])
+    assert result.exit_code == 0, result.stdout
+    _, kwargs = fake.call_args
+    assert kwargs.get("include_archived") is True
+
+
+def test_channel_subscribers_requires_exactly_one_target(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Neither or both of positional/--channel-id is a validation error."""
+    _patch_subscribers(monkeypatch, return_value=[])
+    runner = CliRunner()
+    none_result = runner.invoke(zulip_app, ["channel", "subscribers"])
+    assert none_result.exit_code == 1
+    both_result = runner.invoke(zulip_app, ["channel", "subscribers", "general", "--channel-id", "1"])
+    assert both_result.exit_code == 1
+
+# ---------------------------------------------------------------------------
 # T024 — ``user list`` CLI
 # ---------------------------------------------------------------------------
 

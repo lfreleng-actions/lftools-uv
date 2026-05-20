@@ -38,6 +38,7 @@ from lftools_uv.api.endpoints.zulip import (
     ZulipError,
     get_client,
     list_channels,
+    list_subscribers,
     list_groups,
     list_users,
     resolve_channel,
@@ -285,6 +286,65 @@ def channel_list(
         rows.append(row)
     emit_table(rows, headers)
 
+
+def _resolve_channel_target(channel: str | None, channel_id: int | None) -> None:
+    """Validate that exactly one of ``channel``/``channel_id`` is supplied.
+
+    Mirrors the mutual-exclusivity rule documented in
+    ``contracts/cli-commands.md`` for every channel-scoped subcommand.
+    Raises ``typer.Exit`` (after emitting the canonical error) when the
+    rule is violated.
+    """
+    if (channel is None) == (channel_id is None):
+        emit_error("Exactly one of [channel] (positional) or --channel-id must be supplied.")
+        raise typer.Exit(code=1)
+
+
+@channel_app.command("subscribers")
+def channel_subscribers(
+    ctx: typer.Context,
+    channel: str | None = typer.Argument(
+        None,
+        help="Channel name (case-insensitive). Mutually exclusive with --channel-id.",
+    ),
+    channel_id: int | None = typer.Option(
+        None,
+        "--channel-id",
+        help="Target channel by numeric ID instead of name.",
+    ),
+    include_archived: bool = typer.Option(
+        False,
+        "--include-archived",
+        help="Search archived channels in addition to active ones.",
+    ),
+) -> None:
+    """List subscribers of a channel.
+
+    Targets the channel by case-insensitive name (positional) or
+    numeric ID (``--channel-id``); the two are mutually exclusive. The
+    output is a table of Full Name, Email, and User ID, or — with
+    ``--json`` — a payload of the form ``{"subscribers": [...]}`` per
+    ``contracts/cli-commands.md``.
+    """
+    _resolve_channel_target(channel, channel_id)
+    options = ctx.obj or {}
+    try:
+        client = get_client(zuliprc=options.get("zuliprc"))
+        subscribers = list_subscribers(
+            client,
+            name=channel,
+            channel_id=channel_id,
+            include_archived=include_archived,
+        )
+    except ZulipError as exc:
+        raise handle_zulip_error(exc) from exc
+
+    if options.get("json_output"):
+        emit_json({"subscribers": subscribers})
+        return
+
+    rows = [(sub.get("full_name") or "", sub.get("email") or "", sub.get("user_id")) for sub in subscribers]
+    emit_table(rows, headers=("Full Name", "Email", "User ID"))
 
 # ---------------------------------------------------------------------------
 # US4 — channel create (T035)

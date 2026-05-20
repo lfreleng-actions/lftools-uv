@@ -512,6 +512,158 @@ def test_list_channels_rejects_missing_stream_id() -> None:
 
 
 # ---------------------------------------------------------------------------
+# T045 — list_subscribers (US7)
+# ---------------------------------------------------------------------------
+
+
+def _subscribers_client(
+    streams_active: list[dict[str, Any]],
+    streams_archived: list[dict[str, Any]],
+    subscribers_by_stream: dict[int, list[int]],
+    members: list[dict[str, Any]],
+) -> Any:
+    """Return a mock client that serves streams, subscribers, and members.
+
+    ``streams_active`` is returned for unfiltered streams requests, and
+    ``streams_archived`` for ``include_archived=True``. The
+    ``streams/{id}/members`` endpoint returns ``subscribers_by_stream``.
+    """
+    client = mock.MagicMock()
+
+    def side_effect(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
+        if url == "streams" and method == "GET":
+            if request and request.get("include_archived"):
+                return {"result": "success", "streams": streams_archived}
+            return {"result": "success", "streams": streams_active}
+        if url.startswith("streams/") and url.endswith("/members") and method == "GET":
+            stream_id = int(url.split("/")[1])
+            ids = subscribers_by_stream.get(stream_id, [])
+            return {"result": "success", "subscribers": list(ids)}
+        raise AssertionError(f"unexpected endpoint: {method} {url}")
+
+    client.call_endpoint.side_effect = side_effect
+    client.get_members.return_value = {"result": "success", "members": members}
+    return client
+
+
+SUBS_STREAMS = [
+    {"stream_id": 1, "name": "general", "description": "g", "is_archived": False},
+]
+SUBS_STREAMS_ARCHIVED = SUBS_STREAMS + [
+    {"stream_id": 99, "name": "old-channel", "description": "", "is_archived": True},
+]
+SUBS_MEMBERS = [
+    {
+        "user_id": 10,
+        "full_name": "Alice Smith",
+        "email": "alice@example.com",
+        "delivery_email": "alice@example.com",
+    },
+    {
+        "user_id": 20,
+        "full_name": "Bob Jones",
+        "email": "bob@example.com",
+        "delivery_email": "bob-priv@example.com",
+    },
+]
+
+
+def test_list_subscribers_returns_enriched_dicts() -> None:
+    """Happy path: subscriber IDs are enriched with full_name and email."""
+    from lftools_uv.api.endpoints.zulip import list_subscribers
+
+    client = _subscribers_client(
+        streams_active=SUBS_STREAMS,
+        streams_archived=SUBS_STREAMS_ARCHIVED,
+        subscribers_by_stream={1: [10, 20]},
+        members=SUBS_MEMBERS,
+    )
+    subs = list_subscribers(client, name="general")
+    assert subs == [
+        {"user_id": 10, "full_name": "Alice Smith", "email": "alice@example.com"},
+        {"user_id": 20, "full_name": "Bob Jones", "email": "bob-priv@example.com"},
+    ]
+
+
+def test_list_subscribers_by_channel_id() -> None:
+    """Resolution by channel_id works the same way."""
+    from lftools_uv.api.endpoints.zulip import list_subscribers
+
+    client = _subscribers_client(
+        streams_active=SUBS_STREAMS,
+        streams_archived=SUBS_STREAMS_ARCHIVED,
+        subscribers_by_stream={1: [10]},
+        members=SUBS_MEMBERS,
+    )
+    subs = list_subscribers(client, channel_id=1)
+    assert [s["user_id"] for s in subs] == [10]
+
+
+def test_list_subscribers_channel_not_found() -> None:
+    """A missing channel surfaces :class:`ZulipNotFoundError`."""
+    from lftools_uv.api.endpoints.zulip import list_subscribers
+
+    client = _subscribers_client(
+        streams_active=SUBS_STREAMS,
+        streams_archived=SUBS_STREAMS_ARCHIVED,
+        subscribers_by_stream={},
+        members=SUBS_MEMBERS,
+    )
+    with pytest.raises(ZulipNotFoundError):
+        _ = list_subscribers(client, name="does-not-exist")
+
+
+def test_list_subscribers_include_archived() -> None:
+    """``include_archived=True`` propagates to channel resolution."""
+    from lftools_uv.api.endpoints.zulip import list_subscribers
+
+    client = _subscribers_client(
+        streams_active=SUBS_STREAMS,
+        streams_archived=SUBS_STREAMS_ARCHIVED,
+        subscribers_by_stream={99: [10]},
+        members=SUBS_MEMBERS,
+    )
+    subs = list_subscribers(client, name="old-channel", include_archived=True)
+    assert [s["user_id"] for s in subs] == [10]
+
+
+def test_list_subscribers_handles_missing_user_metadata() -> None:
+    """Subscriber IDs absent from the members listing still surface.
+
+    The Zulip server may include deactivated or otherwise hidden users
+    in a stream's subscriber list. The helper should not raise; missing
+    metadata is reported as ``None`` so callers can decide how to
+    render it.
+    """
+    from lftools_uv.api.endpoints.zulip import list_subscribers
+
+    client = _subscribers_client(
+        streams_active=SUBS_STREAMS,
+        streams_archived=SUBS_STREAMS_ARCHIVED,
+        subscribers_by_stream={1: [10, 999]},
+        members=SUBS_MEMBERS,
+    )
+    subs = list_subscribers(client, name="general")
+    assert subs[0]["user_id"] == 10
+    assert subs[1] == {"user_id": 999, "full_name": None, "email": None}
+
+
+def test_list_subscribers_requires_one_target() -> None:
+    """Exactly one of name/channel_id must be supplied."""
+    from lftools_uv.api.endpoints.zulip import list_subscribers
+
+    client = _subscribers_client(
+        streams_active=SUBS_STREAMS,
+        streams_archived=SUBS_STREAMS_ARCHIVED,
+        subscribers_by_stream={1: [10]},
+        members=SUBS_MEMBERS,
+    )
+    with pytest.raises(ZulipValidationError):
+        _ = list_subscribers(client)
+    with pytest.raises(ZulipValidationError):
+        _ = list_subscribers(client, name="general", channel_id=1)
+
+# ---------------------------------------------------------------------------
 # T025 — list_users API
 # ---------------------------------------------------------------------------
 

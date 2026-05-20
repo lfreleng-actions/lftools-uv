@@ -726,6 +726,90 @@ def list_channels(client: Any, *, include_archived: bool = False) -> list[dict[s
 
 
 # ---------------------------------------------------------------------------
+# Channel subscribers (US7)
+# ---------------------------------------------------------------------------
+
+
+def list_subscribers(
+    client: Any,
+    *,
+    name: str | None = None,
+    channel_id: int | None = None,
+    include_archived: bool = False,
+) -> list[dict[str, Any]]:
+    """List subscribers of a channel, enriched with name/email metadata.
+
+    Resolves the target channel via :func:`resolve_channel` (so the
+    same name/id targeting rules apply, including the friendly
+    ``--include-archived`` hint when the channel exists only in the
+    archived set). Then calls the Zulip ``GET /streams/{id}/members``
+    endpoint and cross-references each subscriber ``user_id`` against
+    the users listing to populate ``full_name`` and ``email``.
+
+    Returns a list of ``{"user_id", "full_name", "email"}`` dicts in
+    the order returned by the server. When a subscriber's metadata is
+    not present in the users listing (e.g. deactivated accounts), the
+    enrichment fields are populated with ``None`` rather than raising.
+
+    Raises :class:`ZulipValidationError` if neither or both of
+    ``name``/``channel_id`` are supplied, :class:`ZulipNotFoundError`
+    when the channel cannot be located, or :class:`ZulipAPIError` for
+    server-side failures.
+    """
+    if (name is None) == (channel_id is None):
+        raise ZulipValidationError("list_subscribers requires exactly one of 'name' or 'channel_id'")
+    stream = resolve_channel(
+        client,
+        name=name,
+        channel_id=channel_id,
+        include_archived=include_archived,
+    )
+    stream_id = stream.get("stream_id")
+    if not isinstance(stream_id, int):
+        raise ZulipAPIError(f"Resolved channel missing numeric stream_id: {stream!r}")
+
+    try:
+        response = client.call_endpoint(
+            url=f"streams/{stream_id}/members",
+            method="GET",
+        )
+    except Exception as exc:  # pragma: no cover - network errors
+        raise ZulipAPIError(f"Failed to list subscribers: {exc}") from exc
+    if not isinstance(response, dict) or response.get("result") != "success":
+        raise ZulipAPIError(f"Unexpected subscribers response: {response!r}")
+    subscriber_ids = response.get("subscribers", [])
+    if not isinstance(subscriber_ids, list):
+        raise ZulipAPIError(f"Malformed subscribers payload: {response!r}")
+
+    # Build a user_id → member dict lookup so enrichment is O(N+M).
+    members = _fetch_users(client)
+    by_id: dict[int, dict[str, Any]] = {}
+    for member in members:
+        uid = member.get("user_id")
+        if isinstance(uid, int):
+            by_id[uid] = member
+
+    enriched: list[dict[str, Any]] = []
+    for raw_id in subscriber_ids:
+        try:
+            uid = int(raw_id)
+        except (TypeError, ValueError):  # pragma: no cover - defensive
+            continue
+        member_record = by_id.get(uid)
+        if member_record is None:
+            enriched.append({"user_id": uid, "full_name": None, "email": None})
+            continue
+        email = member_record.get("delivery_email") or member_record.get("email")
+        enriched.append(
+            {
+                "user_id": uid,
+                "full_name": member_record.get("full_name"),
+                "email": email,
+            }
+        )
+    return enriched
+
+# ---------------------------------------------------------------------------
 # User listing (US2)
 # ---------------------------------------------------------------------------
 
