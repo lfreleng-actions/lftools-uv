@@ -1948,8 +1948,9 @@ def unarchive_channel(
     """Reactivate (unarchive) an archived channel.
 
     Resolves the target channel by name (case-insensitive) or numeric
-    ``channel_id``. When ``include_archived`` is ``True`` the archived
-    set is searched directly; when ``False`` and the channel exists
+    ``channel_id``. When ``include_archived`` is ``True`` the listing
+    request includes archived streams alongside the active set (so the
+    resolver can match either); when ``False`` and the channel exists
     only in the archived set, :class:`ZulipNotFoundError` is raised
     with the FR-018 advisory message suggesting ``--include-archived``.
 
