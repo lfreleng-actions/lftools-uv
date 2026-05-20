@@ -1478,3 +1478,77 @@ def test_subscribe_users_skips_resolve_channel_when_stream_supplied() -> None:
     assert result["status"] == "success"
     assert result["channel_id"] == 42
     assert result["channel_name"] == "general"
+
+
+def test_subscribe_users_rejects_malformed_subscribed_field() -> None:
+    """A non-dict ``subscribed`` field is treated as a server contract error.
+
+    Defensive: protects against silent partial-failure attribution when
+    a server-side regression or proxy reshapes the response.
+    """
+    from unittest import mock
+
+    from lftools_uv.api.endpoints.zulip import (
+        ZulipAPIError,
+        subscribe_users,
+    )
+
+    client = mock.MagicMock()
+    client.get_members.return_value = {
+        "result": "success",
+        "members": [
+            {"user_id": 7, "email": "bob@example.com", "delivery_email": "bob@example.com", "full_name": "Bob"}
+        ],
+    }
+    client.call_endpoint.return_value = {
+        "result": "success",
+        "subscribed": ["bob@example.com"],  # WRONG: should be a dict
+        "already_subscribed": {},
+        "unauthorized": [],
+    }
+
+    import pytest
+
+    with pytest.raises(ZulipAPIError, match="'subscribed' must be a dict"):
+        subscribe_users(
+            client,
+            "general",
+            ["bob@example.com"],
+            id_mode="email",
+            _resolved_stream={"stream_id": 42, "name": "general"},
+        )
+
+
+def test_subscribe_users_rejects_malformed_unauthorized_field() -> None:
+    """A non-list ``unauthorized`` field is rejected as a contract error."""
+    from unittest import mock
+
+    from lftools_uv.api.endpoints.zulip import (
+        ZulipAPIError,
+        subscribe_users,
+    )
+
+    client = mock.MagicMock()
+    client.get_members.return_value = {
+        "result": "success",
+        "members": [
+            {"user_id": 7, "email": "bob@example.com", "delivery_email": "bob@example.com", "full_name": "Bob"}
+        ],
+    }
+    client.call_endpoint.return_value = {
+        "result": "success",
+        "subscribed": {"bob@example.com": ["general"]},
+        "already_subscribed": {},
+        "unauthorized": {"bob@example.com": "denied"},  # WRONG: should be a list
+    }
+
+    import pytest
+
+    with pytest.raises(ZulipAPIError, match="'unauthorized' must be a list"):
+        subscribe_users(
+            client,
+            "general",
+            ["bob@example.com"],
+            id_mode="email",
+            _resolved_stream={"stream_id": 42, "name": "general"},
+        )

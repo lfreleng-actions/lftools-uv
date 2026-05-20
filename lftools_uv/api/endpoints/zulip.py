@@ -1161,9 +1161,29 @@ def subscribe_users(
         msg = response.get("msg") if isinstance(response, dict) else None
         raise ZulipAPIError(f"Subscribe request failed: {msg or response!r}")
 
-    subscribed = response.get("subscribed") or {}
-    already = response.get("already_subscribed") or {}
-    unauthorized = response.get("unauthorized") or []
+    # Defensive: the Zulip API contract documents these as a dict / dict
+    # / list, but real-world responses can drift (or be replayed via a
+    # fake client in tests). Validate the shapes up front so a server-
+    # side regression surfaces as a clear ZulipAPIError instead of a
+    # misleading "no response from server" per-user error.
+    subscribed_raw = response.get("subscribed", {})
+    already_raw = response.get("already_subscribed", {})
+    unauthorized_raw = response.get("unauthorized", [])
+    if not isinstance(subscribed_raw, dict):
+        raise ZulipAPIError(
+            f"Malformed subscribe response: 'subscribed' must be a dict, got {type(subscribed_raw).__name__}"
+        )
+    if not isinstance(already_raw, dict):
+        raise ZulipAPIError(
+            f"Malformed subscribe response: 'already_subscribed' must be a dict, got {type(already_raw).__name__}"
+        )
+    if not isinstance(unauthorized_raw, list):
+        raise ZulipAPIError(
+            f"Malformed subscribe response: 'unauthorized' must be a list, got {type(unauthorized_raw).__name__}"
+        )
+    subscribed: dict[str, Any] = subscribed_raw
+    already: dict[str, Any] = already_raw
+    unauthorized: list[Any] = unauthorized_raw
 
     results: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []

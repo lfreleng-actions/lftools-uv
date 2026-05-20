@@ -741,6 +741,21 @@ def channel_subscribe(
             )
             emit_json(error_payload)
             raise typer.Exit(code=1) from exc
+        # Non-JSON mode: render a normal error, but also surface the
+        # ambiguity disambiguation candidates as a small table so the
+        # operator can pick a concrete identifier and retry.
+        if isinstance(exc, ZulipAmbiguityError) and exc.matches:
+            emit_error(str(exc))
+            match_rows = [
+                (
+                    str(m.get("user_id", "")),
+                    str(m.get("email", "")),
+                    str(m.get("full_name", "")),
+                )
+                for m in exc.matches
+            ]
+            emit_table(match_rows, headers=["User ID", "Email", "Full Name"])
+            raise typer.Exit(code=1) from exc
         raise handle_zulip_error(exc) from exc
 
     if options.get("json_output"):
@@ -749,7 +764,8 @@ def channel_subscribe(
         rows = [(r["user"], r["status"]) for r in result.get("results", [])]
         for err in result.get("errors", []):
             rows.append((err["user"], f"error: {err.get('error', 'unknown')}"))
-        emit_table(rows, headers=["user", "status"])
+        emit_table(rows, headers=["User", "Status"])
+        # Surface a one-line summary on stderr so humans see partial outcomes.
         if result.get("errors"):
             emit_error(f"{len(result['errors'])} user(s) could not be subscribed to '{result.get('channel_name')}'.")
 

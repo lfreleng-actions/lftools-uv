@@ -1324,3 +1324,39 @@ def test_channel_subscribe_json_ambiguity_surfaces_matches() -> None:
     assert payload["status"] == "error"
     assert payload["channel_id"] == 42
     assert payload["errors"][0]["matches"] == matches
+
+
+def test_channel_subscribe_human_mode_surfaces_ambiguity_matches() -> None:
+    """Non-JSON ambiguity errors render the candidates as a table.
+
+    The spec requires that the operator can see the disambiguation
+    candidates (user_id / email / full_name) when a name lookup is
+    ambiguous, not just a single-line error message.
+    """
+    import lftools_uv.api.endpoints.zulip as zulip_api
+
+    matches = [
+        {"user_id": 1, "email": "bob.smith@example.com", "full_name": "Bob"},
+        {"user_id": 2, "email": "bob.jones@example.com", "full_name": "Bob"},
+    ]
+    result, _ = _invoke_subscribe(
+        ["general", "Bob", "--by-name"],
+        resolve_channel_return={"stream_id": 42, "name": "general"},
+        subscribe_side_effect=zulip_api.ZulipAmbiguityError("Ambiguous full_name match for 'Bob'", matches=matches),
+    )
+    assert result.exit_code == 1
+    # Both candidate emails must appear in the rendered output.
+    out = result.stdout + result.output
+    assert "bob.smith@example.com" in out
+    assert "bob.jones@example.com" in out
+
+
+def test_channel_subscribe_table_headers_title_cased() -> None:
+    """Non-JSON success output uses title-cased headers (User, Status)."""
+    result, _ = _invoke_subscribe(
+        ["general", "bob@example.com", "--by-email"],
+        subscribe_return=_bulk_ok(),
+    )
+    assert result.exit_code == 0
+    assert "User" in result.stdout
+    assert "Status" in result.stdout
