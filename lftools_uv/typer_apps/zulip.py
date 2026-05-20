@@ -627,7 +627,7 @@ def channel_subscribe(
     channel_id: int | None = typer.Option(
         None,
         "--channel-id",
-        help="Target channel by numeric ID (mutually exclusive with positional channel).",
+        help="Target channel by numeric ID. When set, all positional arguments are interpreted as USER identifiers (no positional CHANNEL is accepted).",
     ),
     by_email: bool = typer.Option(False, "--by-email", help="Identify users by email."),
     by_id: bool = typer.Option(False, "--by-id", help="Identify users by numeric user ID."),
