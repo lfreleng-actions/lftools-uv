@@ -661,10 +661,12 @@ def _normalize_channel(stream: dict[str, Any]) -> dict[str, Any]:
         channel_type = "public"
     raw_count = stream.get("subscriber_count")
     subscriber_count = raw_count if isinstance(raw_count, int) else 0
+    raw_name = stream.get("name")
+    raw_desc = stream.get("description")
     return {
         "stream_id": stream_id,
-        "name": stream.get("name", ""),
-        "description": stream.get("description", "") or "",
+        "name": str(raw_name) if isinstance(raw_name, str) else "",
+        "description": str(raw_desc) if isinstance(raw_desc, str) else "",
         "type": channel_type,
         "subscriber_count": subscriber_count,
         "is_archived": bool(stream.get("is_archived", False)),
@@ -672,7 +674,7 @@ def _normalize_channel(stream: dict[str, Any]) -> dict[str, Any]:
 
 
 def list_channels(client: Any, *, include_archived: bool = False) -> list[dict[str, Any]]:
-    """Return a normalized list of channels visible to the calling bot.
+    """Return a normalized list of channels visible to the authenticated user.
 
     When ``include_archived`` is ``False`` (the default), only active
     streams are returned. When ``True``, the server's streams endpoint
