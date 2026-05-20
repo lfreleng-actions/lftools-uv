@@ -749,3 +749,74 @@ def list_users(
             continue
         result.append(_normalize_user(member))
     return result
+
+
+# ---------------------------------------------------------------------------
+# Group listing (US3)
+# ---------------------------------------------------------------------------
+
+
+def _normalize_group(raw: dict[str, Any]) -> dict[str, Any]:
+    """Normalize a raw ``user_groups`` API entry to the lftools schema.
+
+    Maps system role groups to their display names per
+    :data:`SYSTEM_ROLE_DISPLAY_NAMES`; custom group names pass through
+    unchanged. ``member_count`` is derived from the ``members`` array
+    length when the server omits an explicit count.
+    """
+    is_system = bool(raw.get("is_system_group", False))
+    api_name = str(raw.get("name", ""))
+    if is_system:
+        display = SYSTEM_ROLE_DISPLAY_NAMES.get(api_name, api_name)
+    else:
+        display = api_name
+    members = raw.get("members", [])
+    member_count = len(members) if isinstance(members, list) else 0
+    return {
+        "group_id": raw.get("id"),
+        "name": display,
+        "description": str(raw.get("description", "") or ""),
+        "member_count": member_count,
+        "type": "system" if is_system else "custom",
+    }
+
+
+def list_groups(
+    client: Any,
+    *,
+    group_name: str | None = None,
+    group_id: int | None = None,
+) -> list[dict[str, Any]]:
+    """List Zulip user groups (custom and system role groups).
+
+    Returns a list of normalized group dicts with keys ``group_id``,
+    ``name``, ``description``, ``member_count``, and ``type`` (either
+    ``"custom"`` or ``"system"``). System role groups are returned with
+    their human display name (e.g. ``"Administrators"``) rather than
+    the internal ``role:administrators`` API name.
+
+    ``group_name`` and ``group_id`` are mutually exclusive filters.
+    ``group_name`` matching is case-insensitive against the display
+    name and applies after the system-role name mapping; a collision
+    that resolves to more than one group raises
+    :class:`ZulipAmbiguityError` with the matches listed.
+    """
+    if group_name is not None and group_id is not None:
+        raise ZulipValidationError("list_groups: --group-name and --group-id are mutually exclusive")
+    raw_groups = _fetch_groups(client)
+    groups = [_normalize_group(raw) for raw in raw_groups]
+
+    if group_id is not None:
+        return [g for g in groups if g["group_id"] == group_id]
+
+    if group_name is not None:
+        target = group_name.casefold()
+        matches = [g for g in groups if str(g["name"]).casefold() == target]
+        if len(matches) > 1:
+            raise ZulipAmbiguityError(
+                f"Group name {group_name!r} matched {len(matches)} groups; use --group-id to disambiguate",
+                matches=[{"group_id": m["group_id"], "name": m["name"]} for m in matches],
+            )
+        return matches
+
+    return groups
