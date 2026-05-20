@@ -1872,9 +1872,10 @@ def archive_channel(
     if isinstance(channel, int):
         target = resolve_channel(client, channel_id=channel, include_archived=include_archived)
     elif isinstance(channel, str):
-        if not channel.strip():
+        channel_name = channel.strip()
+        if not channel_name:
             raise ZulipValidationError("archive_channel requires a non-empty channel name")
-        target = resolve_channel(client, name=channel, include_archived=include_archived)
+        target = resolve_channel(client, name=channel_name, include_archived=include_archived)
     else:  # pragma: no cover - defensive
         raise ZulipValidationError(f"Unsupported channel target type: {type(channel).__name__}")
 
