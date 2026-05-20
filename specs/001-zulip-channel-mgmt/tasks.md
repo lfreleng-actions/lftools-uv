@@ -98,13 +98,13 @@ SPDX-FileCopyrightText: 2026 The Linux Foundation
 
 ### Tests for User Story 2
 
-- [ ] T024 [P] [US2] Write CLI tests for `user list` in tests/unit/test_zulip_cli.py — test table output, `--json` output, `--include-bots`, `--include-deactivated`, config error
-- [ ] T025 [P] [US2] Write API tests for `list_users()` in tests/unit/test_zulip_api.py — mock Zulip users API, test filtering logic
+- [x] T024 [P] [US2] Write CLI tests for `user list` in tests/unit/test_zulip_cli.py — test table output, `--json` output, `--include-bots`, `--include-deactivated`, config error
+- [x] T025 [P] [US2] Write API tests for `list_users()` in tests/unit/test_zulip_api.py — mock Zulip users API, test filtering logic
 
 ### Implementation for User Story 2
 
-- [ ] T026 [US2] Implement `list_users(client, include_bots=False, include_deactivated=False)` in lftools_uv/api/endpoints/zulip.py — call Zulip users API, parse response into list of user dicts with user_id, full_name, email, is_bot, is_active
-- [ ] T027 [US2] Implement `user list` CLI command in lftools_uv/typer_apps/zulip.py — create `user` sub-app, add `list` command with `--include-bots`, `--include-deactivated`, and `--json` flags, format table output
+- [x] T026 [US2] Implement `list_users(client, include_bots=False, include_deactivated=False)` in lftools_uv/api/endpoints/zulip.py — call Zulip users API, parse response into list of user dicts with user_id, full_name, email, is_bot, is_active
+- [x] T027 [US2] Implement `user list` CLI command in lftools_uv/typer_apps/zulip.py — create `user` sub-app, add `list` command with `--include-bots`, `--include-deactivated`, and `--json` flags, format table output
 
 **Checkpoint**: User Story 2 is fully functional — `lftools-uv zulip user list` works independently
 
