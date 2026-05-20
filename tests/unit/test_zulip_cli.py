@@ -479,3 +479,148 @@ def test_user_list_missing_extra(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result.exit_code == 1
     combined = result.output + (getattr(result, "stderr", "") or "")
     assert "zulip extra" in combined
+
+
+# ---------------------------------------------------------------------------
+# T028 — ``zulip group list`` (US3)
+# ---------------------------------------------------------------------------
+
+
+_FAKE_GROUPS = [
+    {
+        "group_id": 10,
+        "name": "engineering",
+        "description": "Engineering team",
+        "member_count": 15,
+        "type": "custom",
+    },
+    {
+        "group_id": 21,
+        "name": "Administrators",
+        "description": "Administrators of this organization",
+        "member_count": 3,
+        "type": "system",
+    },
+]
+
+
+def _invoke_group_list(
+    args: list[str],
+    *,
+    list_groups_return: Any = None,
+    list_groups_exc: BaseException | None = None,
+    get_client_exc: BaseException | None = None,
+) -> Any:
+    """Invoke ``zulip group list`` with the API layer fully mocked."""
+    runner = CliRunner()
+    global_args: list[str] = []
+    command_args = list(args)
+    if "--json" in command_args:
+        command_args.remove("--json")
+        global_args.append("--json")
+    with (
+        mock.patch.object(zulip_mod, "get_client") as get_client_mock,
+        mock.patch.object(zulip_mod, "list_groups") as list_groups_mock,
+        mock.patch.object(zulip_mod, "zulip_available", return_value=True),
+    ):
+        if get_client_exc is not None:
+            get_client_mock.side_effect = get_client_exc
+        else:
+            get_client_mock.return_value = mock.MagicMock()
+        if list_groups_exc is not None:
+            list_groups_mock.side_effect = list_groups_exc
+        else:
+            list_groups_mock.return_value = list_groups_return or []
+        result = runner.invoke(zulip_app, [*global_args, "group", "list", *command_args])
+        return result, list_groups_mock
+
+
+def test_group_list_table_output() -> None:
+    """Default table output renders the expected column headers and rows."""
+    result, _ = _invoke_group_list([], list_groups_return=_FAKE_GROUPS)
+    assert result.exit_code == 0, result.stdout
+    assert "engineering" in result.stdout
+    assert "Administrators" in result.stdout
+    # Required columns from the contract.
+    for header in ("Name", "Group ID", "Type", "Description", "Members"):
+        assert header in result.stdout
+
+
+def test_group_list_json_output_schema() -> None:
+    """``--json`` emits the standard ``{"groups": [...]}`` schema."""
+    result, _ = _invoke_group_list(["--json"], list_groups_return=_FAKE_GROUPS)
+    assert result.exit_code == 0, result.stdout
+    payload = _json.loads(result.stdout)
+    assert set(payload.keys()) == {"groups"}
+    assert payload["groups"] == _FAKE_GROUPS
+
+
+def test_group_list_passes_group_name_filter() -> None:
+    """``--group-name`` is forwarded to the API helper as ``group_name``."""
+    _, list_mock = _invoke_group_list(
+        ["--group-name", "engineering"],
+        list_groups_return=[_FAKE_GROUPS[0]],
+    )
+    _, kwargs = list_mock.call_args
+    assert kwargs.get("group_name") == "engineering"
+    assert kwargs.get("group_id") is None
+
+
+def test_group_list_passes_group_id_filter() -> None:
+    """``--group-id`` is forwarded to the API helper as ``group_id``."""
+    _, list_mock = _invoke_group_list(
+        ["--group-id", "21"],
+        list_groups_return=[_FAKE_GROUPS[1]],
+    )
+    _, kwargs = list_mock.call_args
+    assert kwargs.get("group_id") == 21
+    assert kwargs.get("group_name") is None
+
+
+def test_group_list_accepts_global_zuliprc() -> None:
+    """``--zuliprc`` is accepted before the group subcommands."""
+    runner = CliRunner()
+    with (
+        mock.patch.object(zulip_mod, "get_client") as get_client_mock,
+        mock.patch.object(zulip_mod, "list_groups", return_value=[]),
+        mock.patch.object(zulip_mod, "zulip_available", return_value=True),
+    ):
+        get_client_mock.return_value = mock.MagicMock()
+        result = runner.invoke(zulip_app, ["--zuliprc", "custom.rc", "group", "list"])
+
+    assert result.exit_code == 0, result.stdout
+    _, kwargs = get_client_mock.call_args
+    assert str(kwargs["zuliprc"]) == "custom.rc"
+
+
+def test_group_list_ambiguity_error_display() -> None:
+    """A ``ZulipAmbiguityError`` from the API surfaces with exit code 1."""
+    exc = ZulipAmbiguityError(
+        "Group name 'design' matched 2 groups",
+        matches=[
+            {"group_id": 11, "name": "design"},
+            {"group_id": 12, "name": "Design"},
+        ],
+    )
+    result, _ = _invoke_group_list(["--group-name", "design"], list_groups_exc=exc)
+    assert result.exit_code == 1
+    assert "design" in result.stderr.lower()
+
+
+def test_group_list_config_error_display() -> None:
+    """A ``ZulipConfigError`` from ``get_client`` is surfaced cleanly."""
+    result, _ = _invoke_group_list(
+        [],
+        get_client_exc=ZulipConfigError("No Zulip configuration found."),
+    )
+    assert result.exit_code == 1
+    assert "No Zulip configuration" in result.stderr
+
+
+def test_group_list_help_renders() -> None:
+    """``zulip group list --help`` produces usable help text."""
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["group", "list", "--help"])
+    assert result.exit_code == 0
+    assert "--group-name" in result.stdout
+    assert "--group-id" in result.stdout

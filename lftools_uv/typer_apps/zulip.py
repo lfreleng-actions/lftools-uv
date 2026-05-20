@@ -36,6 +36,7 @@ from lftools_uv.api.endpoints.zulip import (
     ZulipError,
     get_client,
     list_channels,
+    list_groups,
     list_users,
     zulip_available,
 )
@@ -315,3 +316,67 @@ def user_list(
             row.append("yes" if not user["is_active"] else "no")
         rows.append(row)
     emit_table(rows, headers)
+
+
+# ---------------------------------------------------------------------------
+# `zulip group` sub-app (US3)
+# ---------------------------------------------------------------------------
+
+
+group_app = typer.Typer(
+    name="group",
+    help="List and inspect Zulip user groups.",
+    no_args_is_help=True,
+)
+zulip_app.add_typer(group_app, name="group")
+
+
+@group_app.command("list")
+def group_list(
+    ctx: typer.Context,
+    group_name: str | None = typer.Option(
+        None,
+        "--group-name",
+        help="Filter by group name (case-insensitive).",
+    ),
+    group_id: int | None = typer.Option(
+        None,
+        "--group-id",
+        help="Filter by numeric group ID.",
+    ),
+) -> None:
+    """List user groups on the Zulip server.
+
+    Shows both custom user groups and built-in system role groups
+    (Owners, Administrators, Moderators, Full Members, Members,
+    Everyone, Nobody). All listed groups are valid inputs for the
+    ``--allow-group`` and ``--can-remove-subscribers-group`` flags on
+    channel create/update.
+    """
+    options = ctx.obj or {}
+    try:
+        client = get_client(zuliprc=options.get("zuliprc"))
+        groups = list_groups(
+            client,
+            group_name=group_name,
+            group_id=group_id,
+        )
+    except ZulipError as exc:
+        raise handle_zulip_error(exc) from exc
+
+    if options.get("json_output"):
+        emit_json({"groups": groups})
+        return
+
+    headers = ["Name", "Group ID", "Type", "Description", "Members"]
+    rows = [
+        [
+            group.get("name", ""),
+            group.get("group_id", ""),
+            group.get("type", ""),
+            group.get("description", ""),
+            group.get("member_count", 0),
+        ]
+        for group in groups
+    ]
+    emit_table(rows, headers=headers)
