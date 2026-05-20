@@ -36,6 +36,7 @@ from lftools_uv.api.endpoints.zulip import (
     ZulipError,
     get_client,
     list_channels,
+    list_users,
     zulip_available,
 )
 
@@ -251,5 +252,64 @@ def channel_list(
         ]
         if include_archived:
             row.append("archived" if c.get("is_archived") else "active")
+        rows.append(row)
+    emit_table(rows, headers)
+
+
+# ---------------------------------------------------------------------------
+# US2 — user list (T024)
+# ---------------------------------------------------------------------------
+
+
+user_app = typer.Typer(
+    name="user",
+    help="Inspect Zulip users.",
+    no_args_is_help=True,
+)
+zulip_app.add_typer(user_app, name="user")
+
+
+@user_app.command("list")
+def user_list(
+    ctx: typer.Context,
+    include_bots: bool = typer.Option(
+        False,
+        "--include-bots",
+        help="Include bot accounts in the output.",
+    ),
+    include_deactivated: bool = typer.Option(
+        False,
+        "--include-deactivated",
+        help="Include deactivated user accounts in the output.",
+    ),
+) -> None:
+    """List users on the Zulip server (US2)."""
+    options = ctx.obj or {}
+    try:
+        client = get_client(zuliprc=options.get("zuliprc"))
+        users = list_users(
+            client,
+            include_bots=include_bots,
+            include_deactivated=include_deactivated,
+        )
+    except ZulipError as exc:
+        raise handle_zulip_error(exc) from exc
+
+    if options.get("json_output"):
+        emit_json({"users": users})
+        return
+
+    headers = ["User ID", "Full Name", "Email"]
+    if include_bots:
+        headers.append("Bot")
+    if include_deactivated:
+        headers.append("Active")
+    rows: list[list[Any]] = []
+    for user in users:
+        row: list[Any] = [user["user_id"], user["full_name"], user["email"]]
+        if include_bots:
+            row.append("yes" if user["is_bot"] else "no")
+        if include_deactivated:
+            row.append("yes" if user["is_active"] else "no")
         rows.append(row)
     emit_table(rows, headers)

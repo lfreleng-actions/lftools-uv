@@ -39,6 +39,7 @@ from lftools_uv.api.endpoints.zulip import (
     get_client,
     get_server_feature_level,
     list_channels,
+    list_users,
     resolve_channel,
     resolve_groups,
     resolve_users,
@@ -504,3 +505,105 @@ def test_list_channels_rejects_missing_stream_id() -> None:
     client = _streams_client(bad, bad)
     with pytest.raises(ZulipAPIError):
         _ = list_channels(client)
+
+
+# ---------------------------------------------------------------------------
+# T025 — list_users API
+# ---------------------------------------------------------------------------
+
+
+LIST_USERS_MEMBERS = [
+    {
+        "user_id": 10,
+        "full_name": "Alice Smith",
+        "email": "alice@example.com",
+        "is_bot": False,
+        "is_active": True,
+    },
+    {
+        "user_id": 11,
+        "full_name": "Bob Jones",
+        "email": "bob@example.com",
+        "is_bot": False,
+        "is_active": False,
+    },
+    {
+        "user_id": 12,
+        "full_name": "Welcome Bot",
+        "email": "welcome-bot@example.com",
+        "is_bot": True,
+        "is_active": True,
+    },
+    {
+        "user_id": 13,
+        "full_name": "Old Bot",
+        "email": "old-bot@example.com",
+        "is_bot": True,
+        "is_active": False,
+    },
+]
+
+
+def test_list_users_default_filters_bots_and_deactivated() -> None:
+    """Defaults exclude bots and deactivated users, matching the CLI defaults."""
+    client = _members_client(LIST_USERS_MEMBERS)
+    users = list_users(client)
+    assert [u["user_id"] for u in users] == [10]
+    user = users[0]
+    assert set(user.keys()) == {"user_id", "full_name", "email", "is_bot", "is_active"}
+    assert user["full_name"] == "Alice Smith"
+    assert user["email"] == "alice@example.com"
+    assert user["is_bot"] is False
+    assert user["is_active"] is True
+
+
+def test_list_users_include_bots() -> None:
+    """``include_bots=True`` retains bot accounts (still active-only)."""
+    client = _members_client(LIST_USERS_MEMBERS)
+    users = list_users(client, include_bots=True)
+    assert sorted(u["user_id"] for u in users) == [10, 12]
+
+
+def test_list_users_include_deactivated() -> None:
+    """``include_deactivated=True`` retains deactivated humans (no bots by default)."""
+    client = _members_client(LIST_USERS_MEMBERS)
+    users = list_users(client, include_deactivated=True)
+    assert sorted(u["user_id"] for u in users) == [10, 11]
+
+
+def test_list_users_include_both() -> None:
+    """Both flags together return the full member list (normalized)."""
+    client = _members_client(LIST_USERS_MEMBERS)
+    users = list_users(client, include_bots=True, include_deactivated=True)
+    assert sorted(u["user_id"] for u in users) == [10, 11, 12, 13]
+
+
+def test_list_users_empty_list() -> None:
+    """An empty members response yields an empty list."""
+    client = _members_client([])
+    assert list_users(client) == []
+
+
+def test_list_users_coerces_str_fields() -> None:
+    """Non-string ``full_name``/``email`` values are coerced to ``str``."""
+    members = [
+        {
+            "user_id": 1,
+            "full_name": None,
+            "email": None,
+            "is_bot": False,
+            "is_active": True,
+        },
+    ]
+    client = _members_client(members)
+    users = list_users(client)
+    assert users[0]["full_name"] == ""
+    assert users[0]["email"] == ""
+
+
+def test_list_users_propagates_api_errors() -> None:
+    """Server errors during ``_fetch_users`` surface as :class:`ZulipAPIError`."""
+    client = mock.MagicMock()
+    client.get_members.return_value = {"result": "error", "msg": "boom"}
+    with pytest.raises(ZulipAPIError):
+        _ = list_users(client)

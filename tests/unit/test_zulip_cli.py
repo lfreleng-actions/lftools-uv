@@ -17,7 +17,7 @@ alongside the user-story slices that introduce them.
 
 from __future__ import annotations
 
-import json as _json
+import json
 from typing import Any
 from unittest import mock
 
@@ -165,7 +165,7 @@ _LIST_RESPONSE = {
 }
 
 
-def _patched_client(monkeypatch: pytest.MonkeyPatch, response: dict[str, Any]) -> mock.MagicMock:
+def _patched_channel_client(monkeypatch: pytest.MonkeyPatch, response: dict[str, Any]) -> mock.MagicMock:
     """Patch ``get_client`` and return the fake client used by tests."""
     fake = mock.MagicMock()
     fake.call_endpoint.return_value = response
@@ -176,7 +176,7 @@ def _patched_client(monkeypatch: pytest.MonkeyPatch, response: dict[str, Any]) -
 
 def test_channel_list_table_output(monkeypatch: pytest.MonkeyPatch) -> None:
     """Default invocation prints a table with the documented columns."""
-    _patched_client(monkeypatch, _LIST_RESPONSE)
+    _patched_channel_client(monkeypatch, _LIST_RESPONSE)
     runner = CliRunner()
     result = runner.invoke(zulip_app, ["channel", "list"])
     assert result.exit_code == 0, result.stdout
@@ -192,11 +192,11 @@ def test_channel_list_table_output(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_channel_list_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
     """``--json`` emits the documented envelope with normalized fields."""
-    _patched_client(monkeypatch, _LIST_RESPONSE)
+    _patched_channel_client(monkeypatch, _LIST_RESPONSE)
     runner = CliRunner()
     result = runner.invoke(zulip_app, ["--json", "channel", "list"])
     assert result.exit_code == 0, result.stdout
-    payload = _json.loads(result.stdout)
+    payload = json.loads(result.stdout)
     assert "channels" in payload
     by_id = {c["stream_id"]: c for c in payload["channels"]}
     assert by_id[1]["type"] == "public"
@@ -276,7 +276,7 @@ def test_channel_list_blocked_without_extra(monkeypatch: pytest.MonkeyPatch) -> 
 
 def test_channel_list_empty_table(monkeypatch: pytest.MonkeyPatch) -> None:
     """An empty channel list still prints headers and exits 0."""
-    _patched_client(monkeypatch, {"result": "success", "streams": []})
+    _patched_channel_client(monkeypatch, {"result": "success", "streams": []})
     runner = CliRunner()
     result = runner.invoke(zulip_app, ["channel", "list"])
     assert result.exit_code == 0, result.stdout
@@ -286,11 +286,11 @@ def test_channel_list_empty_table(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_channel_list_empty_json(monkeypatch: pytest.MonkeyPatch) -> None:
     """``--json`` on an empty server returns ``{"channels": []}``."""
-    _patched_client(monkeypatch, {"result": "success", "streams": []})
+    _patched_channel_client(monkeypatch, {"result": "success", "streams": []})
     runner = CliRunner()
     result = runner.invoke(zulip_app, ["--json", "channel", "list"])
     assert result.exit_code == 0, result.stdout
-    assert _json.loads(result.stdout) == {"channels": []}
+    assert json.loads(result.stdout) == {"channels": []}
 
 
 def test_channel_list_config_error_surfaces(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -307,3 +307,152 @@ def test_channel_list_config_error_surfaces(monkeypatch: pytest.MonkeyPatch) -> 
     combined = result.stdout + result.stderr
     assert "zuliprc not found" in combined
     assert "Error:" in combined
+
+
+# ---------------------------------------------------------------------------
+# T024 — ``user list`` CLI
+# ---------------------------------------------------------------------------
+
+
+def _patched_user_client(monkeypatch: pytest.MonkeyPatch, members: list[dict[str, Any]]) -> mock.MagicMock:
+    """Patch ``zulip_available``/``get_client`` so the CLI runs end-to-end."""
+    client = mock.MagicMock()
+    client.get_members.return_value = {"result": "success", "members": members}
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
+    monkeypatch.setattr(zulip_mod, "get_client", lambda **_kw: client)
+    return client
+
+
+CLI_MEMBERS = [
+    {
+        "user_id": 10,
+        "full_name": "Alice Smith",
+        "email": "alice@example.com",
+        "is_bot": False,
+        "is_active": True,
+    },
+    {
+        "user_id": 11,
+        "full_name": "Bob Jones",
+        "email": "bob@example.com",
+        "is_bot": False,
+        "is_active": False,
+    },
+    {
+        "user_id": 12,
+        "full_name": "Welcome Bot",
+        "email": "welcome-bot@example.com",
+        "is_bot": True,
+        "is_active": True,
+    },
+]
+
+
+def test_user_list_table_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``user list`` default renders a table of active human users only."""
+    _patched_user_client(monkeypatch, CLI_MEMBERS)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["user", "list"])
+    assert result.exit_code == 0, result.stdout
+    assert "Alice Smith" in result.stdout
+    assert "alice@example.com" in result.stdout
+    assert "10" in result.stdout
+    # Bots and deactivated users are excluded by default.
+    assert "Bob Jones" not in result.stdout
+    assert "Welcome Bot" not in result.stdout
+
+
+def test_user_list_json_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--json`` emits the canonical ``{"users": [...]}`` envelope."""
+    _patched_user_client(monkeypatch, CLI_MEMBERS)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["--json", "user", "list"])
+    assert result.exit_code == 0, result.stdout
+    payload = json.loads(result.stdout)
+    assert "users" in payload
+    assert len(payload["users"]) == 1
+    user = payload["users"][0]
+    assert user == {
+        "user_id": 10,
+        "full_name": "Alice Smith",
+        "email": "alice@example.com",
+        "is_bot": False,
+        "is_active": True,
+    }
+
+
+def test_user_list_include_bots(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--include-bots`` adds bot accounts to the output."""
+    _patched_user_client(monkeypatch, CLI_MEMBERS)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["--json", "user", "list", "--include-bots"])
+    assert result.exit_code == 0, result.stdout
+    payload = json.loads(result.stdout)
+    ids = sorted(u["user_id"] for u in payload["users"])
+    assert ids == [10, 12]
+
+
+def test_user_list_include_deactivated(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--include-deactivated`` adds deactivated humans to the output."""
+    _patched_user_client(monkeypatch, CLI_MEMBERS)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["--json", "user", "list", "--include-deactivated"])
+    assert result.exit_code == 0, result.stdout
+    payload = json.loads(result.stdout)
+    ids = sorted(u["user_id"] for u in payload["users"])
+    assert ids == [10, 11]
+
+
+def test_user_list_accepts_global_zuliprc(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--zuliprc`` is accepted before the user subcommands."""
+    seen: dict[str, Any] = {}
+    client = mock.MagicMock()
+    client.get_members.return_value = {"result": "success", "members": []}
+
+    def _get_client(**kwargs: Any) -> mock.MagicMock:
+        seen.update(kwargs)
+        return client
+
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
+    monkeypatch.setattr(zulip_mod, "get_client", _get_client)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["--zuliprc", "custom.rc", "user", "list"])
+
+    assert result.exit_code == 0, result.stdout
+    assert str(seen["zuliprc"]) == "custom.rc"
+
+
+def test_user_list_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An empty members response renders an empty JSON envelope."""
+    _patched_user_client(monkeypatch, [])
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["--json", "user", "list"])
+    assert result.exit_code == 0, result.stdout
+    payload = json.loads(result.stdout)
+    assert payload == {"users": []}
+
+
+def test_user_list_config_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Config errors are surfaced via the canonical ``Error:`` channel."""
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
+
+    def boom(**_kw: Any) -> Any:
+        raise ZulipConfigError("no zuliprc found")
+
+    monkeypatch.setattr(zulip_mod, "get_client", boom)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["user", "list"])
+    assert result.exit_code == 1
+    # ``mix_stderr`` was removed in newer Click; the combined ``output``
+    # still contains the stderr ``Error:`` line.
+    assert "Error" in result.output
+    assert "no zuliprc found" in result.output
+
+
+def test_user_list_missing_extra(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When the optional extra is missing, invoking ``user list`` errors."""
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: False)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["user", "list"])
+    assert result.exit_code == 1
+    assert "zulip extra" in result.output

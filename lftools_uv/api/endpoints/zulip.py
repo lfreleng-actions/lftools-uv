@@ -685,3 +685,55 @@ def list_channels(client: Any, *, include_archived: bool = False) -> list[dict[s
     """
     streams = _fetch_streams(client, include_archived=include_archived)
     return [_normalize_channel(s) for s in streams]
+
+
+# ---------------------------------------------------------------------------
+# User listing (US2)
+# ---------------------------------------------------------------------------
+
+
+def _normalize_user(member: dict[str, Any]) -> dict[str, Any]:
+    """Project a raw Zulip ``members`` entry to the CLI/JSON contract shape.
+
+    Matches the schema documented in ``contracts/cli-commands.md`` for
+    ``zulip user list``: ``user_id``, ``full_name``, ``email``,
+    ``is_bot``, ``is_active``. String fields are coerced to ``str`` so
+    that ``None`` and other non-string payloads cannot break tabulated
+    output downstream.
+    """
+    full_name = member.get("full_name") or ""
+    email = member.get("email") or ""
+    return {
+        "user_id": member.get("user_id"),
+        "full_name": str(full_name),
+        "email": str(email),
+        "is_bot": bool(member.get("is_bot", False)),
+        "is_active": bool(member.get("is_active", True)),
+    }
+
+
+def list_users(
+    client: Any,
+    *,
+    include_bots: bool = False,
+    include_deactivated: bool = False,
+) -> list[dict[str, Any]]:
+    """List users on the Zulip server (US2).
+
+    Defaults exclude bot accounts and deactivated users, matching the
+    CLI's default behavior. Pass ``include_bots=True`` /
+    ``include_deactivated=True`` to relax those filters independently.
+
+    Returns a list of normalized user dicts in the order the server
+    returned them. Raises :class:`ZulipAPIError` on transport / server
+    errors.
+    """
+    members = _fetch_users(client)
+    result: list[dict[str, Any]] = []
+    for member in members:
+        if not include_bots and member.get("is_bot", False):
+            continue
+        if not include_deactivated and not member.get("is_active", True):
+            continue
+        result.append(_normalize_user(member))
+    return result
