@@ -332,8 +332,8 @@ def _patch_subscribers(
     else:
         fake_list.return_value = return_value or []
 
-    monkeypatch.setattr(zulip_mod, "list_subscribers", fake_list, raising=False)
-    monkeypatch.setattr(zulip_mod, "get_client", lambda *a, **kw: mock.MagicMock(), raising=False)
+    monkeypatch.setattr(zulip_mod, "list_subscribers", fake_list)
+    monkeypatch.setattr(zulip_mod, "get_client", lambda *a, **kw: mock.MagicMock())
     monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
     return fake_list
 
