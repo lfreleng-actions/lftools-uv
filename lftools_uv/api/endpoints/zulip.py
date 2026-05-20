@@ -454,6 +454,57 @@ def _fetch_users(client: Any) -> list[dict[str, Any]]:
     return members
 
 
+def _resolve_single_user(
+    ident: str,
+    members: list[dict[str, Any]],
+    *,
+    mode: IdMode,
+) -> dict[str, Any]:
+    """Resolve a single user identifier against a pre-fetched member list.
+
+    Factored out of :func:`resolve_users` so that callers needing
+    per-identifier error handling (e.g. bulk mutations that report
+    partial failures) can drive the loop themselves and capture
+    failures one-by-one instead of aborting on the first bad entry.
+
+    Raises :class:`ZulipValidationError` for malformed input,
+    :class:`ZulipNotFoundError` when the identifier matches nothing,
+    and :class:`ZulipAmbiguityError` (mode ``name`` only) when a
+    full-name lookup matches more than one user.
+    """
+    ident = ident.strip()
+    if not ident:
+        raise ZulipValidationError("User identifier must not be empty")
+    if mode == "email":
+        matches = [u for u in members if u.get("delivery_email") == ident or u.get("email") == ident]
+    elif mode == "id":
+        try:
+            wanted = int(ident)
+        except ValueError as exc:
+            raise ZulipValidationError(f"--by-id requires a numeric identifier, got {ident!r}") from exc
+        matches = [u for u in members if u.get("user_id") == wanted]
+    elif mode == "name":
+        matches = [u for u in members if u.get("full_name") == ident]
+    else:  # pragma: no cover - guarded by Literal
+        raise ZulipValidationError(f"Unknown user id mode: {mode!r}")
+
+    if not matches:
+        raise ZulipNotFoundError(f"No user found matching {ident!r} (--by-{mode})")
+    if len(matches) > 1:
+        raise ZulipAmbiguityError(
+            f"User name {ident!r} matched {len(matches)} users; use --by-email or --by-id to disambiguate",
+            matches=[
+                {
+                    "user_id": m.get("user_id"),
+                    "full_name": m.get("full_name"),
+                    "email": m.get("delivery_email") or m.get("email"),
+                }
+                for m in matches
+            ],
+        )
+    return matches[0]
+
+
 def resolve_users(
     client: Any,
     identifiers: Iterable[str],
@@ -469,40 +520,7 @@ def resolve_users(
     are unique by construction.
     """
     members = _fetch_users(client)
-    resolved: list[dict[str, Any]] = []
-    for raw in identifiers:
-        ident = raw.strip()
-        if not ident:
-            raise ZulipValidationError("User identifier must not be empty")
-        if mode == "email":
-            matches = [u for u in members if u.get("delivery_email") == ident or u.get("email") == ident]
-        elif mode == "id":
-            try:
-                wanted = int(ident)
-            except ValueError as exc:
-                raise ZulipValidationError(f"--by-id requires a numeric identifier, got {ident!r}") from exc
-            matches = [u for u in members if u.get("user_id") == wanted]
-        elif mode == "name":
-            matches = [u for u in members if u.get("full_name") == ident]
-        else:  # pragma: no cover - guarded by Literal
-            raise ZulipValidationError(f"Unknown user id mode: {mode!r}")
-
-        if not matches:
-            raise ZulipNotFoundError(f"No user found matching {ident!r} (--by-{mode})")
-        if len(matches) > 1:
-            raise ZulipAmbiguityError(
-                f"User name {ident!r} matched {len(matches)} users; use --by-email or --by-id to disambiguate",
-                matches=[
-                    {
-                        "user_id": m.get("user_id"),
-                        "full_name": m.get("full_name"),
-                        "email": m.get("delivery_email") or m.get("email"),
-                    }
-                    for m in matches
-                ],
-            )
-        resolved.append(matches[0])
-    return resolved
+    return [_resolve_single_user(ident, members, mode=mode) for ident in identifiers]
 
 
 # ---------------------------------------------------------------------------
@@ -1286,17 +1304,46 @@ def unsubscribe_users(
     resolved_target_id = target.get("stream_id")
     resolved_target_name = str(target.get("name", ""))
 
-    resolved_users = resolve_users(client, user_list, mode=id_mode)
+    # Resolve identifiers one-by-one so a single bad entry does not
+    # abort the whole bulk operation. Per-user resolution failures are
+    # captured into ``errors`` while successfully-resolved users still
+    # get sent to the Zulip API. This matches the bulk-operation
+    # behavior described in the data-model spec (status: partial).
+    members = _fetch_users(client)
+    results: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+    principals: list[Any] = []
+    resolved_pairs: list[tuple[str, Any]] = []  # (original, principal)
 
-    principals: list[Any]
-    if id_mode == "id":
-        principals = [int(u["user_id"]) for u in resolved_users]
-    else:
-        # For both name- and email-mode lookups we send delivery_email
-        # (falling back to ``email``) as principals so that the server
-        # can match against the channel's subscriber list. Zulip
-        # principals accept emails or user IDs interchangeably.
-        principals = [u.get("delivery_email") or u.get("email") for u in resolved_users]
+    for original in user_list:
+        try:
+            user = _resolve_single_user(original, members, mode=id_mode)
+        except (ZulipNotFoundError, ZulipAmbiguityError, ZulipValidationError) as exc:
+            errors.append({"user": original, "error": str(exc)})
+            continue
+        if id_mode == "id":
+            principal: Any = int(user["user_id"])
+        else:
+            # For both name- and email-mode lookups we send delivery_email
+            # (falling back to ``email``) as principals so that the server
+            # can match against the channel's subscriber list. Zulip
+            # principals accept emails or user IDs interchangeably.
+            principal = user.get("delivery_email") or user.get("email")
+        principals.append(principal)
+        resolved_pairs.append((original, principal))
+
+    if not principals:
+        # Every identifier failed to resolve — skip the API call entirely
+        # and return an all-errors payload so the caller can surface the
+        # per-user failures without a spurious server round-trip.
+        return {
+            "status": "error",
+            "channel_id": resolved_target_id,
+            "channel_name": resolved_target_name,
+            "operation": "unsubscribe",
+            "results": results,
+            "errors": errors,
+        }
 
     try:
         response = client.call_endpoint(
@@ -1317,9 +1364,7 @@ def unsubscribe_users(
     removed_set = {str(item) for item in response.get("removed", []) or []}
     not_removed_set = {str(item) for item in response.get("not_removed", []) or []}
 
-    results: list[dict[str, Any]] = []
-    errors: list[dict[str, Any]] = []
-    for original, _resolved, principal in zip(user_list, resolved_users, principals, strict=True):
+    for original, principal in resolved_pairs:
         principal_str = str(principal)
         if principal_str in removed_set:
             results.append({"user": original, "status": "unsubscribed"})

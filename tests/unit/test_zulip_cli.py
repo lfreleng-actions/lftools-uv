@@ -1477,7 +1477,12 @@ def test_channel_unsubscribe_by_name_ambiguity(monkeypatch: pytest.MonkeyPatch) 
         ["general", "Alice Smith", "--by-name"],
     )
     assert result.exit_code == 1
-    assert "ambig" in (result.stderr or "").lower() or "matched" in (result.stderr or "").lower()
+    # Ambiguity is now captured as a per-user error in the bulk result
+    # (so partial bulk operations still complete for the resolvable
+    # users). The single-user case yields status=error, exit 1, and
+    # the error appears in the rendered table on stdout.
+    combined = (result.stdout or "") + (result.stderr or "")
+    assert "matched" in combined.lower() or "ambig" in combined.lower()
 
 
 def test_channel_unsubscribe_not_subscribed_noop(monkeypatch: pytest.MonkeyPatch) -> None:
