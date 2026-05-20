@@ -782,8 +782,12 @@ def _normalize_group(raw: dict[str, Any]) -> dict[str, Any]:
     length.
 
     Raises :class:`ZulipAPIError` when required fields are missing or
-    have unexpected types — keeping the behaviour consistent with
-    :func:`resolve_groups`, which already validates ``id`` is an int.
+    have unexpected types — ``id`` must be an int, ``name`` must be a
+    non-empty string, ``members`` must be a list, and
+    ``is_system_group`` (when present) must be a ``bool``. The
+    ``description`` field is coerced to a string (Zulip historically
+    returns an empty string when not set, but ``None`` is also
+    tolerated).
     """
     raw_id = raw.get("id")
     if not isinstance(raw_id, int):
@@ -794,8 +798,10 @@ def _normalize_group(raw: dict[str, Any]) -> dict[str, Any]:
     members = raw.get("members", [])
     if not isinstance(members, list):
         raise ZulipAPIError(f"Group object has non-list 'members': {raw!r}")
-    is_system = bool(raw.get("is_system_group", False))
-    if is_system:
+    is_system_raw = raw.get("is_system_group", False)
+    if not isinstance(is_system_raw, bool):
+        raise ZulipAPIError(f"Group object has non-boolean 'is_system_group': {raw!r}")
+    if is_system_raw:
         display = SYSTEM_ROLE_DISPLAY_NAMES.get(api_name, api_name)
     else:
         display = api_name
@@ -805,7 +811,7 @@ def _normalize_group(raw: dict[str, Any]) -> dict[str, Any]:
         "name": display,
         "description": str(description),
         "member_count": len(members),
-        "type": "system" if is_system else "custom",
+        "type": "system" if is_system_raw else "custom",
     }
 
 
@@ -830,7 +836,7 @@ def list_groups(
     :class:`ZulipAmbiguityError` with the matches listed.
     """
     if group_name is not None and group_id is not None:
-        raise ZulipValidationError("list_groups: 'group_name' and 'group_id' are mutually exclusive")
+        raise ZulipValidationError("Specify only one of 'group_name' or 'group_id', not both")
     raw_groups = _fetch_groups(client)
     normalized: list[dict[str, Any]] = []
     for raw in raw_groups:
