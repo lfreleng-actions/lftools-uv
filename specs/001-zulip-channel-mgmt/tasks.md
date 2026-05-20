@@ -205,7 +205,7 @@ SPDX-FileCopyrightText: 2026 The Linux Foundation
 
 ### Implementation for User Story 7
 
-- [X] T046 [US7] Implement `list_subscribers(client, channel, include_archived=False)` in lftools_uv/api/endpoints/zulip.py — resolve channel target, call Zulip subscribers API, cross-reference with users API to get full_name and email for each subscriber ID, return list of subscriber dicts
+- [X] T046 [US7] Implement `list_subscribers(client, *, name=None, channel_id=None, include_archived=False)` in lftools_uv/api/endpoints/zulip.py — resolve channel target (exactly one of `name`/`channel_id`), call Zulip subscribers API, cross-reference with users API to get full_name and email for each subscriber ID, return list of subscriber dicts
 - [X] T047 [US7] Implement `channel subscribers` CLI command in lftools_uv/typer_apps/zulip.py — add `subscribers` command with positional `[channel]`, `--channel-id`, `--include-archived`, `--json` flags, format table output
 
 **Checkpoint**: User Story 7 is fully functional — `lftools-uv zulip channel subscribers` works independently
