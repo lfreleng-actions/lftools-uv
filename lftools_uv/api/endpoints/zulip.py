@@ -634,3 +634,45 @@ def resolve_groups(
             raise ZulipAPIError(f"Group object missing numeric id: {grp!r}")
         group_ids.append(gid)
     return resolved, _build_group_setting_value(group_ids)
+
+
+# ---------------------------------------------------------------------------
+# US1 — List Channels (T022)
+# ---------------------------------------------------------------------------
+
+
+def _normalize_channel(stream: dict[str, Any]) -> dict[str, Any]:
+    """Project a raw Zulip stream dict into the documented shape.
+
+    Returns a stable subset of fields per ``data-model.md`` with a
+    derived ``type`` of ``public``, ``private``, or ``web-public``.
+    Unknown / missing fields are filled with sensible defaults so that
+    table rendering and JSON output never have to special-case them.
+    """
+    if stream.get("is_web_public"):
+        channel_type = "web-public"
+    elif stream.get("invite_only"):
+        channel_type = "private"
+    else:
+        channel_type = "public"
+    return {
+        "stream_id": stream.get("stream_id"),
+        "name": stream.get("name", ""),
+        "description": stream.get("description", "") or "",
+        "type": channel_type,
+        "subscriber_count": stream.get("subscriber_count"),
+        "is_archived": bool(stream.get("is_archived", False)),
+    }
+
+
+def list_channels(client: Any, *, include_archived: bool = False) -> list[dict[str, Any]]:
+    """Return a normalized list of channels visible to the calling bot.
+
+    When ``include_archived`` is ``False`` (the default), only active
+    streams are returned. When ``True``, archived streams are merged in
+    via the server's archived listing.
+
+    Each entry is the dict produced by :func:`_normalize_channel`.
+    """
+    streams = _fetch_streams(client, include_archived=include_archived)
+    return [_normalize_channel(s) for s in streams]

@@ -28,6 +28,7 @@ from lftools_uv.api.endpoints.zulip import (
     FEATURE_LEVELS,
     SYSTEM_ROLE_GROUPS,
     ZulipAmbiguityError,
+    ZulipAPIError,
     ZulipConfig,
     ZulipConfigError,
     ZulipFeatureLevelError,
@@ -37,6 +38,7 @@ from lftools_uv.api.endpoints.zulip import (
     check_feature_level,
     get_client,
     get_server_feature_level,
+    list_channels,
     resolve_channel,
     resolve_groups,
     resolve_users,
@@ -380,3 +382,113 @@ def test_get_client_rejects_both_inputs() -> None:
     )
     with pytest.raises(ZulipValidationError):
         _ = get_client(zuliprc=mock.MagicMock(), config=config)
+
+
+# ---------------------------------------------------------------------------
+# T021 — list_channels()
+# ---------------------------------------------------------------------------
+
+
+def _channels_payload(active: list[dict[str, Any]], archived: list[dict[str, Any]]) -> Any:
+    """Return a client whose streams endpoint returns ``active`` or ``archived``."""
+    client = mock.MagicMock()
+
+    def side_effect(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
+        assert url == "streams"
+        assert method == "GET"
+        if request and request.get("include_archived"):
+            return {"result": "success", "streams": archived}
+        return {"result": "success", "streams": active}
+
+    client.call_endpoint.side_effect = side_effect
+    return client
+
+
+LIST_ACTIVE = [
+    {
+        "stream_id": 1,
+        "name": "general",
+        "description": "General discussion",
+        "invite_only": False,
+        "is_web_public": False,
+        "is_archived": False,
+        "subscriber_count": 42,
+    },
+    {
+        "stream_id": 2,
+        "name": "secret",
+        "description": "private",
+        "invite_only": True,
+        "is_web_public": False,
+        "is_archived": False,
+        "subscriber_count": 5,
+    },
+    {
+        "stream_id": 3,
+        "name": "announce",
+        "description": "",
+        "invite_only": False,
+        "is_web_public": True,
+        "is_archived": False,
+        "subscriber_count": 100,
+    },
+]
+
+LIST_ARCHIVED = LIST_ACTIVE + [
+    {
+        "stream_id": 99,
+        "name": "old",
+        "description": "",
+        "invite_only": False,
+        "is_web_public": False,
+        "is_archived": True,
+        "subscriber_count": 0,
+    },
+]
+
+
+def test_list_channels_active_only_by_default() -> None:
+    """Without ``include_archived``, only active streams are returned."""
+    client = _channels_payload(LIST_ACTIVE, LIST_ARCHIVED)
+    channels = list_channels(client)
+    assert [c["stream_id"] for c in channels] == [1, 2, 3]
+    assert all(not c["is_archived"] for c in channels)
+
+
+def test_list_channels_normalizes_type() -> None:
+    """Each stream maps to one of public / private / web-public."""
+    client = _channels_payload(LIST_ACTIVE, LIST_ARCHIVED)
+    by_id = {c["stream_id"]: c for c in list_channels(client)}
+    assert by_id[1]["type"] == "public"
+    assert by_id[2]["type"] == "private"
+    assert by_id[3]["type"] == "web-public"
+
+
+def test_list_channels_include_archived_returns_all() -> None:
+    """``include_archived=True`` returns the archived superset."""
+    client = _channels_payload(LIST_ACTIVE, LIST_ARCHIVED)
+    channels = list_channels(client, include_archived=True)
+    assert {c["stream_id"] for c in channels} == {1, 2, 3, 99}
+
+
+def test_list_channels_empty_list() -> None:
+    """An empty server returns an empty list, not an error."""
+    client = _channels_payload([], [])
+    assert list_channels(client) == []
+
+
+def test_list_channels_propagates_api_error() -> None:
+    """API failures bubble up as ``ZulipAPIError``."""
+    client = mock.MagicMock()
+    client.call_endpoint.return_value = {"result": "error", "msg": "boom"}
+    with pytest.raises(ZulipAPIError):
+        _ = list_channels(client)
+
+
+def test_list_channels_keeps_description_and_count() -> None:
+    """The returned dict carries description and subscriber_count."""
+    client = _channels_payload(LIST_ACTIVE, LIST_ARCHIVED)
+    by_id = {c["stream_id"]: c for c in list_channels(client)}
+    assert by_id[1]["description"] == "General discussion"
+    assert by_id[1]["subscriber_count"] == 42
+    assert by_id[1]["name"] == "general"

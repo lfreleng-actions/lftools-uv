@@ -34,6 +34,8 @@ from tabulate import tabulate
 
 from lftools_uv.api.endpoints.zulip import (
     ZulipError,
+    get_client,
+    list_channels,
     zulip_available,
 )
 
@@ -182,3 +184,64 @@ def zulip_callback(ctx: typer.Context) -> None:
     if not zulip_available():
         typer.echo(MISSING_EXTRA_MESSAGE, err=True)
         raise typer.Exit(code=1)
+
+
+# ---------------------------------------------------------------------------
+# US1 — channel list (T023)
+# ---------------------------------------------------------------------------
+
+
+channel_app = typer.Typer(
+    name="channel",
+    help="Manage Zulip channels.",
+    no_args_is_help=True,
+)
+zulip_app.add_typer(channel_app, name="channel")
+
+
+@channel_app.command("list")
+def channel_list(
+    zuliprc: Path | None = typer.Option(
+        None,
+        "--zuliprc",
+        help="Path to a zuliprc configuration file (FR-011 precedence applies).",
+        callback=zuliprc_callback,
+    ),
+    include_archived: bool = typer.Option(
+        False,
+        "--include-archived",
+        help="Include archived channels in the output.",
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit machine-readable JSON instead of a table.",
+    ),
+) -> None:
+    """List channels visible to the authenticated user (US1)."""
+    try:
+        client = get_client(zuliprc=zuliprc)
+        channels = list_channels(client, include_archived=include_archived)
+    except ZulipError as exc:
+        raise handle_zulip_error(exc) from exc
+
+    if json_output:
+        emit_json({"channels": channels})
+        return
+
+    headers = ["Name", "Description", "Type", "Subscribers"]
+    if include_archived:
+        headers.append("Status")
+    rows: list[list[Any]] = []
+    for c in channels:
+        sub_count = c.get("subscriber_count")
+        row: list[Any] = [
+            c.get("name", ""),
+            c.get("description", ""),
+            c.get("type", ""),
+            sub_count if sub_count is not None else "-",
+        ]
+        if include_archived:
+            row.append("archived" if c.get("is_archived") else "active")
+        rows.append(row)
+    emit_table(rows, headers)

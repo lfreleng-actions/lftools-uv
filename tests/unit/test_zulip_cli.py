@@ -129,3 +129,119 @@ def test_bulk_mutation_result_error_status() -> None:
         errors=[{"user": "b", "error": "not found"}],
     )
     assert payload["status"] == "error"
+
+
+# ---------------------------------------------------------------------------
+# T020 — channel list command
+# ---------------------------------------------------------------------------
+
+
+from typing import Any  # noqa: E402
+from unittest import mock  # noqa: E402
+
+_LIST_RESPONSE = {
+    "result": "success",
+    "streams": [
+        {
+            "stream_id": 1,
+            "name": "general",
+            "description": "General discussion",
+            "invite_only": False,
+            "is_web_public": False,
+            "is_archived": False,
+            "subscriber_count": 42,
+        },
+        {
+            "stream_id": 2,
+            "name": "secret",
+            "description": "private things",
+            "invite_only": True,
+            "is_web_public": False,
+            "is_archived": False,
+            "subscriber_count": 5,
+        },
+    ],
+}
+
+
+def _patched_client(monkeypatch: pytest.MonkeyPatch, response: dict[str, Any]) -> mock.MagicMock:
+    """Patch ``get_client`` and return the fake client used by tests."""
+    import lftools_uv.typer_apps.zulip as zulip_mod
+
+    fake = mock.MagicMock()
+    fake.call_endpoint.return_value = response
+    monkeypatch.setattr(zulip_mod, "get_client", lambda **_kw: fake)
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
+    return fake
+
+
+def test_channel_list_table_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default invocation prints a table with the documented columns."""
+    _patched_client(monkeypatch, _LIST_RESPONSE)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "list"])
+    assert result.exit_code == 0, result.stdout
+    assert "Name" in result.stdout
+    assert "Description" in result.stdout
+    assert "Type" in result.stdout
+    assert "Subscribers" in result.stdout
+    assert "general" in result.stdout
+    assert "secret" in result.stdout
+    # Status column is hidden unless --include-archived
+    assert "Status" not in result.stdout
+
+
+def test_channel_list_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--json`` emits the documented envelope with normalized fields."""
+    import json as _json
+
+    _patched_client(monkeypatch, _LIST_RESPONSE)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "list", "--json"])
+    assert result.exit_code == 0, result.stdout
+    payload = _json.loads(result.stdout)
+    assert "channels" in payload
+    by_id = {c["stream_id"]: c for c in payload["channels"]}
+    assert by_id[1]["type"] == "public"
+    assert by_id[2]["type"] == "private"
+    assert by_id[1]["subscriber_count"] == 42
+    assert by_id[1]["is_archived"] is False
+
+
+def test_channel_list_include_archived_adds_status_column(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``--include-archived`` adds the Status column and includes archived rows."""
+    archived = {
+        "result": "success",
+        "streams": list(_LIST_RESPONSE["streams"])
+        + [
+            {
+                "stream_id": 9,
+                "name": "old",
+                "description": "",
+                "invite_only": False,
+                "is_web_public": False,
+                "is_archived": True,
+                "subscriber_count": 0,
+            }
+        ],
+    }
+    _patched_client(monkeypatch, archived)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "list", "--include-archived"])
+    assert result.exit_code == 0, result.stdout
+    assert "Status" in result.stdout
+    assert "old" in result.stdout
+    assert "archived" in result.stdout
+
+
+def test_channel_list_blocked_without_extra(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When the zulip extra is missing, the FR-022 guard fires (exit code 1)."""
+    import lftools_uv.typer_apps.zulip as zulip_mod
+
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: False)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "list"])
+    assert result.exit_code == 1
+    assert "zulip extra" in result.stderr or "zulip extra" in result.stdout
