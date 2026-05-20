@@ -1597,3 +1597,73 @@ def test_channel_unsubscribe_json_error_payload(monkeypatch: pytest.MonkeyPatch)
     assert payload["operation"] == "unsubscribe"
     assert payload["channel_name"] == "general"
     assert payload["errors"] and "ghost@example.com" in payload["errors"][0]["error"]
+
+
+def test_channel_unsubscribe_json_error_after_channel_resolved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A raised ZulipError after channel resolution still emits JSON
+    with the resolved channel_id and channel_name.
+
+    Exercises the ``except ZulipError`` branch of the CLI's mutation
+    call: the Zulip DELETE endpoint returns a non-success response,
+    which surfaces as ZulipAPIError. The contract requires the JSON
+    payload to report the resolved channel info (because the channel
+    *was* resolved) — ``channel_id: null`` is reserved for the case
+    where the channel itself could not be resolved.
+    """
+    client = mock.MagicMock()
+
+    def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
+        if url == "streams" and method == "GET":
+            return {"result": "success", "streams": _STREAMS}
+        if url == "users/me/subscriptions" and method == "DELETE":
+            # The Zulip server rejected the call; this surfaces as
+            # ZulipAPIError from unsubscribe_users().
+            return {"result": "error", "msg": "Boom", "removed": [], "not_removed": []}
+        raise AssertionError(f"Unexpected endpoint: {method} {url}")
+
+    client.call_endpoint.side_effect = call_endpoint
+    client.get_members.return_value = {"result": "success", "members": _MEMBERS}
+
+    result = _invoke_unsubscribe(
+        monkeypatch,
+        client,
+        ["general", "bob@example.com", "--by-email", "--json"],
+    )
+    assert result.exit_code == 1
+    payload = _json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["operation"] == "unsubscribe"
+    assert payload["channel_id"] == 1
+    assert payload["channel_name"] == "general"
+    assert payload["errors"] and "Boom" in payload["errors"][0]["error"]
+
+
+def test_channel_unsubscribe_json_error_channel_unresolved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When channel resolution itself fails, the JSON payload reports
+    ``channel_id: null`` (the channel was never resolved).
+    """
+    client = mock.MagicMock()
+
+    def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
+        if url == "streams" and method == "GET":
+            # No streams at all -> resolve_channel raises ZulipNotFoundError.
+            return {"result": "success", "streams": []}
+        raise AssertionError(f"Unexpected endpoint: {method} {url}")
+
+    client.call_endpoint.side_effect = call_endpoint
+    client.get_members.return_value = {"result": "success", "members": _MEMBERS}
+
+    result = _invoke_unsubscribe(
+        monkeypatch,
+        client,
+        ["nosuch", "bob@example.com", "--by-email", "--json"],
+    )
+    assert result.exit_code == 1
+    payload = _json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["channel_id"] is None
+    assert payload["channel_name"] == "nosuch"
