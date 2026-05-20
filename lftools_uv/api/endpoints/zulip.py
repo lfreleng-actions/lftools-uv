@@ -646,21 +646,27 @@ def _normalize_channel(stream: dict[str, Any]) -> dict[str, Any]:
 
     Returns a stable subset of fields per ``data-model.md`` with a
     derived ``type`` of ``public``, ``private``, or ``web-public``.
-    Unknown / missing fields are filled with sensible defaults so that
-    table rendering and JSON output never have to special-case them.
+    ``stream_id`` is required and validated as an ``int``;
+    ``subscriber_count`` defaults to ``0`` when missing or not numeric
+    so that downstream consumers can rely on it being an integer.
     """
+    stream_id = stream.get("stream_id")
+    if not isinstance(stream_id, int):
+        raise ZulipAPIError(f"Stream object missing numeric stream_id: {stream!r}")
     if stream.get("is_web_public"):
         channel_type = "web-public"
     elif stream.get("invite_only"):
         channel_type = "private"
     else:
         channel_type = "public"
+    raw_count = stream.get("subscriber_count")
+    subscriber_count = raw_count if isinstance(raw_count, int) else 0
     return {
-        "stream_id": stream.get("stream_id"),
+        "stream_id": stream_id,
         "name": stream.get("name", ""),
         "description": stream.get("description", "") or "",
         "type": channel_type,
-        "subscriber_count": stream.get("subscriber_count"),
+        "subscriber_count": subscriber_count,
         "is_archived": bool(stream.get("is_archived", False)),
     }
 
@@ -669,8 +675,9 @@ def list_channels(client: Any, *, include_archived: bool = False) -> list[dict[s
     """Return a normalized list of channels visible to the calling bot.
 
     When ``include_archived`` is ``False`` (the default), only active
-    streams are returned. When ``True``, archived streams are merged in
-    via the server's archived listing.
+    streams are returned. When ``True``, the server's streams endpoint
+    is queried with ``include_archived=True`` so that the response
+    already contains both active and archived streams in a single call.
 
     Each entry is the dict produced by :func:`_normalize_channel`.
     """

@@ -234,12 +234,11 @@ def channel_list(
         headers.append("Status")
     rows: list[list[Any]] = []
     for c in channels:
-        sub_count = c.get("subscriber_count")
         row: list[Any] = [
             c.get("name", ""),
             c.get("description", ""),
             c.get("type", ""),
-            sub_count if sub_count is not None else "-",
+            c.get("subscriber_count", 0),
         ]
         if include_archived:
             row.append("archived" if c.get("is_archived") else "active")

@@ -492,3 +492,29 @@ def test_list_channels_keeps_description_and_count() -> None:
     assert by_id[1]["description"] == "General discussion"
     assert by_id[1]["subscriber_count"] == 42
     assert by_id[1]["name"] == "general"
+
+
+def test_list_channels_defaults_missing_subscriber_count_to_zero() -> None:
+    """A stream without ``subscriber_count`` normalizes to 0, not None."""
+    streams = [
+        {
+            "stream_id": 7,
+            "name": "no-count",
+            "description": "",
+            "invite_only": False,
+            "is_web_public": False,
+            "is_archived": False,
+            # no subscriber_count
+        },
+    ]
+    client = _channels_payload(streams, streams)
+    out = list_channels(client)
+    assert out[0]["subscriber_count"] == 0
+
+
+def test_list_channels_rejects_missing_stream_id() -> None:
+    """A stream lacking a numeric stream_id raises ``ZulipAPIError``."""
+    bad = [{"name": "no-id", "description": "", "invite_only": False}]
+    client = _channels_payload(bad, bad)
+    with pytest.raises(ZulipAPIError):
+        _ = list_channels(client)

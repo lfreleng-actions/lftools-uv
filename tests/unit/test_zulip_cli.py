@@ -245,3 +245,42 @@ def test_channel_list_blocked_without_extra(monkeypatch: pytest.MonkeyPatch) -> 
     result = runner.invoke(zulip_app, ["channel", "list"])
     assert result.exit_code == 1
     assert "zulip extra" in result.stderr or "zulip extra" in result.stdout
+
+
+def test_channel_list_empty_table(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An empty channel list still prints headers and exits 0."""
+    _patched_client(monkeypatch, {"result": "success", "streams": []})
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "list"])
+    assert result.exit_code == 0, result.stdout
+    assert "Name" in result.stdout
+    assert "general" not in result.stdout
+
+
+def test_channel_list_empty_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--json`` on an empty server returns ``{\"channels\": []}``."""
+    import json as _json
+
+    _patched_client(monkeypatch, {"result": "success", "streams": []})
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "list", "--json"])
+    assert result.exit_code == 0, result.stdout
+    assert _json.loads(result.stdout) == {"channels": []}
+
+
+def test_channel_list_config_error_surfaces(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``ZulipConfigError`` from ``get_client`` is rendered via emit_error."""
+    import lftools_uv.typer_apps.zulip as zulip_mod
+    from lftools_uv.api.endpoints.zulip import ZulipConfigError
+
+    def _raise(**_kw: Any) -> Any:
+        raise ZulipConfigError("zuliprc not found at any of the expected paths")
+
+    monkeypatch.setattr(zulip_mod, "get_client", _raise)
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "list"])
+    assert result.exit_code == 1
+    combined = result.stdout + result.stderr
+    assert "zuliprc not found" in combined
+    assert "Error:" in combined
