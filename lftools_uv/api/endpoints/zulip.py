@@ -1055,3 +1055,135 @@ def create_channel(
         result["warnings"] = warnings
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Subscription management (US5)
+# ---------------------------------------------------------------------------
+
+
+#: Spec-defined maximum number of users that can be subscribed in a single
+#: invocation. See data-model.md / contracts/cli-commands.md.
+MAX_SUBSCRIBE_USERS = 50
+
+
+def subscribe_users(
+    client: Any,
+    channel: str | int,
+    users: Iterable[str],
+    *,
+    id_mode: IdMode,
+    include_archived: bool = False,
+) -> dict[str, Any]:
+    """Subscribe one or more users to a channel.
+
+    ``channel`` may be a string (channel name) or an int (numeric
+    ``stream_id``). Numeric channel names are explicitly preserved by
+    the CLI layer — callers that want id-based resolution must pass an
+    actual ``int``.
+
+    ``users`` is the iterable of identifiers (emails, ids, or full
+    names depending on ``id_mode``). Up to :data:`MAX_SUBSCRIBE_USERS`
+    identifiers per invocation are permitted (FR / spec cap of 50).
+
+    Returns the standard bulk-mutation payload with ``status``,
+    ``channel_id``, ``channel_name``, ``operation``, ``results``, and
+    ``errors`` fields per ``contracts/cli-commands.md``. Per-user
+    outcomes are derived from the Zulip server's ``subscribed`` and
+    ``already_subscribed`` maps. The ``unauthorized`` list, if any, is
+    surfaced under ``errors``.
+
+    Raises:
+        ZulipValidationError: empty user list, more than 50 users, or
+            other client-side validation failures.
+        ZulipNotFoundError / ZulipAmbiguityError: from resolve_users
+            (e.g. unknown identifier, ambiguous full-name match) or
+            from resolve_channel (e.g. unknown channel).
+        ZulipAPIError: when the Zulip subscribe endpoint returns an
+            error response.
+    """
+    user_list = list(users)
+    if not user_list:
+        raise ZulipValidationError("subscribe_users requires at least one user identifier")
+    if len(user_list) > MAX_SUBSCRIBE_USERS:
+        raise ZulipValidationError(
+            f"subscribe_users accepts at most {MAX_SUBSCRIBE_USERS} users per invocation (got {len(user_list)})"
+        )
+
+    if isinstance(channel, bool):  # bool is an int subclass — reject explicitly
+        raise ZulipValidationError(f"Invalid channel argument: {channel!r}")
+    if isinstance(channel, int):
+        stream = resolve_channel(client, channel_id=channel, include_archived=include_archived)
+    else:
+        stream = resolve_channel(client, name=str(channel), include_archived=include_archived)
+
+    channel_id = stream.get("stream_id")
+    channel_name = stream.get("name")
+    if not isinstance(channel_id, int) or not isinstance(channel_name, str):
+        raise ZulipAPIError(f"Malformed stream object: {stream!r}")
+
+    resolved_users = resolve_users(client, user_list, mode=id_mode)
+
+    # Build a stable per-user identity used for matching the server
+    # response and for the ``user`` field in the result payload. Prefer
+    # delivery_email (the Zulip "real" address) and fall back to email.
+    user_emails: list[str] = []
+    for u in resolved_users:
+        email = u.get("delivery_email") or u.get("email")
+        if not isinstance(email, str) or not email:
+            raise ZulipAPIError(f"Resolved user missing email: {u!r}")
+        user_emails.append(email)
+
+    import json as _json
+
+    request = {
+        "subscriptions": _json.dumps([{"name": channel_name}]),
+        "principals": _json.dumps(user_emails),
+    }
+
+    try:
+        response = client.call_endpoint(url="users/me/subscriptions", method="POST", request=request)
+    except Exception as exc:  # pragma: no cover - network errors
+        raise ZulipAPIError(f"Failed to subscribe users: {exc}") from exc
+    if not isinstance(response, dict) or response.get("result") != "success":
+        msg = response.get("msg") if isinstance(response, dict) else None
+        raise ZulipAPIError(f"Subscribe request failed: {msg or response!r}")
+
+    subscribed = response.get("subscribed") or {}
+    already = response.get("already_subscribed") or {}
+    unauthorized = response.get("unauthorized") or []
+
+    results: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+    accounted: set[str] = set()
+    for email in user_emails:
+        if email in subscribed:
+            results.append({"user": email, "status": "subscribed"})
+            accounted.add(email)
+        elif email in already:
+            results.append({"user": email, "status": "already_subscribed"})
+            accounted.add(email)
+        elif email in unauthorized:
+            errors.append({"user": email, "error": "unauthorized"})
+            accounted.add(email)
+    # Any user not mentioned in either map is treated as an error so
+    # callers can detect silent partial failures.
+    for email in user_emails:
+        if email not in accounted:
+            errors.append({"user": email, "error": "no response from server"})
+
+    if errors and not results:
+        status = "error"
+    elif errors:
+        status = "partial"
+    else:
+        status = "success"
+
+    return {
+        "status": status,
+        "channel_id": channel_id,
+        "channel_name": channel_name,
+        "operation": "subscribe",
+        "results": results,
+        "errors": errors,
+    }
