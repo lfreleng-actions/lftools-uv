@@ -464,10 +464,11 @@ def test_user_list_config_error(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = CliRunner()
     result = runner.invoke(zulip_app, ["user", "list"])
     assert result.exit_code == 1
-    # ``mix_stderr`` was removed in newer Click; the combined ``output``
-    # still contains the stderr ``Error:`` line.
-    assert "Error" in result.output
-    assert "no zuliprc found" in result.output
+    # Click/Typer split stderr separately on some versions and mix it
+    # into stdout on others; check both to remain robust.
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "Error" in combined
+    assert "no zuliprc found" in combined
 
 
 def test_user_list_missing_extra(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -476,4 +477,5 @@ def test_user_list_missing_extra(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = CliRunner()
     result = runner.invoke(zulip_app, ["user", "list"])
     assert result.exit_code == 1
-    assert "zulip extra" in result.output
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "zulip extra" in combined
