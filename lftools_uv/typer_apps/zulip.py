@@ -810,3 +810,92 @@ def channel_subscribe(
 
     if result.get("status") != "success":
         raise typer.Exit(code=1)
+
+
+# `zulip channel unsubscribe` (US6 / T043)
+# ---------------------------------------------------------------------------
+
+
+@channel_app.command("unsubscribe")
+def channel_unsubscribe(
+    ctx: typer.Context,
+    targets: list[str] = typer.Argument(
+        ...,
+        metavar="[CHANNEL] USER [USER...]",
+        help=(
+            "When --channel-id is absent, the first value is the channel "
+            "name and the rest are users. When --channel-id is supplied, "
+            "all values are users."
+        ),
+    ),
+    channel_id: int | None = typer.Option(
+        None,
+        "--channel-id",
+        help="Target the channel by numeric ID instead of name.",
+    ),
+    by_email: bool = typer.Option(False, "--by-email", help="Identify users by email address."),
+    by_id: bool = typer.Option(False, "--by-id", help="Identify users by numeric user ID."),
+    by_name: bool = typer.Option(False, "--by-name", help="Identify users by full name."),
+    include_archived: bool = typer.Option(
+        False,
+        "--include-archived",
+        help="Search archived channels when resolving the channel target.",
+    ),
+) -> None:
+    """Unsubscribe one or more users from a channel."""
+    # Lazy import to avoid a circular dependency at module-load time
+    # while still allowing the CLI tests to monkeypatch ``get_client``
+    # on this module.
+    from lftools_uv.api.endpoints import zulip as zulip_api
+
+    # Validate id-mode mutex: exactly one of --by-email/--by-id/--by-name.
+    mode_flags = [
+        ("email", by_email),
+        ("id", by_id),
+        ("name", by_name),
+    ]
+    chosen = [name for name, flag in mode_flags if flag]
+    if len(chosen) != 1:
+        emit_error("Exactly one of --by-email/--by-id/--by-name is required")
+        raise typer.Exit(code=1)
+    id_mode = chosen[0]
+
+    # Split positional targets into channel + users.
+    if channel_id is not None:
+        channel_name: str | None = None
+        users = list(targets)
+    else:
+        if len(targets) < 2:
+            emit_error("Provide a channel name (or --channel-id) and at least one user")
+            raise typer.Exit(code=1)
+        channel_name, *users = targets
+
+    if not users:
+        emit_error("At least one user identifier is required")
+        raise typer.Exit(code=1)
+
+    options = ctx.obj or {}
+    try:
+        client = get_client(zuliprc=options.get("zuliprc"))
+        payload = zulip_api.unsubscribe_users(
+            client,
+            users,
+            channel=channel_name,
+            channel_id=channel_id,
+            id_mode=id_mode,  # type: ignore[arg-type]
+            include_archived=include_archived,
+        )
+    except ZulipError as exc:
+        raise handle_zulip_error(exc) from exc
+
+    if options.get("json_output"):
+        emit_json(payload)
+        if payload["status"] == "error":
+            raise typer.Exit(code=1)
+        return
+
+    rows = [(item["user"], item["status"]) for item in payload["results"]]
+    rows.extend((item["user"], f"error: {item['error']}") for item in payload["errors"])
+    emit_table(rows, headers=["user", "status"])
+    if payload["status"] == "error":
+        raise typer.Exit(code=1)
