@@ -28,6 +28,9 @@ import lftools_uv.typer_apps.zulip as zulip_mod
 from lftools_uv.api.endpoints.zulip import (
     ZulipAmbiguityError,
     ZulipConfigError,
+    ZulipValidationError,
+    ZulipLockoutError,
+    ZulipFeatureLevelError,
     ZulipNotFoundError,
 )
 from lftools_uv.typer_apps.zulip import (
@@ -1908,3 +1911,292 @@ def test_channel_unsubscribe_json_error_channel_unresolved(
     assert payload["status"] == "error"
     assert payload["channel_id"] is None
     assert payload["channel_name"] == "nosuch"
+
+
+# T048 — `channel update` CLI command (US8)
+# ---------------------------------------------------------------------------
+
+
+def _patch_update(monkeypatch: pytest.MonkeyPatch, **side_effect: Any) -> mock.MagicMock:
+    """Patch ``update_channel`` in the typer module and return the mock."""
+    import lftools_uv.typer_apps.zulip as zulip_mod
+
+    fake = mock.MagicMock()
+    if "side_effect" in side_effect:
+        fake.side_effect = side_effect["side_effect"]
+    else:
+        fake.return_value = side_effect.get(
+            "return_value",
+            {
+                "status": "success",
+                "channel_id": 42,
+                "channel_name": "renamed",
+                "operation": "update",
+            },
+        )
+
+    monkeypatch.setattr(zulip_mod, "update_channel", fake, raising=False)
+    monkeypatch.setattr(zulip_mod, "get_client", lambda *a, **kw: mock.MagicMock())
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
+    return fake
+
+
+
+def test_channel_update_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`channel update --name X` forwards ``new_name`` to the API."""
+    fake = _patch_update(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "update", "general", "--name", "renamed"])
+    assert result.exit_code == 0, result.output
+    kwargs = fake.call_args.kwargs
+    assert kwargs["name"] == "general"
+    assert kwargs["new_name"] == "renamed"
+
+
+def test_channel_update_description(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`channel update --description X` forwards ``description``."""
+    fake = _patch_update(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "update", "general", "--description", "new desc"])
+    assert result.exit_code == 0, result.output
+    assert fake.call_args.kwargs["description"] == "new desc"
+
+
+def test_channel_update_type_public(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--type public`` forwards ``channel_type='public'``."""
+    fake = _patch_update(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "update", "general", "--type", "public"])
+    assert result.exit_code == 0, result.output
+    assert fake.call_args.kwargs["channel_type"] == "public"
+
+
+def test_channel_update_type_private(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _patch_update(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "update", "general", "--type", "private"])
+    assert result.exit_code == 0, result.output
+    assert fake.call_args.kwargs["channel_type"] == "private"
+
+
+def test_channel_update_type_web_public(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _patch_update(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "update", "general", "--type", "web-public"])
+    assert result.exit_code == 0, result.output
+    assert fake.call_args.kwargs["channel_type"] == "web-public"
+
+
+def test_channel_update_topic_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--topic-policy`` choices are forwarded."""
+    fake = _patch_update(monkeypatch)
+    runner = CliRunner()
+    for value in ("allow", "deny", "follow-default"):
+        result = runner.invoke(
+            zulip_app,
+            ["channel", "update", "general", "--topic-policy", value],
+        )
+        assert result.exit_code == 0, result.output
+        assert fake.call_args.kwargs["topic_policy"] == value
+
+
+def test_channel_update_allow_group(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--allow-group`` value is forwarded verbatim."""
+    fake = _patch_update(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        ["channel", "update", "general", "--allow-group", "design"],
+    )
+    assert result.exit_code == 0, result.output
+    assert fake.call_args.kwargs["allow_group"] == "design"
+
+
+def test_channel_update_allow_group_with_type_private(monkeypatch: pytest.MonkeyPatch) -> None:
+    """type-to-private + --allow-group is the documented atomic path."""
+    fake = _patch_update(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        [
+            "channel",
+            "update",
+            "general",
+            "--type",
+            "private",
+            "--allow-group",
+            "design",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert fake.call_args.kwargs["channel_type"] == "private"
+    assert fake.call_args.kwargs["allow_group"] == "design"
+
+
+def test_channel_update_subscribe_requires_id_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--subscribe`` requires exactly one of ``--by-email``/``--by-id``/``--by-name``."""
+    _patch_update(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        [
+            "channel",
+            "update",
+            "general",
+            "--type",
+            "private",
+            "--subscribe",
+            "alice@example.com",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "by-email" in result.output or "by-email" in (result.stderr or "")
+
+
+def test_channel_update_subscribe_with_by_email(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Multi-valued ``--subscribe`` plus ``--by-email`` forwards correctly."""
+    fake = _patch_update(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        [
+            "channel",
+            "update",
+            "general",
+            "--type",
+            "private",
+            "--subscribe",
+            "alice@example.com",
+            "--subscribe",
+            "bob@example.com",
+            "--by-email",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    kwargs = fake.call_args.kwargs
+    assert list(kwargs["subscribe_user_specs"]) == [
+        "alice@example.com",
+        "bob@example.com",
+    ]
+    assert kwargs["user_id_mode"] == "email"
+
+
+def test_channel_update_can_remove_subscribers_group(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _patch_update(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        [
+            "channel",
+            "update",
+            "general",
+            "--can-remove-subscribers-group",
+            "design",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert fake.call_args.kwargs["can_remove_subscribers_group"] == "design"
+
+
+def test_channel_update_no_settings_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Invocation with no setting flags errors via ZulipValidationError."""
+    _patch_update(
+        monkeypatch,
+        side_effect=ZulipValidationError("at least one setting must change"),
+    )
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "update", "general"])
+    assert result.exit_code != 0
+    out = result.output + (result.stderr or "")
+    assert "at least one" in out
+
+
+def test_channel_update_lockout_error_surfaces(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Lockout errors from the API exit non-zero with a clear message."""
+    _patch_update(monkeypatch, side_effect=ZulipLockoutError("lockout"))
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "update", "general", "--type", "private"])
+    assert result.exit_code != 0
+    out = result.output + (result.stderr or "")
+    assert "lockout" in out
+
+
+def test_channel_update_feature_level_error_surfaces(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Feature-level errors carry the FR-019 canonical message."""
+    _patch_update(
+        monkeypatch,
+        side_effect=ZulipFeatureLevelError(required=334, actual=200, feature_name="topic-policy"),
+    )
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "update", "general", "--topic-policy", "deny"])
+    assert result.exit_code != 0
+    out = result.output + (result.stderr or "")
+    assert "feature level 334" in out
+    assert "server has 200" in out
+
+
+def test_channel_update_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--json`` prints the MutationResult as JSON."""
+    _patch_update(
+        monkeypatch,
+        return_value={
+            "status": "success",
+            "channel_id": 42,
+            "channel_name": "renamed",
+            "operation": "update",
+        },
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        ["--json", "channel", "update", "general", "--description", "x"],
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "success"
+    assert payload["operation"] == "update"
+    assert payload["channel_id"] == 42
+
+
+def test_channel_update_requires_exactly_one_target(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exactly one of [channel] positional or --channel-id is required (FR-018)."""
+    _patch_update(monkeypatch)
+    runner = CliRunner()
+    # Neither provided
+    result = runner.invoke(zulip_app, ["channel", "update", "--description", "x"])
+    assert result.exit_code != 0
+    out = result.output + (result.stderr or "")
+    assert "channel" in out.lower()
+    # Both provided
+    result = runner.invoke(
+        zulip_app,
+        [
+            "channel",
+            "update",
+            "general",
+            "--channel-id",
+            "1",
+            "--description",
+            "x",
+        ],
+    )
+    assert result.exit_code != 0
+
+
+def test_channel_update_include_archived_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--include-archived`` forwards to the API layer."""
+    fake = _patch_update(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        [
+            "channel",
+            "update",
+            "old-channel",
+            "--include-archived",
+            "--description",
+            "x",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert fake.call_args.kwargs["include_archived"] is True

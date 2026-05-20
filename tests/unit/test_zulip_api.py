@@ -47,6 +47,7 @@ from lftools_uv.api.endpoints.zulip import (
     resolve_users,
     subscribe_users,
     unsubscribe_users,
+    update_channel,
 )
 
 # ---------------------------------------------------------------------------
@@ -2167,3 +2168,241 @@ def test_unsubscribe_users_rejects_malformed_resolved_channel() -> None:
             id_mode="email",
             resolved_channel={"stream_id": "bad", "name": "general"},
         )
+
+
+# T049 — update_channel() (US8)
+# ---------------------------------------------------------------------------
+
+
+def _update_client(
+    *,
+    streams: list[dict[str, Any]] | None = None,
+    archived_streams: list[dict[str, Any]] | None = None,
+    feature_level: int = 1000,
+    subscribers: list[int] | None = None,
+    groups: list[dict[str, Any]] | None = None,
+    patch_response: dict[str, Any] | None = None,
+) -> Any:
+    """Build a mock client wired for update_channel scenarios."""
+    streams = streams if streams is not None else ACTIVE_STREAMS
+    archived_streams = archived_streams if archived_streams is not None else ARCHIVED_STREAMS
+    subscribers = subscribers if subscribers is not None else [100, 101]
+    groups = groups if groups is not None else GROUPS
+    patch_response = patch_response if patch_response is not None else {"result": "success"}
+
+    client = mock.MagicMock()
+    client.get_server_settings.return_value = {
+        "result": "success",
+        "zulip_feature_level": feature_level,
+    }
+
+    def call_endpoint(*, url: str, method: str = "GET", request: dict[str, Any] | None = None) -> Any:
+        if url == "streams" and method == "GET":
+            if request and request.get("include_archived"):
+                return {"result": "success", "streams": archived_streams}
+            return {"result": "success", "streams": streams}
+        if url == "user_groups" and method == "GET":
+            return {"result": "success", "user_groups": groups}
+        if url.startswith("streams/") and url.endswith("/members") and method == "GET":
+            return {"result": "success", "subscribers": subscribers}
+        if url.startswith("streams/") and method == "PATCH":
+            # Record the PATCH request for assertions.
+            client.last_patch = {"url": url, "request": request}
+            return patch_response
+        raise AssertionError(f"unexpected call_endpoint url={url!r} method={method!r}")
+
+    client.call_endpoint.side_effect = call_endpoint
+    return client
+
+
+def test_update_channel_requires_at_least_one_setting() -> None:
+    """No-op invocation (no settings supplied) is rejected (contract)."""
+    client = _update_client()
+    with pytest.raises(ZulipValidationError, match="at least one"):
+        _ = update_channel(client, name="general")
+
+
+def test_update_channel_rename_only() -> None:
+    """Renaming maps to ``new_name`` in the PATCH request."""
+    client = _update_client()
+    result = update_channel(client, name="general", new_name="general2")
+    assert result["status"] == "success"
+    assert result["operation"] == "update"
+    assert result["channel_id"] == 1
+    assert result["channel_name"] == "general2"
+    assert client.last_patch["url"] == "streams/1"
+    assert client.last_patch["request"]["new_name"] == "general2"
+
+
+def test_update_channel_description_only() -> None:
+    """Description-only updates produce a minimal PATCH payload."""
+    client = _update_client()
+    result = update_channel(client, channel_id=1, description="new desc")
+    assert result["status"] == "success"
+    payload = client.last_patch["request"]
+    assert payload == {"description": "new desc"}
+
+
+def test_update_channel_type_to_public() -> None:
+    """Type→public sends ``is_private=False`` and ``is_web_public=False``."""
+    client = _update_client()
+    _ = update_channel(client, name="general", channel_type="public")
+    payload = client.last_patch["request"]
+    assert payload["is_private"] is False
+    assert payload["is_web_public"] is False
+
+
+def test_update_channel_type_to_web_public_requires_feature_level() -> None:
+    """web-public requires the documented feature level."""
+    client = _update_client(feature_level=1)
+    with pytest.raises(ZulipFeatureLevelError):
+        _ = update_channel(client, name="general", channel_type="web-public")
+
+
+def test_update_channel_type_to_web_public_succeeds_when_supported() -> None:
+    """web-public with sufficient feature level passes through."""
+    client = _update_client(feature_level=1000)
+    _ = update_channel(client, name="general", channel_type="web-public")
+    payload = client.last_patch["request"]
+    assert payload["is_web_public"] is True
+    assert payload["is_private"] is False
+
+
+def test_update_channel_type_to_private_with_subscribers_ok() -> None:
+    """type→private succeeds when channel has existing subscribers (FR-014)."""
+    client = _update_client(subscribers=[100, 101])
+    _ = update_channel(client, name="general", channel_type="private")
+    payload = client.last_patch["request"]
+    assert payload["is_private"] is True
+
+
+def test_update_channel_type_to_private_lockout_without_subs_or_group() -> None:
+    """type→private with empty channel + no subs/group raises lockout."""
+    client = _update_client(subscribers=[])
+    with pytest.raises(ZulipLockoutError):
+        _ = update_channel(client, name="general", channel_type="private")
+
+
+def test_update_channel_type_to_private_with_subscribe_satisfies_lockout() -> None:
+    """type→private with --subscribe targets bypasses lockout check."""
+    client = _update_client(subscribers=[])
+    _ = update_channel(
+        client,
+        name="general",
+        channel_type="private",
+        subscribe_user_specs=["alice@example.com"],
+        user_id_mode="email",
+    )
+    payload = client.last_patch["request"]
+    assert payload["is_private"] is True
+
+
+def test_update_channel_type_to_private_with_allow_group_satisfies_lockout() -> None:
+    """type→private with non-Nobody --allow-group satisfies lockout."""
+    client = _update_client(subscribers=[])
+    _ = update_channel(
+        client,
+        name="general",
+        channel_type="private",
+        allow_group="design",
+    )
+    payload = client.last_patch["request"]
+    assert payload["is_private"] is True
+    # group-setting-update wrapper for PATCH endpoints.
+    assert payload["can_access_group"] == {"new": 30}
+
+
+def test_update_channel_type_to_private_rejects_nobody_group() -> None:
+    """``Nobody`` does not satisfy lockout prevention for type→private."""
+    client = _update_client(subscribers=[])
+    with pytest.raises(ZulipLockoutError):
+        _ = update_channel(
+            client,
+            name="general",
+            channel_type="private",
+            allow_group="Nobody",
+        )
+
+
+def test_update_channel_allow_group_uses_new_wrapper_format() -> None:
+    """``--allow-group`` always wraps with ``{"new": value}`` for PATCH."""
+    client = _update_client()
+    _ = update_channel(client, name="general", allow_group="design")
+    payload = client.last_patch["request"]
+    assert payload["can_access_group"] == {"new": 30}
+
+
+def test_update_channel_allow_group_multiple_uses_complex_form() -> None:
+    """Multiple groups produce the direct_subgroups complex form, still wrapped."""
+    client = _update_client()
+    _ = update_channel(client, name="general", allow_group="design, id:10")
+    payload = client.last_patch["request"]
+    assert payload["can_access_group"] == {"new": {"direct_members": [], "direct_subgroups": [30, 10]}}
+
+
+def test_update_channel_can_remove_subscribers_group_wrapper() -> None:
+    """``--can-remove-subscribers-group`` is wrapped with ``{"new": value}``."""
+    client = _update_client()
+    _ = update_channel(client, name="general", can_remove_subscribers_group="design")
+    payload = client.last_patch["request"]
+    assert payload["can_remove_subscribers_group"] == {"new": 30}
+
+
+def test_update_channel_can_remove_subscribers_group_feature_level() -> None:
+    """``--can-remove-subscribers-group`` requires the documented feature level."""
+    client = _update_client(feature_level=1)
+    with pytest.raises(ZulipFeatureLevelError):
+        _ = update_channel(
+            client,
+            name="general",
+            can_remove_subscribers_group="design",
+        )
+
+
+def test_update_channel_topic_policy_feature_level() -> None:
+    """``--topic-policy`` requires the documented feature level."""
+    client = _update_client(feature_level=1)
+    with pytest.raises(ZulipFeatureLevelError):
+        _ = update_channel(client, name="general", topic_policy="allow")
+
+
+def test_update_channel_topic_policy_passthrough() -> None:
+    """``topic_policy`` value is forwarded to the PATCH payload."""
+    client = _update_client()
+    _ = update_channel(client, name="general", topic_policy="deny")
+    payload = client.last_patch["request"]
+    assert payload["topic_policy"] == "deny"
+
+
+def test_update_channel_multiple_settings() -> None:
+    """Multiple fields combine in a single PATCH request (FR-004)."""
+    client = _update_client()
+    _ = update_channel(
+        client,
+        name="general",
+        new_name="renamed",
+        description="d",
+        allow_group="design",
+    )
+    payload = client.last_patch["request"]
+    assert payload["new_name"] == "renamed"
+    assert payload["description"] == "d"
+    assert payload["can_access_group"] == {"new": 30}
+
+
+def test_update_channel_returns_channel_id_and_name() -> None:
+    """The MutationResult includes the resolved channel id and name."""
+    client = _update_client()
+    result = update_channel(client, channel_id=2, description="d")
+    assert result["channel_id"] == 2
+    assert result["channel_name"] == "Engineering"
+    assert result["operation"] == "update"
+
+
+def test_update_channel_api_error_propagates() -> None:
+    """A non-success PATCH response surfaces as ``ZulipAPIError``."""
+    from lftools_uv.api.endpoints.zulip import ZulipAPIError
+
+    client = _update_client(patch_response={"result": "error", "msg": "boom"})
+    with pytest.raises(ZulipAPIError, match="boom"):
+        _ = update_channel(client, name="general", description="x")

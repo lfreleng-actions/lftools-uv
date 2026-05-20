@@ -1087,3 +1087,141 @@ def channel_unsubscribe(
     # produce a non-zero exit code alongside ``error``.
     if payload["status"] in ("error", "partial"):
         raise typer.Exit(code=1)
+
+
+# ---------------------------------------------------------------------------
+# Channel update (US8)
+# ---------------------------------------------------------------------------
+
+
+def _validate_single_channel_target(
+    channel: str | None,
+    channel_id: int | None,
+) -> None:
+    """Enforce FR-018: exactly one of [channel] or --channel-id."""
+    if channel is None and channel_id is None:
+        emit_error("Exactly one of [channel] or --channel-id is required")
+        raise typer.Exit(code=1)
+    if channel is not None and channel_id is not None:
+        emit_error("Specify only one of [channel] or --channel-id, not both")
+        raise typer.Exit(code=1)
+
+
+@channel_app.command("update")
+def channel_update(  # noqa: PLR0913 - CLI parity with contract
+    ctx: typer.Context,
+    channel: str | None = typer.Argument(
+        None,
+        help="Channel name (optional if --channel-id is given).",
+    ),
+    channel_id: int | None = typer.Option(
+        None,
+        "--channel-id",
+        help="Target channel by numeric ID.",
+    ),
+    new_name: str | None = typer.Option(
+        None,
+        "--name",
+        help="New channel name.",
+    ),
+    description: str | None = typer.Option(
+        None,
+        "--description",
+        help="New channel description.",
+    ),
+    channel_type: str | None = typer.Option(
+        None,
+        "--type",
+        help="New channel type: public, private, or web-public.",
+    ),
+    topic_policy: str | None = typer.Option(
+        None,
+        "--topic-policy",
+        help="New topic policy: allow, deny, or follow-default.",
+    ),
+    subscribe: list[str] = typer.Option(
+        [],
+        "--subscribe",
+        help="User identifier(s) to retain access on type-to-private (repeatable).",
+    ),
+    by_email: bool = typer.Option(False, "--by-email", help="Identify --subscribe users by email."),
+    by_id: bool = typer.Option(False, "--by-id", help="Identify --subscribe users by numeric ID."),
+    by_name: bool = typer.Option(False, "--by-name", help="Identify --subscribe users by full name."),
+    allow_group: str | None = typer.Option(
+        None,
+        "--allow-group",
+        help="Group(s) allowed to join. Comma-separated names; use 'id:NUM' for ID lookup.",
+    ),
+    can_remove_subscribers_group: str | None = typer.Option(
+        None,
+        "--can-remove-subscribers-group",
+        help="Group(s) permitted to remove subscribers (group-setting syntax).",
+    ),
+    include_archived: bool = typer.Option(
+        False,
+        "--include-archived",
+        help="Include archived channels when resolving the target.",
+    ),
+) -> None:
+    """Update channel settings.
+
+    Implements US8 (FR-004). Exactly one of ``[channel]`` or
+    ``--channel-id`` must be supplied. At least one setting flag is
+    required; the API layer also enforces this constraint (the
+    duplication keeps the user-facing error fast and clear).
+    """
+    _validate_single_channel_target(channel, channel_id)
+
+    # Validate --type choice locally so the error is presented before
+    # any network calls are made.
+    valid_types = {"public", "private", "web-public"}
+    if channel_type is not None and channel_type not in valid_types:
+        emit_error(f"Invalid --type {channel_type!r}; expected one of {', '.join(sorted(valid_types))}")
+        raise typer.Exit(code=1)
+
+    valid_policies = {"allow", "deny", "follow-default"}
+    if topic_policy is not None and topic_policy not in valid_policies:
+        emit_error(f"Invalid --topic-policy {topic_policy!r}; expected one of {', '.join(sorted(valid_policies))}")
+        raise typer.Exit(code=1)
+
+    # Validate --by-* mutex: at most one, and required when --subscribe
+    # is used.
+    by_count = sum(1 for v in (by_email, by_id, by_name) if v)
+    if by_count > 1:
+        emit_error("Specify only one of --by-email, --by-id, --by-name")
+        raise typer.Exit(code=1)
+    if subscribe and by_count == 0:
+        emit_error("--subscribe requires one of --by-email, --by-id, --by-name")
+        raise typer.Exit(code=1)
+    user_id_mode: str | None = None
+    if by_email:
+        user_id_mode = "email"
+    elif by_id:
+        user_id_mode = "id"
+    elif by_name:
+        user_id_mode = "name"
+
+    options = ctx.obj or {}
+    try:
+        client = get_client(zuliprc=options.get("zuliprc"))
+        result = update_channel(
+            client,
+            name=channel,
+            channel_id=channel_id,
+            new_name=new_name,
+            description=description,
+            channel_type=channel_type,  # type: ignore[arg-type]
+            topic_policy=topic_policy,  # type: ignore[arg-type]
+            subscribe_user_specs=list(subscribe) if subscribe else None,
+            user_id_mode=user_id_mode,  # type: ignore[arg-type]
+            allow_group=allow_group,
+            can_remove_subscribers_group=can_remove_subscribers_group,
+            include_archived=include_archived,
+        )
+    except ZulipError as exc:
+        raise handle_zulip_error(exc) from exc
+
+    if options.get("json_output"):
+        emit_json(result)
+    else:
+        typer.echo(f"Updated channel '{result['channel_name']}' (id={result['channel_id']})")
