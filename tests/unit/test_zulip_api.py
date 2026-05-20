@@ -2604,10 +2604,12 @@ def test_archive_channel_not_found_propagates() -> None:
 
 
 def test_archive_channel_requires_name_or_id() -> None:
-    """``target`` must be a non-empty string or a positive int."""
+    """``target`` must be a non-empty (after stripping) string or an int."""
     client = _archive_client([], [])
     with pytest.raises(ZulipValidationError):
         _ = archive_channel(client, "")
+    with pytest.raises(ZulipValidationError):
+        _ = archive_channel(client, "   ")
 
 
 def test_archive_channel_already_deactivated_server_response() -> None:
