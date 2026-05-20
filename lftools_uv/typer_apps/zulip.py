@@ -886,25 +886,74 @@ def channel_unsubscribe(
     options = ctx.obj or {}
     try:
         client = get_client(zuliprc=options.get("zuliprc"))
+    except ZulipError as exc:
+        # Configuration/connect failure happens before channel
+        # resolution can even be attempted, so the error payload
+        # cannot carry a resolved channel_id.
+        if options.get("json_output"):
+            error_payload = bulk_mutation_result(
+                operation="unsubscribe",
+                channel_id=channel_id,
+                channel_name=channel_name or "",
+                results=[],
+                errors=[{"user": None, "error": str(exc)}],
+            )
+            emit_json(error_payload)
+            raise typer.Exit(code=1) from exc
+        raise handle_zulip_error(exc) from exc
+
+    # Pre-resolve the channel so that any failure inside
+    # ``unsubscribe_users`` (e.g. the DELETE call returning an error
+    # response) can still report the resolved channel_id/channel_name
+    # in the --json error payload. The contract documents
+    # ``channel_id: null`` only for the case where the channel itself
+    # could not be resolved.
+    resolved_channel_id: int | None = channel_id
+    resolved_channel_name: str = channel_name or ""
+    try:
+        target = zulip_api.resolve_channel(
+            client,
+            name=channel_name,
+            channel_id=channel_id,
+            include_archived=include_archived,
+        )
+    except ZulipError as exc:
+        if options.get("json_output"):
+            error_payload = bulk_mutation_result(
+                operation="unsubscribe",
+                channel_id=None,
+                channel_name=channel_name or "",
+                results=[],
+                errors=[{"user": None, "error": str(exc)}],
+            )
+            emit_json(error_payload)
+            raise typer.Exit(code=1) from exc
+        raise handle_zulip_error(exc) from exc
+
+    raw_id = target.get("stream_id")
+    if isinstance(raw_id, int):
+        resolved_channel_id = raw_id
+    resolved_channel_name = str(target.get("name", "")) or resolved_channel_name
+
+    try:
         payload = zulip_api.unsubscribe_users(
             client,
             users,
-            channel=channel_name,
-            channel_id=channel_id,
+            channel_id=resolved_channel_id,
             id_mode=id_mode,
             include_archived=include_archived,
         )
     except ZulipError as exc:
         if options.get("json_output"):
             # FR-008: mutation commands emit the canonical JSON schema
-            # even on error. ``channel_id`` is None when the failure
-            # happened before channel resolution succeeded; the channel
-            # name is echoed back from the user-supplied target so the
-            # operator can correlate the failure with their command.
+            # even on error. The channel was successfully resolved
+            # above, so we report the resolved channel_id/name here
+            # (the failure is downstream — e.g. the DELETE call itself
+            # returned an error).
             error_payload = bulk_mutation_result(
                 operation="unsubscribe",
-                channel_id=channel_id,
-                channel_name=channel_name or "",
+                channel_id=resolved_channel_id,
+                channel_name=resolved_channel_name,
                 results=[],
                 errors=[{"user": None, "error": str(exc)}],
             )
