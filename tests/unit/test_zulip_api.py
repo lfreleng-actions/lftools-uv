@@ -389,21 +389,6 @@ def test_get_client_rejects_both_inputs() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _channels_payload(active: list[dict[str, Any]], archived: list[dict[str, Any]]) -> Any:
-    """Return a client whose streams endpoint returns ``active`` or ``archived``."""
-    client = mock.MagicMock()
-
-    def side_effect(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
-        assert url == "streams"
-        assert method == "GET"
-        if request and request.get("include_archived"):
-            return {"result": "success", "streams": archived}
-        return {"result": "success", "streams": active}
-
-    client.call_endpoint.side_effect = side_effect
-    return client
-
-
 LIST_ACTIVE = [
     {
         "stream_id": 1,
@@ -449,7 +434,7 @@ LIST_ARCHIVED = LIST_ACTIVE + [
 
 def test_list_channels_active_only_by_default() -> None:
     """Without ``include_archived``, only active streams are returned."""
-    client = _channels_payload(LIST_ACTIVE, LIST_ARCHIVED)
+    client = _streams_client(LIST_ACTIVE, LIST_ARCHIVED)
     channels = list_channels(client)
     assert [c["stream_id"] for c in channels] == [1, 2, 3]
     assert all(not c["is_archived"] for c in channels)
@@ -457,7 +442,7 @@ def test_list_channels_active_only_by_default() -> None:
 
 def test_list_channels_normalizes_type() -> None:
     """Each stream maps to one of public / private / web-public."""
-    client = _channels_payload(LIST_ACTIVE, LIST_ARCHIVED)
+    client = _streams_client(LIST_ACTIVE, LIST_ARCHIVED)
     by_id = {c["stream_id"]: c for c in list_channels(client)}
     assert by_id[1]["type"] == "public"
     assert by_id[2]["type"] == "private"
@@ -466,14 +451,14 @@ def test_list_channels_normalizes_type() -> None:
 
 def test_list_channels_include_archived_returns_all() -> None:
     """``include_archived=True`` returns the archived superset."""
-    client = _channels_payload(LIST_ACTIVE, LIST_ARCHIVED)
+    client = _streams_client(LIST_ACTIVE, LIST_ARCHIVED)
     channels = list_channels(client, include_archived=True)
     assert {c["stream_id"] for c in channels} == {1, 2, 3, 99}
 
 
 def test_list_channels_empty_list() -> None:
     """An empty server returns an empty list, not an error."""
-    client = _channels_payload([], [])
+    client = _streams_client([], [])
     assert list_channels(client) == []
 
 
@@ -487,7 +472,7 @@ def test_list_channels_propagates_api_error() -> None:
 
 def test_list_channels_keeps_description_and_count() -> None:
     """The returned dict carries description and subscriber_count."""
-    client = _channels_payload(LIST_ACTIVE, LIST_ARCHIVED)
+    client = _streams_client(LIST_ACTIVE, LIST_ARCHIVED)
     by_id = {c["stream_id"]: c for c in list_channels(client)}
     assert by_id[1]["description"] == "General discussion"
     assert by_id[1]["subscriber_count"] == 42
@@ -507,7 +492,7 @@ def test_list_channels_defaults_missing_subscriber_count_to_zero() -> None:
             # no subscriber_count
         },
     ]
-    client = _channels_payload(streams, streams)
+    client = _streams_client(streams, streams)
     out = list_channels(client)
     assert out[0]["subscriber_count"] == 0
 
@@ -515,6 +500,6 @@ def test_list_channels_defaults_missing_subscriber_count_to_zero() -> None:
 def test_list_channels_rejects_missing_stream_id() -> None:
     """A stream lacking a numeric stream_id raises ``ZulipAPIError``."""
     bad = [{"name": "no-id", "description": "", "invite_only": False}]
-    client = _channels_payload(bad, bad)
+    client = _streams_client(bad, bad)
     with pytest.raises(ZulipAPIError):
         _ = list_channels(client)
