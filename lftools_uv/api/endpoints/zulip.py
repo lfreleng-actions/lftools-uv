@@ -1580,18 +1580,17 @@ def update_channel(
       the channel currently has 0 subscribers, the caller must supply
       either ``subscribe_user_specs`` (a non-empty list) or a non-Nobody
       ``allow_group`` value. ``Nobody`` does NOT satisfy this rule.
+      When ``subscribe_user_specs`` is supplied, the users are
+      resolved AND actually subscribed via
+      ``POST /api/v1/users/me/subscriptions`` before the PATCH so that
+      access is genuinely retained (the API call would otherwise lock
+      the channel out, despite passing client-side validation).
     * Resolves group specs and wraps them using the group-setting-update
       ``{"new": value}`` envelope required by the Zulip PATCH endpoints.
       Note that this wrapping differs from the POST endpoints
       (``streams`` create), which take the raw value.
     * Returns the standard ``MutationResult`` dict
       (``status``/``channel_id``/``channel_name``/``operation``).
-
-    The caller is responsible for any follow-on operations (e.g.
-    actually subscribing ``subscribe_user_specs`` to the channel via
-    the existing ``channel subscribe`` flow); the ``--subscribe`` flag
-    on ``channel update`` exists primarily to satisfy lockout
-    prevention.
     """
     # ------------------------------------------------------------------
     # Argument validation
@@ -1614,11 +1613,40 @@ def update_channel(
             "or --can-remove-subscribers-group)"
         )
 
+    valid_channel_types = {"public", "private", "web-public"}
+    if channel_type is not None and channel_type not in valid_channel_types:
+        raise ZulipValidationError(
+            f"Invalid channel_type {channel_type!r}; expected one of {', '.join(sorted(valid_channel_types))}"
+        )
+    valid_topic_policies = {"allow", "deny", "follow-default"}
+    if topic_policy is not None and topic_policy not in valid_topic_policies:
+        raise ZulipValidationError(
+            f"Invalid topic_policy {topic_policy!r}; expected one of {', '.join(sorted(valid_topic_policies))}"
+        )
+
     # ------------------------------------------------------------------
     # Feature-level gating (FR-019)
     # ------------------------------------------------------------------
     if channel_type == "web-public":
         check_feature_level(client, FEATURE_LEVELS["web-public"], feature_name="web-public")
+        # Spectator access must also be enabled on the realm (spec
+        # scenario 8). The setting is exposed by the server_settings
+        # endpoint as ``realm_enable_spectator_access`` on recent
+        # servers; defensively allow the transition when the field is
+        # absent (older servers leave enforcement to the API itself).
+        try:
+            settings_response = client.get_server_settings()
+        except Exception as exc:  # pragma: no cover - network errors
+            raise ZulipAPIError(f"Failed to query server settings: {exc}") from exc
+        spectator = None
+        if isinstance(settings_response, dict):
+            spectator = settings_response.get("realm_enable_spectator_access")
+        if spectator is False:
+            raise ZulipFeatureLevelError(
+                required=FEATURE_LEVELS["web-public"],
+                actual=get_server_feature_level(client),
+                feature_name="web-public (spectator access disabled on realm)",
+            )
     if topic_policy is not None:
         check_feature_level(client, FEATURE_LEVELS["topic-policy"], feature_name="topic-policy")
     if allow_group is not None:
@@ -1682,14 +1710,42 @@ def update_channel(
                 )
 
     # ------------------------------------------------------------------
-    # Resolve --subscribe identifiers. Actual subscription is performed
-    # by the dedicated ``channel subscribe`` command — on update, the
-    # flag exists primarily to satisfy lockout prevention. We still
-    # require an explicit id-mode for parity with the subscribe command
-    # so callers do not get a surprising "by-name" silent behavior.
+    # Resolve --subscribe identifiers. When supplied we actually
+    # subscribe the users BEFORE issuing the PATCH so that
+    # type-to-private conversions truly retain access — relying on the
+    # lockout-prevention bypass without actually subscribing would
+    # still lock the channel out.
     # ------------------------------------------------------------------
     if subscribe_list and user_id_mode is None:
         raise ZulipValidationError("--subscribe requires one of --by-email/--by-id/--by-name")
+    if subscribe_list:
+        assert user_id_mode is not None  # for type narrowing (validated above)
+        resolved_users = resolve_users(client, subscribe_list, mode=user_id_mode)
+        principals: list[Any] = []
+        for user in resolved_users:
+            user_id_value = user.get("user_id")
+            if isinstance(user_id_value, int):
+                principals.append(user_id_value)
+            else:
+                email = user.get("delivery_email") or user.get("email")
+                if isinstance(email, str):
+                    principals.append(email)
+        try:
+            sub_response = client.call_endpoint(
+                url="users/me/subscriptions",
+                method="POST",
+                request={
+                    "subscriptions": [{"name": resolved_name}],
+                    "principals": principals,
+                },
+            )
+        except Exception as exc:  # pragma: no cover - network errors
+            raise ZulipAPIError(f"Failed to subscribe users during update: {exc}") from exc
+        if not isinstance(sub_response, dict) or sub_response.get("result") != "success":
+            msg = ""
+            if isinstance(sub_response, dict):
+                msg = str(sub_response.get("msg") or sub_response)
+            raise ZulipAPIError(f"Subscribe-during-update failed: {msg or sub_response!r}")
 
     # ------------------------------------------------------------------
     # Build PATCH request

@@ -1166,11 +1166,36 @@ def channel_update(  # noqa: PLR0913 - CLI parity with contract
     """Update channel settings.
 
     Implements US8 (FR-004). Exactly one of ``[channel]`` or
-    ``--channel-id`` must be supplied. At least one setting flag is
-    required; the API layer also enforces this constraint (the
-    duplication keeps the user-facing error fast and clear).
+    ``--channel-id`` must be supplied. The API layer
+    (:func:`update_channel`) enforces the at-least-one-setting
+    constraint and surfaces it as a :class:`ZulipValidationError`; this
+    CLI layer validates flag-shape constraints (choice values, the
+    ``--by-*`` mutex, and ``--subscribe`` requiring an id-mode) before
+    contacting the server so that obvious errors are reported quickly.
     """
     _validate_single_channel_target(channel, channel_id)
+
+    # Local at-least-one-setting check so the user-facing error is
+    # presented before any network calls are made; the API layer also
+    # enforces the same constraint as a defence-in-depth check.
+    any_setting = any(
+        v is not None
+        for v in (
+            new_name,
+            description,
+            channel_type,
+            topic_policy,
+            allow_group,
+            can_remove_subscribers_group,
+        )
+    )
+    if not any_setting:
+        emit_error(
+            "channel update requires at least one setting to change "
+            "(--name, --description, --type, --topic-policy, --allow-group, "
+            "or --can-remove-subscribers-group)"
+        )
+        raise typer.Exit(code=1)
 
     # Validate --type choice locally so the error is presented before
     # any network calls are made.

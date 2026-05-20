@@ -2181,20 +2181,26 @@ def _update_client(
     feature_level: int = 1000,
     subscribers: list[int] | None = None,
     groups: list[dict[str, Any]] | None = None,
+    members: list[dict[str, Any]] | None = None,
     patch_response: dict[str, Any] | None = None,
+    spectator_access: bool = True,
 ) -> Any:
     """Build a mock client wired for update_channel scenarios."""
     streams = streams if streams is not None else ACTIVE_STREAMS
     archived_streams = archived_streams if archived_streams is not None else ARCHIVED_STREAMS
     subscribers = subscribers if subscribers is not None else [100, 101]
     groups = groups if groups is not None else GROUPS
+    members = members if members is not None else MEMBERS
     patch_response = patch_response if patch_response is not None else {"result": "success"}
 
     client = mock.MagicMock()
     client.get_server_settings.return_value = {
         "result": "success",
         "zulip_feature_level": feature_level,
+        "realm_enable_spectator_access": spectator_access,
     }
+    client.get_members.return_value = {"result": "success", "members": members}
+    client.subscribe_calls = []
 
     def call_endpoint(*, url: str, method: str = "GET", request: dict[str, Any] | None = None) -> Any:
         if url == "streams" and method == "GET":
@@ -2205,6 +2211,9 @@ def _update_client(
             return {"result": "success", "user_groups": groups}
         if url.startswith("streams/") and url.endswith("/members") and method == "GET":
             return {"result": "success", "subscribers": subscribers}
+        if url == "users/me/subscriptions" and method == "POST":
+            client.subscribe_calls.append(request)
+            return {"result": "success", "subscribed": {}, "already_subscribed": {}}
         if url.startswith("streams/") and method == "PATCH":
             # Record the PATCH request for assertions.
             client.last_patch = {"url": url, "request": request}
@@ -2284,7 +2293,7 @@ def test_update_channel_type_to_private_lockout_without_subs_or_group() -> None:
 
 
 def test_update_channel_type_to_private_with_subscribe_satisfies_lockout() -> None:
-    """type→private with --subscribe targets bypasses lockout check."""
+    """type→private with --subscribe targets actually subscribes + bypasses lockout."""
     client = _update_client(subscribers=[])
     _ = update_channel(
         client,
@@ -2295,6 +2304,12 @@ def test_update_channel_type_to_private_with_subscribe_satisfies_lockout() -> No
     )
     payload = client.last_patch["request"]
     assert payload["is_private"] is True
+    # The subscription POST must have been issued before the PATCH so
+    # that the new subscriber retains access to the now-private channel.
+    assert client.subscribe_calls, "expected POST /users/me/subscriptions"
+    sub_request = client.subscribe_calls[0]
+    assert sub_request["subscriptions"] == [{"name": "general"}]
+    assert 100 in sub_request["principals"]
 
 
 def test_update_channel_type_to_private_with_allow_group_satisfies_lockout() -> None:
@@ -2406,3 +2421,25 @@ def test_update_channel_api_error_propagates() -> None:
     client = _update_client(patch_response={"result": "error", "msg": "boom"})
     with pytest.raises(ZulipAPIError, match="boom"):
         _ = update_channel(client, name="general", description="x")
+
+
+def test_update_channel_rejects_invalid_channel_type() -> None:
+    """Unknown ``channel_type`` values are rejected with ``ZulipValidationError``."""
+    client = _update_client()
+    with pytest.raises(ZulipValidationError, match="channel_type"):
+        _ = update_channel(client, name="general", channel_type="bogus")  # type: ignore[arg-type]
+
+
+def test_update_channel_rejects_invalid_topic_policy() -> None:
+    """Unknown ``topic_policy`` values are rejected with ``ZulipValidationError``."""
+    client = _update_client()
+    with pytest.raises(ZulipValidationError, match="topic_policy"):
+        _ = update_channel(client, name="general", topic_policy="bogus")  # type: ignore[arg-type]
+
+
+def test_update_channel_web_public_requires_spectator_access() -> None:
+    """``--type web-public`` errors when the realm has spectator access disabled."""
+    client = _update_client(feature_level=1000, spectator_access=False)
+    with pytest.raises(ZulipFeatureLevelError) as exc_info:
+        _ = update_channel(client, name="general", channel_type="web-public")
+    assert "spectator" in exc_info.value.feature_name
