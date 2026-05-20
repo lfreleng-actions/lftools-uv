@@ -1234,7 +1234,13 @@ def test_channel_subscribe_json_channel_not_found() -> None:
 
 
 def test_channel_subscribe_json_channel_id_not_found() -> None:
-    """`--json` with an unknown numeric channel-id reflects the id back."""
+    """`--json` with an unknown numeric channel-id reports ``channel_id=null``.
+
+    Per FR-008 / data-model.md, ``channel_id`` must be ``None`` when the
+    target channel cannot be resolved — even if the caller supplied a
+    numeric ``--channel-id``. The schema reserves ``channel_id`` for
+    successfully-resolved channels only.
+    """
     import lftools_uv.api.endpoints.zulip as zulip_api
 
     result, _ = _invoke_subscribe(
@@ -1244,7 +1250,7 @@ def test_channel_subscribe_json_channel_id_not_found() -> None:
     assert result.exit_code == 1
     payload = _json.loads(result.stdout)
     assert payload["status"] == "error"
-    assert payload["channel_id"] == 9999
+    assert payload["channel_id"] is None
     assert payload["operation"] == "subscribe"
 
 

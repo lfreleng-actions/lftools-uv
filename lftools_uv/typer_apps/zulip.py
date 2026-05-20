@@ -690,9 +690,13 @@ def channel_subscribe(
         # fall back to the human-readable formatter.
         if options.get("json_output"):
             channel_name_str = channel_arg if isinstance(channel_arg, str) else None
+            # Per FR-008 / data-model.md, ``channel_id`` is ``None`` when the
+            # target channel could not be resolved — even if the caller
+            # supplied a numeric ``--channel-id`` (the ID didn't map to any
+            # real channel, so we don't echo it back as if it had).
             error_payload = bulk_mutation_result(
                 operation="subscribe",
-                channel_id=channel_arg if isinstance(channel_arg, int) else None,
+                channel_id=None,
                 channel_name=channel_name_str or "",
                 results=[],
                 errors=[{"error": str(exc)}],
