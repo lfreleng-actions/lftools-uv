@@ -1067,26 +1067,28 @@ def test_channel_subscribe_by_name_flag() -> None:
 
 
 def test_channel_subscribe_missing_identifier_flag_errors() -> None:
-    """Omitting all of --by-email/--by-id/--by-name is a usage error."""
+    """Omitting all of --by-email/--by-id/--by-name exits with code 1.
+
+    The implementation routes this through ``emit_error()`` +
+    ``typer.Exit(1)`` to honour the cli-commands.md contract (exit
+    codes 0/1 only — never Click's default 2 for usage errors). We
+    don't assert on the error message text because Rich-panel rendering
+    on CI may wrap/truncate it; the exit code is the contract.
+    """
     result, _ = _invoke_subscribe(
         ["general", "bob@example.com"],
         subscribe_return=_bulk_ok(),
     )
-    # The implementation routes this through emit_error() + typer.Exit(1)
-    # to honour the cli-commands.md contract (exit codes 0/1 only). We
-    # don't assert on the error message itself because Rich-panel
-    # rendering on CI may wrap/truncate it; the exit code is the
-    # contract.
-    assert result.exit_code != 0
+    assert result.exit_code == 1
 
 
 def test_channel_subscribe_multiple_identifier_flags_errors() -> None:
-    """Specifying more than one of the identifier flags is a usage error."""
+    """Specifying more than one of the identifier flags exits with code 1."""
     result, _ = _invoke_subscribe(
         ["general", "bob@example.com", "--by-email", "--by-id"],
         subscribe_return=_bulk_ok(),
     )
-    assert result.exit_code != 0
+    assert result.exit_code == 1
 
 
 def test_channel_subscribe_ambiguity_error_exits_1() -> None:
@@ -1179,17 +1181,19 @@ def test_channel_subscribe_numeric_channel_name_treated_as_name() -> None:
 
 
 def test_channel_subscribe_channel_without_users_errors() -> None:
-    """A single positional (channel only) with no USER args is rejected.
+    """A single positional (channel only) with no USER args exits with code 1.
 
     The contract requires at least one USER positional whenever
-    --channel-id is absent. Click parses ['general'] as a single
-    positional → the CLI sees one entry, no USERs, and aborts.
+    ``--channel-id`` is absent. Click parses ``['general']`` as a single
+    positional → the CLI sees one entry, no USERs, and aborts via
+    ``typer.Exit(1)`` (NOT Click's default 2 for usage errors), per
+    the cli-commands.md contract.
     """
     result, _ = _invoke_subscribe(
         ["general", "--by-email"],
         subscribe_return=_bulk_ok(),
     )
-    assert result.exit_code != 0
+    assert result.exit_code == 1
 
 
 def test_channel_subscribe_channel_id_with_zero_users_errors() -> None:
@@ -1273,24 +1277,6 @@ def test_channel_subscribe_json_channel_id_not_found() -> None:
     assert payload["status"] == "error"
     assert payload["channel_id"] is None
     assert payload["operation"] == "subscribe"
-
-
-def test_channel_subscribe_exit_code_one_on_no_identifier() -> None:
-    """Per contract, missing identifier flag exits 1 (not Click's default 2)."""
-    result, _ = _invoke_subscribe(
-        ["general", "bob@example.com"],
-        subscribe_return=_bulk_ok(),
-    )
-    assert result.exit_code == 1
-
-
-def test_channel_subscribe_exit_code_one_on_missing_users() -> None:
-    """Per contract, channel-only-no-USERs exits 1 (not Click's default 2)."""
-    result, _ = _invoke_subscribe(
-        ["general", "--by-email"],
-        subscribe_return=_bulk_ok(),
-    )
-    assert result.exit_code == 1
 
 
 def test_channel_subscribe_json_user_resolution_error_keeps_channel_context() -> None:

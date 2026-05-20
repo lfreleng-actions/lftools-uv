@@ -35,7 +35,6 @@ from tabulate import tabulate
 from lftools_uv.api.endpoints.zulip import (
     ZulipAmbiguityError,
     ZulipError,
-    ZulipNotFoundError,
     get_client,
     list_channels,
     list_groups,
@@ -680,17 +679,23 @@ def channel_subscribe(
     # accurate channel context:
     #   Stage 1 — resolve the channel. If this fails, channel_id MUST be
     #             None per FR-008 / data-model.md.
-    #   Stage 2 — call subscribe_users (which will re-resolve internally,
-    #             but now we have authoritative channel context to thread
-    #             into any --json error payload for failures that happen
-    #             *after* the channel resolved).
+    #   Stage 2 — call subscribe_users with _resolved_stream=stream so it
+    #             skips the redundant internal resolve_channel call. We
+    #             still wrap it in try/except to thread the resolved
+    #             channel context into any --json error payload for
+    #             failures that happen *after* the channel resolved
+    #             (user resolution, ambiguity, server errors).
     try:
         client = get_client(zuliprc=options.get("zuliprc"))
         if isinstance(channel_arg, int):
             stream = resolve_channel(client, channel_id=channel_arg, include_archived=include_archived)
         else:
             stream = resolve_channel(client, name=channel_arg, include_archived=include_archived)
-    except ZulipNotFoundError as exc:
+    except ZulipError as exc:
+        # Per FR-008, --json errors are structured. ``channel_id`` is
+        # ``None`` because the channel never resolved (this includes
+        # ZulipNotFoundError on the channel itself as well as any other
+        # ZulipError raised during client setup or channel lookup).
         if options.get("json_output"):
             channel_name_str = channel_arg if isinstance(channel_arg, str) else ""
             error_payload = bulk_mutation_result(
@@ -702,8 +707,6 @@ def channel_subscribe(
             )
             emit_json(error_payload)
             raise typer.Exit(code=1) from exc
-        raise handle_zulip_error(exc) from exc
-    except ZulipError as exc:
         raise handle_zulip_error(exc) from exc
 
     resolved_channel_id = stream.get("stream_id") if isinstance(stream, dict) else None
