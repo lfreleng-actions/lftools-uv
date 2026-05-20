@@ -663,6 +663,25 @@ def test_list_subscribers_requires_one_target() -> None:
     with pytest.raises(ZulipValidationError):
         _ = list_subscribers(client, name="general", channel_id=1)
 
+def test_list_subscribers_rejects_non_numeric_id() -> None:
+    """Non-integer subscriber ids must raise ZulipAPIError, not be skipped."""
+    from lftools_uv.api.endpoints.zulip import list_subscribers
+
+    client = mock.MagicMock()
+
+    def side_effect(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
+        if url == "streams" and method == "GET":
+            return {"result": "success", "streams": SUBS_STREAMS}
+        if url == "streams/1/members" and method == "GET":
+            return {"result": "success", "subscribers": [10, "not-a-number", 20]}
+        raise AssertionError(f"unexpected endpoint: {method} {url}")
+
+    client.call_endpoint.side_effect = side_effect
+    client.get_members.return_value = {"result": "success", "members": SUBS_MEMBERS}
+
+    with pytest.raises(ZulipAPIError, match="Malformed subscriber id"):
+        _ = list_subscribers(client, name="general")
+
 # ---------------------------------------------------------------------------
 # T025 — list_users API
 # ---------------------------------------------------------------------------

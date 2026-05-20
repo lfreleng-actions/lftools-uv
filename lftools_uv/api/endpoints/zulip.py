@@ -793,8 +793,8 @@ def list_subscribers(
     for raw_id in subscriber_ids:
         try:
             uid = int(raw_id)
-        except (TypeError, ValueError):  # pragma: no cover - defensive
-            continue
+        except (TypeError, ValueError) as exc:
+            raise ZulipAPIError(f"Malformed subscriber id in payload: {raw_id!r}") from exc
         member_record = by_id.get(uid)
         if member_record is None:
             enriched.append({"user_id": uid, "full_name": None, "email": None})
