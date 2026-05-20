@@ -1229,3 +1229,124 @@ def subscribe_users(
         "results": results,
         "errors": errors,
     }
+
+
+# Subscription mutations (US6 — unsubscribe)
+# ---------------------------------------------------------------------------
+
+
+def unsubscribe_users(
+    client: Any,
+    users: Iterable[str],
+    *,
+    channel: str | None = None,
+    channel_id: int | None = None,
+    id_mode: IdMode,
+    include_archived: bool = False,
+) -> dict[str, Any]:
+    """Unsubscribe one or more users from a channel.
+
+    Resolves the channel target (by name or numeric id) and the user
+    identifiers (per ``id_mode``), then calls the Zulip
+    ``DELETE /users/me/subscriptions`` endpoint. The return value is a
+    bulk :class:`MutationResult`-shaped dict:
+
+    .. code-block:: python
+
+       {
+           "status": "success" | "partial" | "error",
+           "channel_id": int,
+           "channel_name": str,
+           "operation": "unsubscribe",
+           "results": [
+               {"user": "<identifier>", "status": "unsubscribed"},
+               {"user": "<identifier>", "status": "not_subscribed"},
+           ],
+           "errors": [],
+       }
+
+    The Zulip server returns ``removed`` for users who were unsubscribed
+    and ``not_removed`` for users who were not subscribed in the first
+    place — the latter is reported as a ``not_subscribed`` no-op,
+    consistent with the CLI contract "exit 0 = all succeeded (including
+    no-ops)".
+    """
+    if (channel is None) == (channel_id is None):
+        raise ZulipValidationError("unsubscribe_users requires exactly one of 'channel' or 'channel_id'")
+    user_list = list(users)
+    if not user_list:
+        raise ZulipValidationError("unsubscribe_users requires at least one user")
+
+    target = resolve_channel(
+        client,
+        name=channel,
+        channel_id=channel_id,
+        include_archived=include_archived,
+    )
+    resolved_target_id = target.get("stream_id")
+    resolved_target_name = str(target.get("name", ""))
+
+    resolved_users = resolve_users(client, user_list, mode=id_mode)
+
+    principals: list[Any]
+    if id_mode == "id":
+        principals = [int(u["user_id"]) for u in resolved_users]
+    else:
+        # For both name- and email-mode lookups we send delivery_email
+        # (falling back to ``email``) as principals so that the server
+        # can match against the channel's subscriber list. Zulip
+        # principals accept emails or user IDs interchangeably.
+        principals = [u.get("delivery_email") or u.get("email") for u in resolved_users]
+
+    try:
+        response = client.call_endpoint(
+            url="users/me/subscriptions",
+            method="DELETE",
+            request={
+                "subscriptions": [resolved_target_name],
+                "principals": principals,
+            },
+        )
+    except Exception as exc:  # pragma: no cover - network errors
+        raise ZulipAPIError(f"Failed to unsubscribe users: {exc}") from exc
+
+    if not isinstance(response, dict) or response.get("result") != "success":
+        msg = (response or {}).get("msg") if isinstance(response, dict) else None
+        raise ZulipAPIError(f"Unexpected unsubscribe response: {msg or response!r}")
+
+    removed_set = {str(item) for item in response.get("removed", []) or []}
+    not_removed_set = {str(item) for item in response.get("not_removed", []) or []}
+
+    results: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+    for original, _resolved, principal in zip(user_list, resolved_users, principals, strict=True):
+        principal_str = str(principal)
+        if principal_str in removed_set:
+            results.append({"user": original, "status": "unsubscribed"})
+        elif principal_str in not_removed_set:
+            results.append({"user": original, "status": "not_subscribed"})
+        else:
+            # Neither list mentioned this principal — treat as an error
+            # so the operator notices an unexpected server response.
+            errors.append(
+                {
+                    "user": original,
+                    "error": "Server did not report an outcome for this user",
+                }
+            )
+
+    if errors and not results:
+        status = "error"
+    elif errors:
+        status = "partial"
+    else:
+        status = "success"
+
+    return {
+        "status": status,
+        "channel_id": resolved_target_id,
+        "channel_name": resolved_target_name,
+        "operation": "unsubscribe",
+        "results": results,
+        "errors": errors,
+    }
