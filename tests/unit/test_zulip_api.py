@@ -2612,6 +2612,17 @@ def test_archive_channel_requires_name_or_id() -> None:
         _ = archive_channel(client, "   ")
 
 
+def test_archive_channel_rejects_non_positive_id() -> None:
+    """Channel ids must be positive integers."""
+    from lftools_uv.api.endpoints.zulip import archive_channel
+
+    client = _archive_client([], [])
+    with pytest.raises(ZulipValidationError, match="positive channel id"):
+        _ = archive_channel(client, 0)
+    with pytest.raises(ZulipValidationError, match="positive channel id"):
+        _ = archive_channel(client, -3)
+
+
 def test_archive_channel_already_deactivated_server_response() -> None:
     """A STREAM_DEACTIVATED server response is treated as idempotent success."""
     from lftools_uv.api.endpoints.zulip import archive_channel

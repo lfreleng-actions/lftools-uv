@@ -1870,6 +1870,8 @@ def archive_channel(
     if isinstance(channel, bool) or channel is None:
         raise ZulipValidationError("archive_channel requires a channel name or id")
     if isinstance(channel, int):
+        if channel <= 0:
+            raise ZulipValidationError(f"archive_channel requires a positive channel id (got {channel})")
         target = resolve_channel(client, channel_id=channel, include_archived=include_archived)
     elif isinstance(channel, str):
         channel_name = channel.strip()
