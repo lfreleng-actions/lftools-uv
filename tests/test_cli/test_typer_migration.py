@@ -114,7 +114,12 @@ class TestTyperUtilsPassgen:
         result = self.runner.invoke(utils_app, ["passgen", "-5"])
         # Negative numbers cause argument parsing errors (exit code 2)
         assert result.exit_code == 2
-        assert_in_output("No such option: -5", result.stderr)
+        # Click's error message format has varied across versions:
+        #   older: "No such option: -5"
+        #   newer: "No such option '-5'."
+        # Match both by asserting on the stable substrings.
+        assert_in_output("No such option", result.stderr)
+        assert_in_output("-5", result.stderr)
 
     def test_passgen_invalid_length_too_large(self):
         """Test passgen with invalid length (too large)."""
