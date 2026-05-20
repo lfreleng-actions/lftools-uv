@@ -697,16 +697,27 @@ def _normalize_user(member: dict[str, Any]) -> dict[str, Any]:
 
     Matches the schema documented in ``contracts/cli-commands.md`` for
     ``zulip user list``: ``user_id``, ``full_name``, ``email``,
-    ``is_bot``, ``is_active``. String fields are coerced to ``str`` so
-    that ``None`` and other non-string payloads cannot break tabulated
-    output downstream.
+    ``is_bot``, ``is_active``.
+
+    Behavioural notes:
+
+    * ``full_name`` / ``email`` are coerced via ``str(...)``; only an
+      explicit ``None`` (or missing key) collapses to ``""`` so that
+      legitimate falsy-but-stringifiable values are preserved.
+    * ``user_id`` is required and validated to be an ``int``; the
+      Zulip API guarantees this, so a missing or non-numeric value
+      indicates a malformed payload and raises
+      :class:`ZulipAPIError`.
     """
-    full_name = member.get("full_name") or ""
-    email = member.get("email") or ""
+    user_id = member.get("user_id")
+    if not isinstance(user_id, int):
+        raise ZulipAPIError(f"Malformed user payload: missing/invalid user_id in {member!r}")
+    full_name = member.get("full_name")
+    email = member.get("email")
     return {
-        "user_id": member.get("user_id"),
-        "full_name": str(full_name),
-        "email": str(email),
+        "user_id": user_id,
+        "full_name": "" if full_name is None else str(full_name),
+        "email": "" if email is None else str(email),
         "is_bot": bool(member.get("is_bot", False)),
         "is_active": bool(member.get("is_active", True)),
     }

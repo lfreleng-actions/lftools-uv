@@ -299,17 +299,19 @@ def user_list(
         emit_json({"users": users})
         return
 
-    headers = ["User ID", "Full Name", "Email"]
+    headers = ["Full Name", "Email", "User ID"]
     if include_bots:
         headers.append("Bot")
     if include_deactivated:
-        headers.append("Active")
+        headers.append("Deactivated")
     rows: list[list[Any]] = []
     for user in users:
-        row: list[Any] = [user["user_id"], user["full_name"], user["email"]]
+        row: list[Any] = [user["full_name"], user["email"], user["user_id"]]
         if include_bots:
             row.append("yes" if user["is_bot"] else "no")
         if include_deactivated:
-            row.append("yes" if user["is_active"] else "no")
+            # The contract names the column "Deactivated" so that a
+            # "yes" cell consistently flags the abnormal state.
+            row.append("yes" if not user["is_active"] else "no")
         rows.append(row)
     emit_table(rows, headers)

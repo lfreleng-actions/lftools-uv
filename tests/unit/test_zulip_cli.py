@@ -354,12 +354,33 @@ def test_user_list_table_default(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = CliRunner()
     result = runner.invoke(zulip_app, ["user", "list"])
     assert result.exit_code == 0, result.stdout
+    # Header order matches contracts/cli-commands.md: Full Name, Email, User ID.
+    assert "Full Name" in result.stdout
+    assert "Email" in result.stdout
+    assert "User ID" in result.stdout
+    assert result.stdout.index("Full Name") < result.stdout.index("Email") < result.stdout.index("User ID")
+    # Optional columns are omitted unless the corresponding flag is set.
+    assert "Bot" not in result.stdout
+    assert "Deactivated" not in result.stdout
     assert "Alice Smith" in result.stdout
     assert "alice@example.com" in result.stdout
     assert "10" in result.stdout
     # Bots and deactivated users are excluded by default.
     assert "Bob Jones" not in result.stdout
     assert "Welcome Bot" not in result.stdout
+
+
+def test_user_list_table_optional_columns(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--include-bots`` / ``--include-deactivated`` add labeled columns."""
+    _patched_client(monkeypatch, CLI_MEMBERS)
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        ["user", "list", "--include-bots", "--include-deactivated"],
+    )
+    assert result.exit_code == 0, result.stdout
+    assert "Bot" in result.stdout
+    assert "Deactivated" in result.stdout
 
 
 def test_user_list_json_envelope(monkeypatch: pytest.MonkeyPatch) -> None:

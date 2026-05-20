@@ -585,7 +585,7 @@ def test_list_users_empty_list() -> None:
 
 
 def test_list_users_coerces_str_fields() -> None:
-    """Non-string ``full_name``/``email`` values are coerced to ``str``."""
+    """``None`` ``full_name``/``email`` values collapse to ``""``."""
     members = [
         {
             "user_id": 1,
@@ -599,6 +599,31 @@ def test_list_users_coerces_str_fields() -> None:
     users = list_users(client)
     assert users[0]["full_name"] == ""
     assert users[0]["email"] == ""
+
+
+def test_list_users_preserves_str_zero_like_values() -> None:
+    """Falsy-but-stringifiable values (e.g. ``"0"``) survive normalization."""
+    members = [
+        {
+            "user_id": 7,
+            "full_name": "0",
+            "email": "0",
+            "is_bot": False,
+            "is_active": True,
+        },
+    ]
+    client = _members_client(members)
+    users = list_users(client)
+    assert users[0]["full_name"] == "0"
+    assert users[0]["email"] == "0"
+
+
+def test_list_users_rejects_missing_user_id() -> None:
+    """Members without a numeric ``user_id`` are a malformed payload."""
+    members = [{"full_name": "Mystery", "email": "m@x.example", "is_bot": False, "is_active": True}]
+    client = _members_client(members)
+    with pytest.raises(ZulipAPIError, match="user_id"):
+        _ = list_users(client)
 
 
 def test_list_users_propagates_api_errors() -> None:
