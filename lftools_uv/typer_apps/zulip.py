@@ -603,7 +603,14 @@ def group_list(
 
 
 def _resolve_id_mode(by_email: bool, by_id: bool, by_name: bool) -> Literal["email", "id", "name"]:
-    """Return the canonical id_mode string for the identifier flags."""
+    """Return the canonical id_mode string for the trio of identifier flags.
+
+    Emits a usage error and raises :class:`typer.Exit` with code ``1`` when
+    zero or more than one flag is provided. We deliberately avoid
+    :class:`typer.BadParameter` (which would exit with Click's default code
+    ``2``) so the CLI honours the cli-commands.md contract of ``0`` /``1``
+    exit codes only.
+    """
     chosen = [name for name, val in (("email", by_email), ("id", by_id), ("name", by_name)) if val]
     if len(chosen) == 0:
         emit_error("Specify exactly one of --by-email, --by-id, or --by-name")
@@ -617,8 +624,8 @@ def _resolve_id_mode(by_email: bool, by_id: bool, by_name: bool) -> Literal["ema
 @channel_app.command("subscribe")
 def channel_subscribe(
     ctx: typer.Context,
-    targets: list[str] = typer.Argument(
-        ...,
+    targets: list[str] | None = typer.Argument(
+        None,
         metavar="[CHANNEL] USER [USER...]",
         help=(
             "Channel name (when --channel-id is absent) followed by one or "
@@ -642,15 +649,20 @@ def channel_subscribe(
     # Split positional arguments per the contract:
     #   --channel-id present → all positionals are USERs.
     #   --channel-id absent  → first positional is channel name, rest are USERs.
-    # ``targets`` is declared as a required Typer argument with `...`, so
-    # Click rejects the zero-positional case before this body executes —
-    # we only need to disambiguate the "channel-only with no USERs" path.
+    # ``targets`` is declared as an optional Typer argument (default ``None``)
+    # rather than required (``...``) so we can validate "no arguments" cases
+    # ourselves and exit with code 1, honouring the cli-commands.md contract
+    # (Click's required-argument failure would otherwise exit 2).
+    targets_list: list[str] = list(targets or [])
     channel_arg: str | int
     if channel_id is not None:
+        if not targets_list:
+            emit_error("Provide at least one USER, or omit --channel-id and pass [CHANNEL] USER...")
+            raise typer.Exit(code=1)
         channel_arg = channel_id
-        user_idents = list(targets)
+        user_idents = targets_list
     else:
-        if len(targets) < 2:
+        if len(targets_list) < 2:
             # Contract says exit code 0/1, not 2 — use Exit(1) rather than
             # typer.BadParameter (which would exit 2 via Click).
             emit_error("Provide [CHANNEL] followed by at least one USER, or use --channel-id.")
@@ -658,8 +670,8 @@ def channel_subscribe(
         # Preserve the channel positional as a STRING — even if it looks
         # numeric (e.g. literally the channel named "123"). Callers that
         # want id-based resolution must use --channel-id.
-        channel_arg = targets[0]
-        user_idents = list(targets[1:])
+        channel_arg = targets_list[0]
+        user_idents = targets_list[1:]
 
     options = ctx.obj or {}
     try:

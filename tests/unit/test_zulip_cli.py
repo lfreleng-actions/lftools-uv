@@ -1174,15 +1174,17 @@ def test_channel_subscribe_channel_without_users_errors() -> None:
 def test_channel_subscribe_channel_id_with_zero_users_errors() -> None:
     """`--channel-id` with no USER positionals is a Click usage error.
 
-    With --channel-id, ALL positionals are interpreted as USERs (the
-    contract); zero USERs trips Click's required-argument check before
-    our body runs.
+    With ``--channel-id``, ALL positionals are interpreted as USERs (per
+    the contract). Zero USERs must exit with code ``1`` (the contract
+    documents exit codes 0/1 only); we explicitly route this through
+    :func:`typer.Exit` rather than letting Click's required-argument
+    check exit with code 2.
     """
     result, _ = _invoke_subscribe(
         ["--channel-id", "42", "--by-email"],
         subscribe_return=_bulk_ok(),
     )
-    assert result.exit_code != 0
+    assert result.exit_code == 1
 
 
 def test_channel_subscribe_include_archived_forwarded() -> None:
