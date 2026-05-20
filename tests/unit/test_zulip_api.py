@@ -1656,8 +1656,8 @@ def test_unsubscribe_users_not_subscribed_noop() -> None:
     assert payload["errors"] == []
 
 
-def test_unsubscribe_users_partial() -> None:
-    """A mix of removed + not_removed is still a success (all exits clean)."""
+def test_unsubscribe_users_mixed_removed_and_not_removed_is_success() -> None:
+    """A mix of removed + not_removed (no errors) is overall success."""
     client = _unsubscribe_client(
         ACTIVE_STREAMS,
         MEMBERS,
@@ -1678,6 +1678,69 @@ def test_unsubscribe_users_partial() -> None:
         "bob@example.com": "not_subscribed",
     }
     assert payload["errors"] == []
+
+
+def test_unsubscribe_users_partial() -> None:
+    """A mix of resolvable users + an unknown identifier yields partial.
+
+    The unknown identifier is captured into ``errors`` instead of
+    aborting the whole call, while the resolvable user is still sent
+    to the server. Overall status is ``partial`` because we have both
+    a successful result and an error.
+    """
+    client = _unsubscribe_client(
+        ACTIVE_STREAMS,
+        MEMBERS,
+        removed=["bob@example.com"],
+        not_removed=[],
+    )
+    payload = unsubscribe_users(
+        client,
+        channel="general",
+        users=["bob@example.com", "ghost@example.com"],
+        id_mode="email",
+    )
+    assert payload["status"] == "partial"
+    assert payload["results"] == [
+        {"user": "bob@example.com", "status": "unsubscribed"},
+    ]
+    assert len(payload["errors"]) == 1
+    err = payload["errors"][0]
+    assert err["user"] == "ghost@example.com"
+    assert "ghost@example.com" in err["error"]
+
+    # The server-side DELETE call must only include the principal for
+    # the successfully-resolved user.
+    delete_calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
+    assert delete_calls, "expected an unsubscribe DELETE call"
+    assert delete_calls[0].kwargs["request"]["principals"] == ["bob@example.com"]
+
+
+def test_unsubscribe_users_all_unknown_is_error() -> None:
+    """When every identifier fails to resolve, status is ``error`` and the
+    DELETE endpoint is never called.
+    """
+    client = _unsubscribe_client(
+        ACTIVE_STREAMS,
+        MEMBERS,
+        removed=[],
+        not_removed=[],
+    )
+    payload = unsubscribe_users(
+        client,
+        channel="general",
+        users=["ghost@example.com", "phantom@example.com"],
+        id_mode="email",
+    )
+    assert payload["status"] == "error"
+    assert payload["results"] == []
+    assert {e["user"] for e in payload["errors"]} == {
+        "ghost@example.com",
+        "phantom@example.com",
+    }
+    # No DELETE call should have been issued because no user resolved.
+    delete_calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
+    assert not delete_calls, "DELETE should not be called when no user resolved"
 
 
 def test_unsubscribe_users_by_id_passes_principals_as_ints() -> None:
