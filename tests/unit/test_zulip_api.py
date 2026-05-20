@@ -36,6 +36,7 @@ from lftools_uv.api.endpoints.zulip import (
     ZulipLockoutError,
     ZulipNotFoundError,
     ZulipValidationError,
+    archive_channel,
     check_feature_level,
     get_client,
     get_server_feature_level,
@@ -2521,3 +2522,89 @@ def test_update_channel_web_public_requires_spectator_access() -> None:
     with pytest.raises(ZulipValidationError) as exc_info:
         _ = update_channel(client, name="general", channel_type="web-public")
     assert "spectator" in str(exc_info.value).lower()
+
+
+# T053 — archive_channel (US9)
+# ---------------------------------------------------------------------------
+
+
+def _archive_client(
+    active: list[dict[str, Any]],
+    archived: list[dict[str, Any]],
+    *,
+    delete_response: dict[str, Any] | None = None,
+    delete_error: Exception | None = None,
+) -> Any:
+    """Return a client whose stream listings and DELETE responses are mocked.
+
+    GET /streams returns ``active`` or ``archived`` per the
+    ``include_archived`` request flag. DELETE /streams/{id} returns the
+    configured ``delete_response`` (or raises ``delete_error``).
+    """
+    client = mock.MagicMock()
+    delete_calls: list[dict[str, Any]] = []
+    client.delete_calls = delete_calls
+
+    def side_effect(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
+        if method == "GET" and url == "streams":
+            if request and request.get("include_archived"):
+                return {"result": "success", "streams": archived}
+            return {"result": "success", "streams": active}
+        if method == "DELETE" and url.startswith("streams/"):
+            delete_calls.append({"url": url, "method": method, "request": request})
+            if delete_error is not None:
+                raise delete_error
+            return delete_response or {"result": "success"}
+        raise AssertionError(f"unexpected call: {method} {url}")
+
+    client.call_endpoint.side_effect = side_effect
+    return client
+
+
+def test_archive_channel_success() -> None:
+    """Archiving an active channel calls DELETE and returns success."""
+    active = [{"stream_id": 1, "name": "old-project", "is_archived": False}]
+    client = _archive_client(active, active)
+    result = archive_channel(client, "old-project")
+    assert result["status"] == "success"
+    assert result["channel_id"] == 1
+    assert result["channel_name"] == "old-project"
+    assert result["operation"] == "archive"
+    assert client.delete_calls == [{"url": "streams/1", "method": "DELETE", "request": None}]
+
+
+def test_archive_channel_by_id() -> None:
+    """Archiving by channel_id resolves and deletes the right stream."""
+    active = [{"stream_id": 7, "name": "deprecated", "is_archived": False}]
+    client = _archive_client(active, active)
+    result = archive_channel(client, 7)
+    assert result["channel_id"] == 7
+    assert result["channel_name"] == "deprecated"
+    assert client.delete_calls[0]["url"] == "streams/7"
+
+
+def test_archive_channel_already_archived_is_noop() -> None:
+    """An already-archived channel returns success without calling DELETE."""
+    active: list[dict[str, Any]] = []
+    archived = [{"stream_id": 99, "name": "gone", "is_archived": True}]
+    client = _archive_client(active, archived)
+    result = archive_channel(client, "gone", include_archived=True)
+    assert result["status"] == "success"
+    assert result["channel_id"] == 99
+    assert result["channel_name"] == "gone"
+    assert result["operation"] == "archive"
+    assert client.delete_calls == []
+
+
+def test_archive_channel_not_found_propagates() -> None:
+    """A missing channel raises ZulipNotFoundError."""
+    client = _archive_client([], [])
+    with pytest.raises(ZulipNotFoundError):
+        _ = archive_channel(client, "ghost")
+
+
+def test_archive_channel_requires_name_or_id() -> None:
+    """``target`` must be a non-empty string or a positive int."""
+    client = _archive_client([], [])
+    with pytest.raises(ZulipValidationError):
+        _ = archive_channel(client, "")

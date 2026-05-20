@@ -38,6 +38,7 @@ from lftools_uv.api.endpoints.zulip import (
     TopicPolicy,
     ZulipAmbiguityError,
     ZulipError,
+    archive_channel,
     get_client,
     list_channels,
     list_groups,
@@ -1264,3 +1265,66 @@ def channel_update(  # noqa: PLR0913 - CLI parity with contract
         emit_json(result)
     else:
         typer.echo(f"Updated channel '{result['channel_name']}' (id={result['channel_id']})")
+
+
+@channel_app.command("archive")
+def channel_archive(
+    ctx: typer.Context,
+    channel: str | None = typer.Argument(
+        None,
+        metavar="[CHANNEL]",
+        help="Channel name (mutually exclusive with --channel-id).",
+    ),
+    channel_id: int | None = typer.Option(
+        None,
+        "--channel-id",
+        help="Target the channel by numeric stream ID.",
+    ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        help="Confirm archival (required).",
+    ),
+    include_archived: bool = typer.Option(
+        False,
+        "--include-archived",
+        help="Search archived channels when resolving the target.",
+    ),
+) -> None:
+    """Archive (deactivate) a Zulip channel.
+
+    Requires ``--yes`` to perform the destructive operation. Resolves
+    the channel by name (positional) or by numeric ID (``--channel-id``)
+    — exactly one must be supplied. Idempotent: an already-archived
+    channel surfaced via ``--include-archived`` is reported as success
+    without a redundant API call.
+    """
+    # Validate target selection (exactly one of channel/--channel-id).
+    has_name = channel is not None and channel != ""
+    has_id = channel_id is not None
+    if has_name == has_id:
+        emit_error("Specify exactly one of [CHANNEL] or --channel-id.")
+        raise typer.Exit(code=1)
+
+    # --yes is mandatory for this destructive operation.
+    if not yes:
+        emit_error("Refusing to archive without --yes. Re-run with --yes to confirm.")
+        raise typer.Exit(code=1)
+
+    options = ctx.obj or {}
+    try:
+        client = get_client(zuliprc=options.get("zuliprc"))
+    except ZulipError as exc:
+        raise handle_zulip_error(exc) from exc
+
+    target: str | int = channel_id if has_id else channel  # type: ignore[assignment]
+
+    try:
+        result = archive_channel(client, target, include_archived=include_archived)
+    except ZulipError as exc:
+        raise handle_zulip_error(exc) from exc
+
+    if options.get("json_output"):
+        emit_json(result)
+    else:
+        typer.echo(f"Archived channel '{result['channel_name']}' (id={result['channel_id']}).")
