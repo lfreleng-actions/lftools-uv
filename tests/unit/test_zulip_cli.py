@@ -1178,3 +1178,25 @@ def test_channel_subscribe_channel_id_and_positional_channel_errors() -> None:
         subscribe_return=_bulk_ok(),
     )
     assert result.exit_code != 0
+
+
+def test_channel_subscribe_include_archived_forwarded() -> None:
+    """`--include-archived` is forwarded to subscribe_users as a kwarg."""
+    result, sub = _invoke_subscribe(
+        ["general", "bob@example.com", "--by-email", "--include-archived"],
+        subscribe_return=_bulk_ok(),
+    )
+    assert result.exit_code == 0, result.stderr
+    _, kwargs = sub.call_args
+    assert kwargs.get("include_archived") is True
+
+
+def test_channel_subscribe_include_archived_default_false() -> None:
+    """Without `--include-archived`, the flag defaults to False on the API."""
+    result, sub = _invoke_subscribe(
+        ["general", "bob@example.com", "--by-email"],
+        subscribe_return=_bulk_ok(),
+    )
+    assert result.exit_code == 0, result.stderr
+    _, kwargs = sub.call_args
+    assert kwargs.get("include_archived") is False

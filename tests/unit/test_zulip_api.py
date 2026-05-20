@@ -1246,10 +1246,15 @@ def test_subscribe_users_single_email_success() -> None:
     assert result["operation"] == "subscribe"
     assert result["results"] == [{"user": "bob@example.com", "status": "subscribed"}]
     assert result["errors"] == []
-    # Verify the request payload shape.
+    # Verify the request payload encodes the resolved channel name and
+    # the resolved user email exactly per the API contract.
     req = client._last_subscribe_request
-    assert "subscriptions" in req
-    assert "principals" in req
+    import json as _json
+
+    subs = _json.loads(req["subscriptions"])
+    principals = _json.loads(req["principals"])
+    assert subs == [{"name": "general"}]
+    assert principals == ["bob@example.com"]
 
 
 def test_subscribe_users_bulk_mixed_outcomes() -> None:
@@ -1325,8 +1330,15 @@ def test_subscribe_users_partial_unauthorized() -> None:
     assert "bob@example.com" in error_users
 
 
-def test_subscribe_users_by_id_uses_principals() -> None:
-    """``id_mode='id'`` sends numeric principals to the Zulip endpoint."""
+def test_subscribe_users_by_id_resolves_to_email_principals() -> None:
+    """``id_mode='id'`` resolves numeric IDs to user emails before send.
+
+    Zulip's stable identifier is the delivery_email, so even when the
+    caller supplies numeric user IDs, ``subscribe_users`` looks up the
+    resolved user object and sends its email as the principal. This
+    test asserts the actual JSON-encoded ``principals`` payload to
+    pin the contract down.
+    """
     client = _subscribe_client(
         _SUBSCRIBE_STREAMS,
         MEMBERS,
@@ -1339,6 +1351,12 @@ def test_subscribe_users_by_id_uses_principals() -> None:
     )
     result = subscribe_users(client, "general", ["200"], id_mode="id")
     assert result["status"] == "success"
+
+    import json as _json
+
+    principals = _json.loads(client._last_subscribe_request["principals"])
+    # User id 200 in MEMBERS maps to bob@example.com.
+    assert principals == ["bob@example.com"]
 
 
 def test_subscribe_users_invalid_user_raises() -> None:

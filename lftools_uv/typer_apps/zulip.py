@@ -637,10 +637,14 @@ def channel_subscribe(
     """Subscribe users to a channel (FR-005, US5)."""
     id_mode = _resolve_id_mode(by_email, by_id, by_name)
 
+    # Split positional arguments per the contract:
+    #   --channel-id present → all positionals are USERs.
+    #   --channel-id absent  → first positional is channel name, rest are USERs.
+    # ``targets`` is declared as a required Typer argument with `...`, so
+    # Click rejects the zero-positional case before this body executes —
+    # we only need to disambiguate the "channel-only with no USERs" path.
     channel_arg: str | int
     if channel_id is not None:
-        if not targets:
-            raise typer.BadParameter("At least one USER positional argument is required.")
         channel_arg = channel_id
         user_idents = list(targets)
     else:
