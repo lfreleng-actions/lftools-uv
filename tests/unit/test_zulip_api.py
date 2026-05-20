@@ -1436,3 +1436,45 @@ def test_subscribe_users_api_error_response() -> None:
     )
     with pytest.raises(ZulipAPIError):
         _ = subscribe_users(client, "general", ["bob@example.com"], id_mode="email")
+
+
+def test_subscribe_users_skips_resolve_channel_when_stream_supplied() -> None:
+    """`_resolved_stream=...` bypasses the internal resolve_channel call.
+
+    The CLI layer pre-resolves the channel so that ``--json`` error
+    payloads can include accurate channel context. Passing the already-
+    resolved stream into ``subscribe_users()`` MUST skip the duplicate
+    ``GET /streams`` round-trip that would otherwise occur.
+    """
+    from unittest import mock
+
+    from lftools_uv.api.endpoints.zulip import subscribe_users
+
+    client = mock.MagicMock()
+    client.get_members.return_value = {
+        "result": "success",
+        "members": [
+            {"user_id": 7, "email": "bob@example.com", "delivery_email": "bob@example.com", "full_name": "Bob"}
+        ],
+    }
+    client.call_endpoint.return_value = {
+        "result": "success",
+        "subscribed": {"bob@example.com": ["general"]},
+        "already_subscribed": {},
+        "unauthorized": [],
+    }
+
+    with mock.patch("lftools_uv.api.endpoints.zulip.resolve_channel") as resolve_chan:
+        result = subscribe_users(
+            client,
+            "general",
+            ["bob@example.com"],
+            id_mode="email",
+            _resolved_stream={"stream_id": 42, "name": "general"},
+        )
+
+    # resolve_channel MUST NOT be called when _resolved_stream is supplied.
+    resolve_chan.assert_not_called()
+    assert result["status"] == "success"
+    assert result["channel_id"] == 42
+    assert result["channel_name"] == "general"

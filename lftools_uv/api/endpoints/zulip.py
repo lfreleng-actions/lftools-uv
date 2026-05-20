@@ -1074,6 +1074,7 @@ def subscribe_users(
     *,
     id_mode: IdMode,
     include_archived: bool = False,
+    _resolved_stream: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Subscribe one or more users to a channel.
 
@@ -1085,6 +1086,13 @@ def subscribe_users(
     ``users`` is the iterable of identifiers (emails, ids, or full
     names depending on ``id_mode``). Up to :data:`MAX_SUBSCRIBE_USERS`
     identifiers per invocation are permitted (FR / spec cap of 50).
+
+    ``_resolved_stream`` is an internal optimisation: when the caller
+    has *already* resolved the channel (e.g. the CLI layer pre-resolves
+    so it can thread channel context into ``--json`` error payloads),
+    it may pass the resulting stream dict here to skip a redundant
+    ``GET /streams`` round-trip. Callers outside this package should
+    leave it as ``None``.
 
     Returns the standard bulk-mutation payload with ``status``,
     ``channel_id``, ``channel_name``, ``operation``, ``results``, and
@@ -1112,7 +1120,11 @@ def subscribe_users(
 
     if isinstance(channel, bool):  # bool is an int subclass — reject explicitly
         raise ZulipValidationError(f"Invalid channel argument: {channel!r}")
-    if isinstance(channel, int):
+    if _resolved_stream is not None:
+        # Caller (e.g. the CLI) has already resolved the channel. Trust
+        # the supplied dict and skip the redundant API round-trip.
+        stream = _resolved_stream
+    elif isinstance(channel, int):
         stream = resolve_channel(client, channel_id=channel, include_archived=include_archived)
     else:
         stream = resolve_channel(client, name=str(channel), include_archived=include_archived)

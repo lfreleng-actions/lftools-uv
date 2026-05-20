@@ -716,6 +716,7 @@ def channel_subscribe(
             user_idents,
             id_mode=id_mode,
             include_archived=include_archived,
+            _resolved_stream=stream,
         )
     except ZulipError as exc:
         # Channel was successfully resolved above; thread that context
