@@ -2459,8 +2459,14 @@ def test_update_channel_rejects_invalid_topic_policy() -> None:
 
 
 def test_update_channel_web_public_requires_spectator_access() -> None:
-    """``--type web-public`` errors when the realm has spectator access disabled."""
+    """``--type web-public`` errors when the realm has spectator access disabled.
+
+    Spectator-disabled is reported as a ``ZulipValidationError`` (with
+    an explicit message) rather than ``ZulipFeatureLevelError``: a
+    feature-level mismatch error would be misleading because the
+    server-side feature level is in fact sufficient.
+    """
     client = _update_client(feature_level=1000, spectator_access=False)
-    with pytest.raises(ZulipFeatureLevelError) as exc_info:
+    with pytest.raises(ZulipValidationError) as exc_info:
         _ = update_channel(client, name="general", channel_type="web-public")
-    assert "spectator" in exc_info.value.feature_name
+    assert "spectator" in str(exc_info.value).lower()

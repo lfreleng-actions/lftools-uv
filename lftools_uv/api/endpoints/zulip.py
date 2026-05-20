@@ -1644,27 +1644,39 @@ def update_channel(
     # Feature-level gating (FR-019)
     # ------------------------------------------------------------------
     if channel_type == "web-public":
-        check_feature_level(client, FEATURE_LEVELS["web-public"], feature_name="web-public")
-        # Spectator access must also be enabled on the realm (spec
-        # scenario 8). The setting is exposed by the server_settings
-        # endpoint as ``realm_enable_spectator_access`` on recent
-        # servers; defensively allow the transition when the field is
-        # absent (older servers leave enforcement to the API itself).
+        # Fetch server settings ONCE and reuse for both the feature-
+        # level check (by priming the cached level) and the spectator-
+        # access validation (spec scenario 8). Avoids two HTTP calls
+        # when the cache is cold.
         try:
             settings_response = client.get_server_settings()
         except Exception as exc:  # pragma: no cover - network errors
             raise ZulipAPIError(f"Failed to query server settings: {exc}") from exc
         if not isinstance(settings_response, dict) or settings_response.get("result") != "success":
             raise ZulipAPIError(f"Unexpected server-settings response: {settings_response!r}")
+        # Prime the feature-level cache so the following check_feature_level
+        # call does not issue a second HTTP request.
+        level_value = settings_response.get("zulip_feature_level")
+        if isinstance(level_value, int):
+            try:
+                client._lftools_feature_level = level_value
+            except AttributeError:  # pragma: no cover - defensive
+                pass
+        check_feature_level(client, FEATURE_LEVELS["web-public"], feature_name="web-public")
         # ``realm_enable_spectator_access`` is present on recent Zulip
         # servers; defensively allow the transition when the field is
         # absent (older servers leave enforcement to the API itself).
         spectator = settings_response.get("realm_enable_spectator_access")
         if spectator is False:
-            raise ZulipFeatureLevelError(
-                required=FEATURE_LEVELS["web-public"],
-                actual=get_server_feature_level(client),
-                feature_name="web-public (spectator access disabled on realm)",
+            # Use ZulipValidationError (not ZulipFeatureLevelError) so
+            # the user sees the actual cause — feature-level error
+            # messages are formatted as version mismatches and would
+            # be misleading when the realm has explicitly disabled
+            # spectator access.
+            raise ZulipValidationError(
+                "Cannot convert channel to web-public: spectator access "
+                "is disabled on this Zulip realm (realm_enable_spectator_access=false). "
+                "Enable spectator access in the realm settings first."
             )
     if topic_policy is not None:
         check_feature_level(client, FEATURE_LEVELS["topic-policy"], feature_name="topic-policy")

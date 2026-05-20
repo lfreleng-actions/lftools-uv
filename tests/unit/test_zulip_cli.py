@@ -2099,8 +2099,13 @@ def test_channel_update_can_remove_subscribers_group(monkeypatch: pytest.MonkeyP
 
 
 def test_channel_update_no_settings_errors(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Invocation with no setting flags errors via ZulipValidationError."""
-    _patch_update(
+    """No-settings invocation fails locally before reaching the API.
+
+    The CLI performs an "at least one setting must change" check
+    before dispatching to ``update_channel``; this test verifies the
+    local guard fires (the side-effect set on the mock is unused).
+    """
+    fake = _patch_update(
         monkeypatch,
         side_effect=ZulipValidationError("at least one setting must change"),
     )
@@ -2109,6 +2114,8 @@ def test_channel_update_no_settings_errors(monkeypatch: pytest.MonkeyPatch) -> N
     assert result.exit_code != 0
     out = result.output + (result.stderr or "")
     assert "at least one" in out
+    # The CLI guard should short-circuit BEFORE the API layer.
+    assert fake.call_count == 0
 
 
 def test_channel_update_lockout_error_surfaces(monkeypatch: pytest.MonkeyPatch) -> None:
