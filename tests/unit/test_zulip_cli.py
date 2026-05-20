@@ -2351,4 +2351,6 @@ def test_channel_archive_by_channel_id() -> None:
     assert result.exit_code == 0, result.output
     archive_mock = result.archive_mock
     args, kwargs = archive_mock.call_args
-    assert 42 in args or kwargs.get("channel") == 42
+    # archive_channel(client, target, include_archived=...) — target is
+    # positional arg index 1 (or supplied as the ``channel`` kwarg).
+    assert (len(args) >= 2 and args[1] == 42) or kwargs.get("channel") == 42

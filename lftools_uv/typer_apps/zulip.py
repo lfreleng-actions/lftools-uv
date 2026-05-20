@@ -1300,7 +1300,8 @@ def channel_archive(
     without a redundant API call.
     """
     # Validate target selection (exactly one of channel/--channel-id).
-    has_name = channel is not None and channel != ""
+    channel_name = channel.strip() if isinstance(channel, str) else None
+    has_name = bool(channel_name)
     has_id = channel_id is not None
     if has_name == has_id:
         emit_error("Specify exactly one of [CHANNEL] or --channel-id.")
@@ -1317,7 +1318,13 @@ def channel_archive(
     except ZulipError as exc:
         raise handle_zulip_error(exc) from exc
 
-    target: str | int = channel_id if has_id else channel  # type: ignore[assignment]
+    target: str | int
+    if has_id:
+        assert channel_id is not None  # narrow for the type checker
+        target = channel_id
+    else:
+        assert channel_name is not None  # narrow for the type checker
+        target = channel_name
 
     try:
         result = archive_channel(client, target, include_archived=include_archived)

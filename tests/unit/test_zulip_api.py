@@ -2608,3 +2608,62 @@ def test_archive_channel_requires_name_or_id() -> None:
     client = _archive_client([], [])
     with pytest.raises(ZulipValidationError):
         _ = archive_channel(client, "")
+
+
+def test_archive_channel_already_deactivated_server_response() -> None:
+    """A STREAM_DEACTIVATED server response is treated as idempotent success."""
+    from lftools_uv.api.endpoints.zulip import archive_channel
+
+    active = [{"stream_id": 5, "name": "stale", "is_archived": False}]
+    client = _archive_client(
+        active,
+        active,
+        delete_response={
+            "result": "error",
+            "code": "STREAM_DEACTIVATED",
+            "msg": "Channel is deactivated.",
+        },
+    )
+    result = archive_channel(client, "stale")
+    assert result["status"] == "success"
+    assert result["channel_id"] == 5
+
+
+def test_archive_channel_unexpected_error_response() -> None:
+    """A non-success response that is not STREAM_DEACTIVATED raises ZulipAPIError."""
+    from lftools_uv.api.endpoints.zulip import ZulipAPIError, archive_channel
+
+    active = [{"stream_id": 6, "name": "boom", "is_archived": False}]
+    client = _archive_client(
+        active,
+        active,
+        delete_response={
+            "result": "error",
+            "code": "BAD_REQUEST",
+            "msg": "Insufficient permission.",
+        },
+    )
+    with pytest.raises(ZulipAPIError, match="Insufficient permission"):
+        _ = archive_channel(client, "boom")
+
+
+def test_archive_channel_malformed_non_dict_response() -> None:
+    """A non-dict DELETE response is treated as a hard API error."""
+    from lftools_uv.api.endpoints.zulip import ZulipAPIError, archive_channel
+
+    active = [{"stream_id": 7, "name": "weird", "is_archived": False}]
+    client = _archive_client(active, active, delete_response=None)
+    # The helper substitutes ``{"result": "success"}`` when delete_response
+    # is None, so use a sentinel instead by overriding the side effect.
+    bogus_calls: list[Any] = []
+
+    def side_effect(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
+        if method == "GET":
+            return {"result": "success", "streams": active}
+        bogus_calls.append((url, method))
+        return ["not", "a", "dict"]
+
+    client.call_endpoint.side_effect = side_effect
+    with pytest.raises(ZulipAPIError, match="Malformed archive response"):
+        _ = archive_channel(client, "weird")
+    assert bogus_calls == [("streams/7", "DELETE")]
