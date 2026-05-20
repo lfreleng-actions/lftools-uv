@@ -47,6 +47,7 @@ from lftools_uv.api.endpoints.zulip import (
     resolve_channel,
     subscribe_users,
     update_channel,
+    unarchive_channel,
     zulip_available,
 )
 
@@ -1333,3 +1334,66 @@ def channel_archive(
         emit_json(result)
     else:
         typer.echo(f"Archived channel '{result['channel_name']}' (id={result['channel_id']}).")
+
+
+@channel_app.command("unarchive")
+def channel_unarchive(
+    ctx: typer.Context,
+    channel: str | None = typer.Argument(
+        None,
+        help="Channel name (case-insensitive). Mutually exclusive with --channel-id.",
+        show_default=False,
+    ),
+    channel_id: int | None = typer.Option(
+        None,
+        "--channel-id",
+        help="Target channel by numeric id. Mutually exclusive with the positional name.",
+    ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        help="REQUIRED. Confirm reactivation of the channel.",
+    ),
+    include_archived: bool = typer.Option(
+        False,
+        "--include-archived",
+        help="Search archived channels (typically required to locate a previously archived target).",
+    ),
+) -> None:
+    """Reactivate (unarchive) a previously archived Zulip channel.
+
+    Requires explicit ``--yes`` confirmation. When the target channel is
+    archived you will typically also need ``--include-archived`` so that
+    the name/ID resolves; without it the CLI emits a helpful FR-018
+    message pointing at the flag.
+    """
+    # CLI-side validation of mutual exclusivity for cleaner errors than
+    # letting the API layer raise ZulipValidationError.
+    if channel is None and channel_id is None:
+        emit_error("Specify a channel name (positional) or --channel-id to identify the target.")
+        raise typer.Exit(code=2)
+    if channel is not None and channel_id is not None:
+        emit_error("Specify either a channel name (positional) or --channel-id, not both.")
+        raise typer.Exit(code=2)
+
+    if not yes:
+        emit_error("Refusing to unarchive without explicit confirmation. Re-run with --yes to proceed.")
+        raise typer.Exit(code=2)
+
+    options = ctx.obj or {}
+    try:
+        client = get_client(zuliprc=options.get("zuliprc"))
+        payload = unarchive_channel(
+            client,
+            channel=channel,
+            channel_id=channel_id,
+            include_archived=include_archived,
+        )
+    except ZulipError as exc:
+        raise handle_zulip_error(exc) from exc
+
+    if options.get("json_output"):
+        emit_json(payload)
+        return
+
+    typer.echo(f"Unarchived channel '{payload['channel_name']}' (id={payload['channel_id']}).")

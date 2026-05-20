@@ -1932,3 +1932,93 @@ def archive_channel(
         "channel_name": name,
         "operation": "archive",
     }
+
+# ---------------------------------------------------------------------------
+# Channel mutations — unarchive (US10)
+# ---------------------------------------------------------------------------
+
+
+def unarchive_channel(
+    client: Any,
+    channel: str | None = None,
+    *,
+    channel_id: int | None = None,
+    include_archived: bool = False,
+) -> dict[str, Any]:
+    """Reactivate (unarchive) an archived channel.
+
+    Resolves the target channel by name (case-insensitive) or numeric
+    ``channel_id``. When ``include_archived`` is ``True`` the archived
+    set is searched directly; when ``False`` and the channel exists
+    only in the archived set, :class:`ZulipNotFoundError` is raised
+    with the FR-018 advisory message suggesting ``--include-archived``.
+
+    Already-active channels are handled idempotently: the function
+    returns a success ``MutationResult`` without contacting the
+    reactivate endpoint, so retries are safe (FR-013 idempotency).
+
+    Returns the canonical ``MutationResult`` dict:
+    ``{"status": "success", "channel_id": int, "channel_name": str,
+    "operation": "unarchive"}``.
+
+    Raises:
+        ZulipValidationError: if neither/both of ``channel``/``channel_id``
+            are supplied.
+        ZulipFeatureLevelError: if the server's reported feature level
+            is below :data:`FEATURE_LEVELS`[``"unarchive"``].
+        ZulipNotFoundError: if the target channel cannot be located
+            (FR-018 message includes ``--include-archived`` hint when
+            the channel exists only in the archived set).
+        ZulipAPIError: if the Zulip server returns a non-success
+            reactivate response.
+    """
+    if (channel is None) == (channel_id is None):
+        raise ZulipValidationError("unarchive_channel requires exactly one of 'channel' or 'channel_id'")
+
+    check_feature_level(
+        client,
+        required_level=FEATURE_LEVELS["unarchive"],
+        feature_name="unarchive",
+    )
+
+    stream = resolve_channel(
+        client,
+        name=channel,
+        channel_id=channel_id,
+        include_archived=include_archived,
+    )
+
+    stream_id = stream.get("stream_id")
+    if not isinstance(stream_id, int):
+        raise ZulipAPIError(f"Resolved channel missing numeric stream_id: {stream!r}")
+    stream_name = str(stream.get("name", ""))
+
+    # Idempotent no-op: already-active channels skip the reactivate POST
+    # entirely so retries after a partial failure are safe.
+    if not stream.get("is_archived", False):
+        return {
+            "status": "success",
+            "channel_id": stream_id,
+            "channel_name": stream_name,
+            "operation": "unarchive",
+        }
+
+    try:
+        response = client.call_endpoint(
+            url=f"streams/{stream_id}/unarchive",
+            method="POST",
+            request={},
+        )
+    except Exception as exc:  # pragma: no cover - network errors
+        raise ZulipAPIError(f"Failed to unarchive channel {stream_name!r}: {exc}") from exc
+
+    if not isinstance(response, dict) or response.get("result") != "success":
+        msg = (response or {}).get("msg") if isinstance(response, dict) else None
+        raise ZulipAPIError(f"Failed to unarchive channel {stream_name!r}: {msg or response!r}")
+
+    return {
+        "status": "success",
+        "channel_id": stream_id,
+        "channel_name": stream_name,
+        "operation": "unarchive",
+    }

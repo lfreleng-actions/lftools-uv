@@ -48,6 +48,7 @@ from lftools_uv.api.endpoints.zulip import (
     resolve_users,
     subscribe_users,
     unsubscribe_users,
+    unarchive_channel,
     update_channel,
 )
 
@@ -2706,3 +2707,137 @@ def test_archive_channel_malformed_non_dict_response() -> None:
     with pytest.raises(ZulipAPIError, match="Malformed archive response"):
         _ = archive_channel(client, "weird")
     assert bogus_calls == [("streams/7", "DELETE")]
+
+# ---------------------------------------------------------------------------
+# T057 — Unarchive (reactivate) channel
+# ---------------------------------------------------------------------------
+
+
+def _unarchive_client(
+    *,
+    feature_level: int = 200,
+    active: list[dict[str, Any]] | None = None,
+    archived: list[dict[str, Any]] | None = None,
+    reactivate_response: dict[str, Any] | None = None,
+) -> Any:
+    """Return a mock client wired for ``unarchive_channel`` tests.
+
+    * ``server_settings`` returns the chosen ``feature_level``.
+    * ``streams`` GETs respond with ``active`` or ``archived`` based on
+      the ``include_archived`` request flag (matching the foundation
+      ``_fetch_streams`` contract).
+    * ``streams/<id>/unarchive`` POSTs return
+      ``reactivate_response`` when provided, else a success stub.
+    """
+    client = mock.MagicMock()
+    client.get_server_settings.return_value = {
+        "result": "success",
+        "zulip_feature_level": feature_level,
+    }
+
+    active_list = active if active is not None else []
+    archived_list = archived if archived is not None else []
+    default_reactivate = reactivate_response or {"result": "success"}
+
+    def side_effect(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
+        if url == "streams" and method == "GET":
+            if request and request.get("include_archived"):
+                return {"result": "success", "streams": archived_list}
+            return {"result": "success", "streams": active_list}
+        if url.startswith("streams/") and url.endswith("/unarchive") and method == "POST":
+            return default_reactivate
+        raise AssertionError(f"Unexpected call: {url} {method} {request!r}")
+
+    client.call_endpoint.side_effect = side_effect
+    return client
+
+
+def test_unarchive_channel_success_by_name() -> None:
+    """Reactivates an archived channel resolved via ``include_archived``."""
+    archived = [
+        {"stream_id": 99, "name": "old-channel", "is_archived": True},
+    ]
+    client = _unarchive_client(
+        active=[],
+        archived=archived,
+    )
+    result = unarchive_channel(client, channel="old-channel", include_archived=True)
+    assert result["status"] == "success"
+    assert result["channel_id"] == 99
+    assert result["channel_name"] == "old-channel"
+    assert result["operation"] == "unarchive"
+
+    # Verify the reactivate endpoint was called with the correct URL.
+    reactivate_calls = [
+        call for call in client.call_endpoint.call_args_list if call.kwargs.get("url", "").endswith("/unarchive")
+    ]
+    assert len(reactivate_calls) == 1
+    assert reactivate_calls[0].kwargs["url"] == "streams/99/unarchive"
+    assert reactivate_calls[0].kwargs["method"] == "POST"
+
+
+def test_unarchive_channel_already_active_is_noop() -> None:
+    """An already-active channel returns success without calling reactivate."""
+    active = [
+        {"stream_id": 1, "name": "general", "is_archived": False},
+    ]
+    client = _unarchive_client(active=active, archived=active)
+    result = unarchive_channel(client, channel="general")
+    assert result["status"] == "success"
+    assert result["channel_id"] == 1
+    assert result["operation"] == "unarchive"
+
+    # Reactivate endpoint must NOT have been hit for an already-active channel.
+    reactivate_calls = [
+        call for call in client.call_endpoint.call_args_list if call.kwargs.get("url", "").endswith("/unarchive")
+    ]
+    assert reactivate_calls == []
+
+
+def test_unarchive_channel_feature_level_too_low() -> None:
+    """A server below the unarchive feature level raises the canonical error."""
+    client = _unarchive_client(feature_level=10)
+    with pytest.raises(ZulipFeatureLevelError) as exc_info:
+        _ = unarchive_channel(client, channel="anything", include_archived=True)
+    assert exc_info.value.required == FEATURE_LEVELS["unarchive"]
+    assert "feature level" in str(exc_info.value)
+
+
+def test_unarchive_channel_by_id() -> None:
+    """The ``channel_id`` keyword targets a channel by its numeric id."""
+    archived = [{"stream_id": 42, "name": "archived-by-id", "is_archived": True}]
+    client = _unarchive_client(active=[], archived=archived)
+    result = unarchive_channel(client, channel_id=42, include_archived=True)
+    assert result["channel_id"] == 42
+    assert result["channel_name"] == "archived-by-id"
+    assert result["status"] == "success"
+
+
+def test_unarchive_channel_not_found_suggests_include_archived() -> None:
+    """When a channel exists archived but ``include_archived`` is False,
+    the helper bubbles up the FR-018 not-found error suggesting the flag."""
+    archived = [{"stream_id": 5, "name": "ghost", "is_archived": True}]
+    client = _unarchive_client(active=[], archived=archived)
+    with pytest.raises(ZulipNotFoundError, match="--include-archived"):
+        _ = unarchive_channel(client, channel="ghost")
+
+
+def test_unarchive_channel_requires_one_target() -> None:
+    """Exactly one of ``channel`` or ``channel_id`` is required."""
+    client = _unarchive_client()
+    with pytest.raises(ZulipValidationError):
+        _ = unarchive_channel(client)
+    with pytest.raises(ZulipValidationError):
+        _ = unarchive_channel(client, channel="x", channel_id=1)
+
+
+def test_unarchive_channel_server_error_propagates() -> None:
+    """A non-success reactivate response raises :class:`ZulipAPIError`."""
+    archived = [{"stream_id": 7, "name": "broken", "is_archived": True}]
+    client = _unarchive_client(
+        active=[],
+        archived=archived,
+        reactivate_response={"result": "error", "msg": "boom"},
+    )
+    with pytest.raises(ZulipAPIError, match="boom"):
+        _ = unarchive_channel(client, channel="broken", include_archived=True)
