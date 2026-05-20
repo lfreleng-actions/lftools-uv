@@ -221,7 +221,15 @@ def zulip_callback(
 # ---------------------------------------------------------------------------
 # US1 — channel list (T023)
 # ---------------------------------------------------------------------------
-
+#
+# NOTE: The ``channel`` sub-app is shared across the channel-scoped
+# user-story slices: US1 (channel list), US4 (channel create), US5
+# (channel subscribe), US6 (channel unsubscribe), and the remaining
+# US7-US10 channel commands. The first PR to land that touches a
+# channel command also lands this sub-app instantiation. If two PRs
+# instantiate the sub-app independently, the trivial merge conflict
+# on the ``channel_app = typer.Typer(...)`` line should be resolved
+# by keeping a single instance.
 
 channel_app = typer.Typer(
     name="channel",
@@ -886,16 +894,32 @@ def channel_unsubscribe(
             include_archived=include_archived,
         )
     except ZulipError as exc:
+        if options.get("json_output"):
+            # FR-008: mutation commands emit the canonical JSON schema
+            # even on error. ``channel_id`` is None when the failure
+            # happened before channel resolution succeeded; the channel
+            # name is echoed back from the user-supplied target so the
+            # operator can correlate the failure with their command.
+            error_payload = bulk_mutation_result(
+                operation="unsubscribe",
+                channel_id=channel_id,
+                channel_name=channel_name or "",
+                results=[],
+                errors=[{"user": None, "error": str(exc)}],
+            )
+            emit_json(error_payload)
+            raise typer.Exit(code=1) from exc
         raise handle_zulip_error(exc) from exc
 
     if options.get("json_output"):
         emit_json(payload)
-        if payload["status"] == "error":
-            raise typer.Exit(code=1)
-        return
+    else:
+        rows = [(item["user"], item["status"]) for item in payload["results"]]
+        rows.extend((item["user"], f"error: {item['error']}") for item in payload["errors"])
+        emit_table(rows, headers=["user", "status"])
 
-    rows = [(item["user"], item["status"]) for item in payload["results"]]
-    rows.extend((item["user"], f"error: {item['error']}") for item in payload["errors"])
-    emit_table(rows, headers=["user", "status"])
-    if payload["status"] == "error":
+    # Per the CLI contract, exit non-zero on ANY error condition. A
+    # ``partial`` status means some operations failed, so it must also
+    # produce a non-zero exit code alongside ``error``.
+    if payload["status"] in ("error", "partial"):
         raise typer.Exit(code=1)

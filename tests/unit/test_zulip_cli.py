@@ -1433,7 +1433,11 @@ def _invoke_unsubscribe(monkeypatch: pytest.MonkeyPatch, client: Any, args: list
     monkeypatch.setattr(zulip_mod, "get_client", lambda *a, **kw: client)
     monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
     runner = CliRunner()
-    return runner.invoke(zulip_app, ["channel", "unsubscribe", *args])
+    prefix: list[str] = []
+    if "--json" in args:
+        args = [arg for arg in args if arg != "--json"]
+        prefix.append("--json")
+    return runner.invoke(zulip_app, [*prefix, "channel", "unsubscribe", *args])
 
 
 def test_channel_unsubscribe_single_user(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1541,3 +1545,50 @@ def test_channel_unsubscribe_rejects_no_channel_target(monkeypatch: pytest.Monke
     client = _build_client(removed=[], not_removed=[])
     result = _invoke_unsubscribe(monkeypatch, client, ["--by-email"])
     assert result.exit_code != 0
+
+
+def test_channel_unsubscribe_partial_exits_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A ``partial`` outcome (some users in neither list) exits non-zero."""
+    # ``not_removed`` empty + ``removed`` missing alice -> alice reports
+    # as an error (server didn't acknowledge), producing partial status.
+    client = _build_client(removed=["bob@example.com"], not_removed=[])
+    result = _invoke_unsubscribe(
+        monkeypatch,
+        client,
+        [
+            "general",
+            "alice@example.com",
+            "bob@example.com",
+            "--by-email",
+            "--json",
+        ],
+    )
+    payload = _json.loads(result.stdout)
+    assert payload["status"] == "partial"
+    assert result.exit_code == 1
+
+
+def test_channel_unsubscribe_json_error_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When --json is requested and the API errors, emit JSON to stdout."""
+    # Empty members list -> resolve_users raises ZulipNotFoundError.
+    client = mock.MagicMock()
+
+    def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
+        if url == "streams" and method == "GET":
+            return {"result": "success", "streams": _STREAMS}
+        raise AssertionError(f"Unexpected endpoint: {method} {url}")
+
+    client.call_endpoint.side_effect = call_endpoint
+    client.get_members.return_value = {"result": "success", "members": []}
+
+    result = _invoke_unsubscribe(
+        monkeypatch,
+        client,
+        ["general", "ghost@example.com", "--by-email", "--json"],
+    )
+    assert result.exit_code == 1
+    payload = _json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["operation"] == "unsubscribe"
+    assert payload["channel_name"] == "general"
+    assert payload["errors"] and "ghost@example.com" in payload["errors"][0]["error"]
