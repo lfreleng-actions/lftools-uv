@@ -167,8 +167,6 @@ _LIST_RESPONSE = {
 
 def _patched_client(monkeypatch: pytest.MonkeyPatch, response: dict[str, Any]) -> mock.MagicMock:
     """Patch ``get_client`` and return the fake client used by tests."""
-    import lftools_uv.typer_apps.zulip as zulip_mod
-
     fake = mock.MagicMock()
     fake.call_endpoint.return_value = response
     monkeypatch.setattr(zulip_mod, "get_client", lambda **_kw: fake)
