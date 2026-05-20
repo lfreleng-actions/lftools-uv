@@ -35,10 +35,12 @@ from tabulate import tabulate
 from lftools_uv.api.endpoints.zulip import (
     ZulipAmbiguityError,
     ZulipError,
+    ZulipNotFoundError,
     get_client,
     list_channels,
     list_groups,
     list_users,
+    resolve_channel,
     subscribe_users,
     zulip_available,
 )
@@ -674,8 +676,40 @@ def channel_subscribe(
         user_idents = targets_list[1:]
 
     options = ctx.obj or {}
+    # Two-stage resolution so that --json error payloads can include
+    # accurate channel context:
+    #   Stage 1 — resolve the channel. If this fails, channel_id MUST be
+    #             None per FR-008 / data-model.md.
+    #   Stage 2 — call subscribe_users (which will re-resolve internally,
+    #             but now we have authoritative channel context to thread
+    #             into any --json error payload for failures that happen
+    #             *after* the channel resolved).
     try:
         client = get_client(zuliprc=options.get("zuliprc"))
+        if isinstance(channel_arg, int):
+            stream = resolve_channel(client, channel_id=channel_arg, include_archived=include_archived)
+        else:
+            stream = resolve_channel(client, name=channel_arg, include_archived=include_archived)
+    except ZulipNotFoundError as exc:
+        if options.get("json_output"):
+            channel_name_str = channel_arg if isinstance(channel_arg, str) else ""
+            error_payload = bulk_mutation_result(
+                operation="subscribe",
+                channel_id=None,
+                channel_name=channel_name_str,
+                results=[],
+                errors=[{"error": str(exc)}],
+            )
+            emit_json(error_payload)
+            raise typer.Exit(code=1) from exc
+        raise handle_zulip_error(exc) from exc
+    except ZulipError as exc:
+        raise handle_zulip_error(exc) from exc
+
+    resolved_channel_id = stream.get("stream_id") if isinstance(stream, dict) else None
+    resolved_channel_name = stream.get("name") if isinstance(stream, dict) else None
+
+    try:
         result = subscribe_users(
             client,
             channel_arg,
@@ -684,22 +718,22 @@ def channel_subscribe(
             include_archived=include_archived,
         )
     except ZulipError as exc:
-        # When --json is requested, emit a structured bulk-mutation error
-        # payload (channel_id=null, status="error", errors=[...]) so that
-        # callers can still parse the response programmatically. Otherwise
-        # fall back to the human-readable formatter.
+        # Channel was successfully resolved above; thread that context
+        # into the --json payload so consumers can correlate the error
+        # with the target stream even when the failure was downstream
+        # (e.g. user resolution, ambiguity, server error).
         if options.get("json_output"):
-            channel_name_str = channel_arg if isinstance(channel_arg, str) else None
-            # Per FR-008 / data-model.md, ``channel_id`` is ``None`` when the
-            # target channel could not be resolved — even if the caller
-            # supplied a numeric ``--channel-id`` (the ID didn't map to any
-            # real channel, so we don't echo it back as if it had).
+            err_entry: dict[str, Any] = {"error": str(exc)}
+            if isinstance(exc, ZulipAmbiguityError) and exc.matches:
+                # Surface the disambiguation candidates so --json consumers
+                # can prompt the operator with concrete choices.
+                err_entry["matches"] = exc.matches
             error_payload = bulk_mutation_result(
                 operation="subscribe",
-                channel_id=None,
-                channel_name=channel_name_str or "",
+                channel_id=resolved_channel_id if isinstance(resolved_channel_id, int) else None,
+                channel_name=resolved_channel_name if isinstance(resolved_channel_name, str) else "",
                 results=[],
-                errors=[{"error": str(exc)}],
+                errors=[err_entry],
             )
             emit_json(error_payload)
             raise typer.Exit(code=1) from exc

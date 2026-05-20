@@ -962,8 +962,19 @@ def test_channel_create_help_renders(monkeypatch: pytest.MonkeyPatch) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _invoke_subscribe(args, subscribe_return=None, subscribe_side_effect=None):
-    """Invoke ``zulip channel subscribe`` with API helpers patched."""
+def _invoke_subscribe(
+    args,
+    subscribe_return=None,
+    subscribe_side_effect=None,
+    resolve_channel_return=None,
+    resolve_channel_side_effect=None,
+):
+    """Invoke ``zulip channel subscribe`` with API helpers patched.
+
+    The CLI pre-resolves the channel so ``--json`` error payloads can
+    include accurate channel context. Tests patch both ``resolve_channel``
+    and ``subscribe_users``.
+    """
     runner = CliRunner()
     command_args = list(args)
     global_args: list[str] = []
@@ -972,10 +983,18 @@ def _invoke_subscribe(args, subscribe_return=None, subscribe_side_effect=None):
         global_args.append("--json")
     with (
         mock.patch("lftools_uv.typer_apps.zulip.get_client") as get_client,
+        mock.patch("lftools_uv.typer_apps.zulip.resolve_channel") as resolve_chan,
         mock.patch("lftools_uv.typer_apps.zulip.subscribe_users") as subscribe,
         mock.patch("lftools_uv.typer_apps.zulip.zulip_available", return_value=True),
     ):
         get_client.return_value = mock.MagicMock()
+        if resolve_channel_side_effect is not None:
+            resolve_chan.side_effect = resolve_channel_side_effect
+        else:
+            resolve_chan.return_value = resolve_channel_return or {
+                "stream_id": 42,
+                "name": "general",
+            }
         if subscribe_side_effect is not None:
             subscribe.side_effect = subscribe_side_effect
         else:
@@ -1053,9 +1072,11 @@ def test_channel_subscribe_missing_identifier_flag_errors() -> None:
         ["general", "bob@example.com"],
         subscribe_return=_bulk_ok(),
     )
-    # Typer's Rich panel renderer truncates the BadParameter message body
-    # at the captured terminal width on CI runners, so don't assert on the
-    # message contents — exit_code != 0 is the contract we care about.
+    # The implementation routes this through emit_error() + typer.Exit(1)
+    # to honour the cli-commands.md contract (exit codes 0/1 only). We
+    # don't assert on the error message itself because Rich-panel
+    # rendering on CI may wrap/truncate it; the exit code is the
+    # contract.
     assert result.exit_code != 0
 
 
@@ -1220,7 +1241,7 @@ def test_channel_subscribe_json_channel_not_found() -> None:
 
     result, _ = _invoke_subscribe(
         ["unknown-channel", "bob@example.com", "--by-email", "--json"],
-        subscribe_side_effect=zulip_api.ZulipNotFoundError("Channel 'unknown-channel' not found"),
+        resolve_channel_side_effect=zulip_api.ZulipNotFoundError("Channel 'unknown-channel' not found"),
     )
     assert result.exit_code == 1
     payload = _json.loads(result.stdout)
@@ -1245,7 +1266,7 @@ def test_channel_subscribe_json_channel_id_not_found() -> None:
 
     result, _ = _invoke_subscribe(
         ["--channel-id", "9999", "bob@example.com", "--by-email", "--json"],
-        subscribe_side_effect=zulip_api.ZulipNotFoundError("No channel with id 9999"),
+        resolve_channel_side_effect=zulip_api.ZulipNotFoundError("No channel with id 9999"),
     )
     assert result.exit_code == 1
     payload = _json.loads(result.stdout)
@@ -1270,3 +1291,50 @@ def test_channel_subscribe_exit_code_one_on_missing_users() -> None:
         subscribe_return=_bulk_ok(),
     )
     assert result.exit_code == 1
+
+
+def test_channel_subscribe_json_user_resolution_error_keeps_channel_context() -> None:
+    """`--json` error AFTER channel resolves preserves channel context.
+
+    When the channel resolves successfully but a downstream failure
+    (e.g. user resolution) raises, the structured ``--json`` payload
+    MUST thread the resolved ``channel_id`` and ``channel_name``
+    through — otherwise consumers lose the ability to correlate the
+    error with its target stream.
+    """
+    import lftools_uv.api.endpoints.zulip as zulip_api
+
+    result, _ = _invoke_subscribe(
+        ["general", "ghost@example.com", "--by-email", "--json"],
+        resolve_channel_return={"stream_id": 42, "name": "general"},
+        subscribe_side_effect=zulip_api.ZulipNotFoundError("No user found matching 'ghost@example.com'"),
+    )
+    assert result.exit_code == 1
+    payload = _json.loads(result.stdout)
+    assert payload["status"] == "error"
+    # Channel context is preserved because it was resolved before the
+    # downstream user-resolution failure.
+    assert payload["channel_id"] == 42
+    assert payload["channel_name"] == "general"
+    assert payload["results"] == []
+    assert len(payload["errors"]) == 1
+
+
+def test_channel_subscribe_json_ambiguity_surfaces_matches() -> None:
+    """`--json` payload for ZulipAmbiguityError includes ``matches``."""
+    import lftools_uv.api.endpoints.zulip as zulip_api
+
+    matches = [
+        {"user_id": 1, "email": "bob.smith@example.com", "full_name": "Bob"},
+        {"user_id": 2, "email": "bob.jones@example.com", "full_name": "Bob"},
+    ]
+    result, _ = _invoke_subscribe(
+        ["general", "Bob", "--by-name", "--json"],
+        resolve_channel_return={"stream_id": 42, "name": "general"},
+        subscribe_side_effect=zulip_api.ZulipAmbiguityError("Ambiguous full_name match for 'Bob'", matches=matches),
+    )
+    assert result.exit_code == 1
+    payload = _json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["channel_id"] == 42
+    assert payload["errors"][0]["matches"] == matches
