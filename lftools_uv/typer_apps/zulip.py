@@ -893,7 +893,7 @@ def channel_unsubscribe(
         if options.get("json_output"):
             error_payload = bulk_mutation_result(
                 operation="unsubscribe",
-                channel_id=channel_id,
+                channel_id=None,
                 channel_name=channel_name or "",
                 results=[],
                 errors=[{"user": None, "error": str(exc)}],

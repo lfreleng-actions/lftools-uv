@@ -1640,6 +1640,45 @@ def test_channel_unsubscribe_json_error_after_channel_resolved(
     assert payload["errors"] and "Boom" in payload["errors"][0]["error"]
 
 
+def test_channel_unsubscribe_json_error_client_init_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When ``get_client`` itself fails, the JSON payload reports
+    ``channel_id: null`` because the channel was never resolved.
+
+    Even if the operator supplied ``--channel-id N``, the value is
+    not echoed back: per the contract, ``channel_id`` carries the
+    *resolved* identifier, and a configuration/connect failure
+    happens before any resolution attempt.
+    """
+    import lftools_uv.typer_apps.zulip as zulip_mod
+    from lftools_uv.api.endpoints.zulip import ZulipError
+
+    def _boom(*_args: Any, **_kwargs: Any) -> Any:
+        raise ZulipError("config missing")
+
+    monkeypatch.setattr(zulip_mod, "get_client", _boom)
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        [
+            "channel",
+            "unsubscribe",
+            "--channel-id",
+            "42",
+            "bob@example.com",
+            "--by-email",
+            "--json",
+        ],
+    )
+    assert result.exit_code == 1
+    payload = _json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["channel_id"] is None
+    assert payload["channel_name"] == ""
+    assert payload["errors"] and "config missing" in payload["errors"][0]["error"]
+
+
 def test_channel_unsubscribe_json_error_channel_unresolved(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
