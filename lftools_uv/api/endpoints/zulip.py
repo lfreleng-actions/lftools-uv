@@ -1678,15 +1678,20 @@ def update_channel(
     # ------------------------------------------------------------------
     subscribe_list: list[str] = list(subscribe_user_specs or [])
 
+    # ``allow_group`` is always resolved with allow_nobody=True; the
+    # lockout-prevention block below decides whether a Nobody-only
+    # value is acceptable in the current context. (Per spec, Nobody is
+    # only forbidden when converting to private with 0 existing
+    # subscribers and no --subscribe targets; on a channel that
+    # already has subscribers, Nobody is allowed and simply disables
+    # future joins.)
     allow_group_value: GroupSettingValue | None = None
+    allow_group_resolved: list[dict[str, Any]] | None = None
     if allow_group is not None:
-        # When converting to private with no existing subscribers and no
-        # --subscribe targets, the allow-group cannot be Nobody.
-        nobody_forbidden = channel_type == "private" and not subscribe_list
-        _, allow_group_value = resolve_groups(
+        allow_group_resolved, allow_group_value = resolve_groups(
             client,
             allow_group,
-            allow_nobody=not nobody_forbidden,
+            allow_nobody=True,
         )
 
     can_remove_value: GroupSettingValue | None = None
@@ -1697,9 +1702,18 @@ def update_channel(
     # Lockout prevention on type→private (spec scenarios 13/14, FR-004)
     # ------------------------------------------------------------------
     if channel_type == "private":
-        has_subs = bool(subscribe_list)
-        has_allow_group = allow_group_value is not None
-        if not has_subs and not has_allow_group:
+        has_subs_to_add = bool(subscribe_list)
+        # An allow-group satisfies lockout prevention only if it
+        # resolves to something other than just the Nobody system role
+        # (which would disable the permission entirely).
+        allow_group_is_only_nobody = (
+            allow_group_resolved is not None
+            and len(allow_group_resolved) == 1
+            and allow_group_resolved[0].get("name") == "role:nobody"
+        )
+        allow_group_satisfies = allow_group_value is not None and not allow_group_is_only_nobody
+
+        if not has_subs_to_add and not allow_group_satisfies:
             # Inspect current subscriber count; if zero, refuse.
             current = _subscriber_count(client, stream_id)
             if current == 0:

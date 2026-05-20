@@ -2328,7 +2328,7 @@ def test_update_channel_type_to_private_with_allow_group_satisfies_lockout() -> 
 
 
 def test_update_channel_type_to_private_rejects_nobody_group() -> None:
-    """``Nobody`` does not satisfy lockout prevention for type→private."""
+    """``Nobody`` does not satisfy lockout prevention for type→private (empty channel)."""
     client = _update_client(subscribers=[])
     with pytest.raises(ZulipLockoutError):
         _ = update_channel(
@@ -2337,6 +2337,27 @@ def test_update_channel_type_to_private_rejects_nobody_group() -> None:
             channel_type="private",
             allow_group="Nobody",
         )
+
+
+def test_update_channel_type_to_private_allows_nobody_with_existing_subscribers() -> None:
+    """``Nobody`` is allowed on type→private when channel already has subscribers.
+
+    Per spec: lockout prevention only rejects converting an EMPTY
+    channel to private without retainable access. An already-populated
+    channel may freely set ``can_access_group`` to Nobody — it simply
+    disables future joins.
+    """
+    client = _update_client(subscribers=[100, 101])
+    _ = update_channel(
+        client,
+        name="general",
+        channel_type="private",
+        allow_group="Nobody",
+    )
+    payload = client.last_patch["request"]
+    assert payload["is_private"] is True
+    # The Nobody system group resolves to id 21 in the test fixture.
+    assert payload["can_access_group"] == {"new": 21}
 
 
 def test_update_channel_allow_group_uses_new_wrapper_format() -> None:
