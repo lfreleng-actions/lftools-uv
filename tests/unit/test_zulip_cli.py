@@ -1157,10 +1157,13 @@ def test_channel_subscribe_numeric_channel_name_treated_as_name() -> None:
     assert isinstance(call["channel"], str)
 
 
-def test_channel_subscribe_no_channel_no_id_errors() -> None:
-    """When neither positional channel nor --channel-id is given, error."""
-    # Only one positional → with no --channel-id, that positional becomes
-    # the channel name and there are zero USER args.
+def test_channel_subscribe_channel_without_users_errors() -> None:
+    """A single positional (channel only) with no USER args is rejected.
+
+    The contract requires at least one USER positional whenever
+    --channel-id is absent. Click parses ['general'] as a single
+    positional → the CLI sees one entry, no USERs, and aborts.
+    """
     result, _ = _invoke_subscribe(
         ["general", "--by-email"],
         subscribe_return=_bulk_ok(),
@@ -1168,11 +1171,13 @@ def test_channel_subscribe_no_channel_no_id_errors() -> None:
     assert result.exit_code != 0
 
 
-def test_channel_subscribe_channel_id_and_positional_channel_errors() -> None:
-    """Providing both --channel-id and treating a positional as channel errors.
+def test_channel_subscribe_channel_id_with_zero_users_errors() -> None:
+    """`--channel-id` with no USER positionals is a Click usage error.
 
-    With --channel-id, ALL positionals are USER values, so passing too few
-    positionals (e.g. zero USERs) is the failure path we must surface."""
+    With --channel-id, ALL positionals are interpreted as USERs (the
+    contract); zero USERs trips Click's required-argument check before
+    our body runs.
+    """
     result, _ = _invoke_subscribe(
         ["--channel-id", "42", "--by-email"],
         subscribe_return=_bulk_ok(),
