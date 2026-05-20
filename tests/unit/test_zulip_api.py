@@ -1824,3 +1824,40 @@ def test_unsubscribe_users_api_error_marks_all_errors() -> None:
             users=["bob@example.com"],
             id_mode="email",
         )
+
+
+def test_unsubscribe_users_resolved_channel_skips_resolution() -> None:
+    """A caller-supplied ``resolved_channel`` skips ``GET /streams``.
+
+    Pinning this behavior prevents the CLI from incurring two streams
+    round-trips per ``zulip channel unsubscribe`` invocation: the CLI
+    pre-resolves the channel to capture the resolved id/name for its
+    ``--json`` error payload contract and then forwards the result
+    here.
+    """
+    client = mock.MagicMock()
+
+    def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
+        if url == "streams":
+            raise AssertionError("unsubscribe_users must not call GET /streams when resolved_channel is supplied")
+        if url == "users/me/subscriptions" and method == "DELETE":
+            return {
+                "result": "success",
+                "msg": "",
+                "removed": ["bob@example.com"],
+                "not_removed": [],
+            }
+        raise AssertionError(f"Unexpected endpoint call: {method} {url}")
+
+    client.call_endpoint.side_effect = call_endpoint
+    client.get_members.return_value = {"result": "success", "members": MEMBERS}
+
+    payload = unsubscribe_users(
+        client,
+        ["bob@example.com"],
+        id_mode="email",
+        resolved_channel={"stream_id": 1, "name": "general"},
+    )
+    assert payload["status"] == "success"
+    assert payload["channel_id"] == 1
+    assert payload["channel_name"] == "general"

@@ -1261,6 +1261,7 @@ def unsubscribe_users(
     channel_id: int | None = None,
     id_mode: IdMode,
     include_archived: bool = False,
+    resolved_channel: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Unsubscribe one or more users from a channel.
 
@@ -1288,19 +1289,31 @@ def unsubscribe_users(
     place — the latter is reported as a ``not_subscribed`` no-op,
     consistent with the CLI contract "exit 0 = all succeeded (including
     no-ops)".
+
+    Pass ``resolved_channel`` (a stream dict as returned by
+    :func:`resolve_channel`) to skip the internal channel resolution
+    step. This lets callers that have already resolved the channel
+    (for example the CLI, which needs the resolved id available for
+    the ``--json`` error payload before invoking this function) avoid
+    a redundant ``GET /streams`` round-trip. When ``resolved_channel``
+    is supplied, ``channel`` and ``channel_id`` are ignored.
     """
-    if (channel is None) == (channel_id is None):
-        raise ZulipValidationError("unsubscribe_users requires exactly one of 'channel' or 'channel_id'")
+    if resolved_channel is None:
+        if (channel is None) == (channel_id is None):
+            raise ZulipValidationError("unsubscribe_users requires exactly one of 'channel' or 'channel_id'")
     user_list = list(users)
     if not user_list:
         raise ZulipValidationError("unsubscribe_users requires at least one user")
 
-    target = resolve_channel(
-        client,
-        name=channel,
-        channel_id=channel_id,
-        include_archived=include_archived,
-    )
+    if resolved_channel is not None:
+        target = resolved_channel
+    else:
+        target = resolve_channel(
+            client,
+            name=channel,
+            channel_id=channel_id,
+            include_archived=include_archived,
+        )
     resolved_target_id = target.get("stream_id")
     resolved_target_name = str(target.get("name", ""))
 

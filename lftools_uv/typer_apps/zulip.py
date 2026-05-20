@@ -941,9 +941,9 @@ def channel_unsubscribe(
         payload = zulip_api.unsubscribe_users(
             client,
             users,
-            channel_id=resolved_channel_id,
             id_mode=id_mode,
             include_archived=include_archived,
+            resolved_channel=target,
         )
     except ZulipError as exc:
         if options.get("json_output"):
