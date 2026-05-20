@@ -619,8 +619,16 @@ def test_group_list_config_error_display() -> None:
 
 def test_group_list_help_renders() -> None:
     """``zulip group list --help`` produces usable help text."""
+    import re as _re
+
     runner = CliRunner()
-    result = runner.invoke(zulip_app, ["group", "list", "--help"])
+    result = runner.invoke(
+        zulip_app,
+        ["group", "list", "--help"],
+        env={"COLUMNS": "200", "NO_COLOR": "1", "TERM": "dumb"},
+    )
     assert result.exit_code == 0
-    assert "--group-name" in result.stdout
-    assert "--group-id" in result.stdout
+    # Strip any residual ANSI escape sequences before substring assertions.
+    cleaned = _re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", result.stdout)
+    assert "--group-name" in cleaned
+    assert "--group-id" in cleaned
