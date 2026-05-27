@@ -163,7 +163,7 @@ jobs:
         id: python-metadata
         continue-on-error: true
         # yamllint disable-line rule:line-length
-        uses: lfreleng-actions/python-project-metadata-action@47b9a8fe6b25c6d85f5fe6a0a848c04280f5fbde  # v0.1.18
+        uses: lfreleng-actions/python-project-metadata-action@965ab7492b891fc6d69c6f835a50b7db1cf83c57  # v0.1.19
 
       - name: 'Resolve project name'
         id: resolve-name
