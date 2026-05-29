@@ -36,6 +36,7 @@ See ``specs/001-zulip-channel-mgmt/`` for the full feature design.
 from __future__ import annotations
 
 import configparser
+import json
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -1369,8 +1370,8 @@ def unsubscribe_users(
                 url="users/me/subscriptions",
                 method="DELETE",
                 request={
-                    "subscriptions": [resolved_target_name],
-                    "principals": [principal],
+                    "subscriptions": json.dumps([resolved_target_name]),
+                    "principals": json.dumps([principal]),
                 },
             )
         except Exception as exc:  # pragma: no cover - network errors

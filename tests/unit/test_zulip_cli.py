@@ -1414,8 +1414,10 @@ def _build_client(*, removed: list[Any], not_removed: list[Any]) -> Any:
             return {"result": "success", "streams": _STREAMS}
         if url == "users/me/subscriptions" and method == "DELETE":
             request = request or {}
-            subscription = (request.get("subscriptions") or [""])[0]
-            principal = (request.get("principals") or [None])[0]
+            subscriptions = _json.loads(request.get("subscriptions", "[]"))
+            principals = _json.loads(request.get("principals", "[]"))
+            subscription = (subscriptions or [""])[0]
+            principal = (principals or [None])[0]
             return {
                 "result": "success",
                 "msg": "",

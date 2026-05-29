@@ -19,6 +19,7 @@ Covers the foundational tasks T016–T019:
 
 from __future__ import annotations
 
+import json as _json
 from typing import Any
 from unittest import mock
 
@@ -1581,8 +1582,10 @@ def _unsubscribe_client(
             return {"result": "success", "streams": streams}
         if url == "users/me/subscriptions" and method == "DELETE":
             request = request or {}
-            subscription = (request.get("subscriptions") or [""])[0]
-            principal = (request.get("principals") or [None])[0]
+            subscriptions = _json.loads(request.get("subscriptions", "[]"))
+            principals = _json.loads(request.get("principals", "[]"))
+            subscription = (subscriptions or [""])[0]
+            principal = (principals or [None])[0]
             removed_streams = [subscription] if principal in (removed or []) else []
             not_removed_streams = [subscription] if principal in (not_removed or []) else []
             return {
@@ -1718,7 +1721,7 @@ def test_unsubscribe_users_partial() -> None:
     # the successfully-resolved user.
     delete_calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
     assert delete_calls, "expected an unsubscribe DELETE call"
-    assert delete_calls[0].kwargs["request"]["principals"] == ["bob@example.com"]
+    assert _json.loads(delete_calls[0].kwargs["request"]["principals"]) == ["bob@example.com"]
 
 
 def test_unsubscribe_users_all_unknown_is_error() -> None:
@@ -1786,8 +1789,8 @@ def test_unsubscribe_users_by_id_passes_principals_as_ints() -> None:
     calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
     assert calls, "expected an unsubscribe DELETE call"
     request = calls[0].kwargs["request"]
-    assert request["subscriptions"] == ["general"]
-    assert request["principals"] == [200]
+    assert _json.loads(request["subscriptions"]) == ["general"]
+    assert _json.loads(request["principals"]) == [200]
 
 
 def test_unsubscribe_users_by_channel_id() -> None:
