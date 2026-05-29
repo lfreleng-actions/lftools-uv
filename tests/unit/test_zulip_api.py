@@ -2292,6 +2292,15 @@ def test_update_channel_type_to_private_lockout_without_subs_or_group() -> None:
         _ = update_channel(client, name="general", channel_type="private")
 
 
+def test_update_channel_already_private_skips_lockout() -> None:
+    """Already-private channels may be updated without conversion checks."""
+    streams = [{"stream_id": 1, "name": "general", "description": "g", "invite_only": True}]
+    client = _update_client(streams=streams, subscribers=[])
+    result = update_channel(client, name="general", channel_type="private", description="new")
+    assert result["status"] == "success"
+    assert client.last_patch["request"]["description"] == "new"
+
+
 def test_update_channel_type_to_private_with_subscribe_satisfies_lockout() -> None:
     """type→private with --subscribe targets actually subscribes + bypasses lockout."""
     client = _update_client(subscribers=[])

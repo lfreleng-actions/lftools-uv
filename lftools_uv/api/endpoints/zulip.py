@@ -1731,7 +1731,8 @@ def update_channel(
     # ------------------------------------------------------------------
     # Lockout prevention on type→private (spec scenarios 13/14, FR-004)
     # ------------------------------------------------------------------
-    if channel_type == "private":
+    is_type_to_private = channel_type == "private" and not bool(channel.get("invite_only"))
+    if is_type_to_private:
         has_subs_to_add = bool(subscribe_list)
         # An allow-group satisfies lockout prevention only if it
         # resolves to something other than just the Nobody system role
