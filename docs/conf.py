@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 # SPDX-License-Identifier: EPL-1.0
 # SPDX-FileCopyrightText: 2025 The Linux Foundation
 #
@@ -40,7 +39,8 @@ author = 'Linux Foundation Release Engineering'
 # in the build environment, and the build environment to have access to
 # git tags so hatch-vcs can derive the version at install time.
 try:
-    from importlib.metadata import PackageNotFoundError, version as _pkg_version
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as _pkg_version
 
     try:
         version = _pkg_version("lftools-uv")
