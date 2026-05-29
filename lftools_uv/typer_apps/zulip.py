@@ -33,7 +33,9 @@ import typer
 from tabulate import tabulate
 
 from lftools_uv.api.endpoints.zulip import (
+    ChannelType,
     IdMode,
+    TopicPolicy,
     ZulipAmbiguityError,
     ZulipError,
     get_client,
@@ -43,6 +45,7 @@ from lftools_uv.api.endpoints.zulip import (
     list_users,
     resolve_channel,
     subscribe_users,
+    update_channel,
     zulip_available,
 )
 
@@ -1235,10 +1238,10 @@ def channel_update(  # noqa: PLR0913 - CLI parity with contract
             channel_id=channel_id,
             new_name=new_name,
             description=description,
-            channel_type=channel_type,  # type: ignore[arg-type]
-            topic_policy=topic_policy,  # type: ignore[arg-type]
+            channel_type=cast(ChannelType | None, channel_type),
+            topic_policy=cast(TopicPolicy | None, topic_policy),
             subscribe_user_specs=list(subscribe) if subscribe else None,
-            user_id_mode=user_id_mode,  # type: ignore[arg-type]
+            user_id_mode=cast(IdMode | None, user_id_mode),
             allow_group=allow_group,
             can_remove_subscribers_group=can_remove_subscribers_group,
             include_archived=include_archived,
