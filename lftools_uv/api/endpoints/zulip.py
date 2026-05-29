@@ -1331,7 +1331,12 @@ def unsubscribe_users(
     for original in user_list:
         try:
             user = _resolve_single_user(original, members, mode=id_mode)
-        except (ZulipNotFoundError, ZulipAmbiguityError, ZulipValidationError) as exc:
+        except ZulipAmbiguityError as exc:
+            match_parts = [f"{m.get('full_name')} <{m.get('email')}> (id: {m.get('user_id')})" for m in exc.matches]
+            detail = f"{exc}; matches: {', '.join(match_parts)}"
+            errors.append({"user": original, "error": detail, "matches": exc.matches})
+            continue
+        except (ZulipNotFoundError, ZulipValidationError) as exc:
             errors.append({"user": original, "error": str(exc)})
             continue
         if id_mode == "id":

@@ -1545,11 +1545,39 @@ def test_channel_unsubscribe_requires_id_mode(monkeypatch: pytest.MonkeyPatch) -
     assert "by-email" in (result.stderr or "") or "by-id" in (result.stderr or "")
 
 
+def test_channel_unsubscribe_requires_id_mode_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ID-mode validation honors the --json error contract."""
+    client = _build_client(removed=[], not_removed=[])
+    result = _invoke_unsubscribe(
+        monkeypatch,
+        client,
+        ["general", "bob@example.com", "--json"],
+    )
+    assert result.exit_code == 1
+    payload = _json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["channel_name"] == "general"
+    assert "by-email" in payload["errors"][0]["error"]
+    assert result.stderr == ""
+
+
 def test_channel_unsubscribe_rejects_no_channel_target(monkeypatch: pytest.MonkeyPatch) -> None:
     """Missing both channel name and --channel-id is a CLI error."""
     client = _build_client(removed=[], not_removed=[])
     result = _invoke_unsubscribe(monkeypatch, client, ["--by-email"])
     assert result.exit_code != 0
+
+
+def test_channel_unsubscribe_rejects_missing_user_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Missing user validation honors the --json error contract."""
+    client = _build_client(removed=[], not_removed=[])
+    result = _invoke_unsubscribe(monkeypatch, client, ["general", "--by-email", "--json"])
+    assert result.exit_code == 1
+    payload = _json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["channel_name"] == "general"
+    assert "at least one user" in payload["errors"][0]["error"]
+    assert result.stderr == ""
 
 
 def test_channel_unsubscribe_partial_exits_one(monkeypatch: pytest.MonkeyPatch) -> None:

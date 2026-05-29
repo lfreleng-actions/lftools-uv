@@ -859,6 +859,34 @@ def channel_unsubscribe(
     # there by the CLI unit tests.
     from lftools_uv.api.endpoints import zulip as zulip_api
 
+    def fail_validation(message: str, *, channel_name: str = "") -> None:
+        if as_json:
+            emit_json(
+                bulk_mutation_result(
+                    operation="unsubscribe",
+                    channel_id=None,
+                    channel_name=channel_name,
+                    results=[],
+                    errors=[{"user": None, "error": message}],
+                )
+            )
+        else:
+            emit_error(message)
+        raise typer.Exit(code=1)
+
+    # Split positional targets into channel + users.
+    if channel_id is not None:
+        channel_name: str | None = None
+        users = list(targets)
+    else:
+        if len(targets) < 2:
+            channel_for_error = targets[0] if targets else ""
+            fail_validation(
+                "Provide a channel name (or --channel-id) and at least one user",
+                channel_name=channel_for_error,
+            )
+        channel_name, *users = targets
+
     # Validate id-mode mutex: exactly one of --by-email/--by-id/--by-name.
     mode_flags = [
         ("email", by_email),
@@ -867,23 +895,14 @@ def channel_unsubscribe(
     ]
     chosen = [name for name, flag in mode_flags if flag]
     if len(chosen) != 1:
-        emit_error("Exactly one of --by-email/--by-id/--by-name is required")
-        raise typer.Exit(code=1)
+        fail_validation(
+            "Exactly one of --by-email/--by-id/--by-name is required",
+            channel_name=channel_name or "",
+        )
     id_mode = cast(IdMode, chosen[0])
 
-    # Split positional targets into channel + users.
-    if channel_id is not None:
-        channel_name: str | None = None
-        users = list(targets)
-    else:
-        if len(targets) < 2:
-            emit_error("Provide a channel name (or --channel-id) and at least one user")
-            raise typer.Exit(code=1)
-        channel_name, *users = targets
-
     if not users:
-        emit_error("At least one user identifier is required")
-        raise typer.Exit(code=1)
+        fail_validation("At least one user identifier is required", channel_name=channel_name or "")
 
     options = ctx.obj or {}
     try:

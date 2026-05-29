@@ -1743,6 +1743,25 @@ def test_unsubscribe_users_all_unknown_is_error() -> None:
     assert not delete_calls, "DELETE should not be called when no user resolved"
 
 
+def test_unsubscribe_users_name_ambiguity_lists_matches() -> None:
+    """Ambiguous --by-name errors include user IDs and emails."""
+    client = _unsubscribe_client(ACTIVE_STREAMS, MEMBERS, removed=[], not_removed=[])
+    payload = unsubscribe_users(
+        client,
+        channel="general",
+        users=["Alice Smith"],
+        id_mode="name",
+    )
+    assert payload["status"] == "error"
+    error = payload["errors"][0]
+    assert error["matches"] == [
+        {"user_id": 100, "full_name": "Alice Smith", "email": "alice@example.com"},
+        {"user_id": 101, "full_name": "Alice Smith", "email": "alice2@example.com"},
+    ]
+    assert "alice@example.com" in error["error"]
+    assert "id: 100" in error["error"]
+
+
 def test_unsubscribe_users_by_id_passes_principals_as_ints() -> None:
     """When id_mode='id', principals sent to Zulip are integer user ids."""
     client = _unsubscribe_client(
