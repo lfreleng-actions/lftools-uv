@@ -371,7 +371,7 @@ def test_channel_subscribers_json_output(monkeypatch: pytest.MonkeyPatch) -> Non
     runner = CliRunner()
     result = runner.invoke(zulip_app, ["--json", "channel", "subscribers", "general"])
     assert result.exit_code == 0, result.stdout
-    payload = _json.loads(result.stdout)
+    payload = json.loads(result.stdout)
     assert payload == {
         "subscribers": [
             {"user_id": 10, "full_name": "Alice Smith", "email": "alice@example.com"},
