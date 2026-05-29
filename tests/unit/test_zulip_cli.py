@@ -2262,7 +2262,10 @@ def _invoke_archive(args: list[str], *, archive_side_effect: object | None = Non
 
     runner = CliRunner()
     fake_client = mock.MagicMock()
-    with mock.patch.object(zulip_mod, "get_client", return_value=fake_client):
+    with (
+        mock.patch.object(zulip_mod, "get_client", return_value=fake_client),
+        mock.patch.object(zulip_mod, "zulip_available", return_value=True),
+    ):
         if archive_side_effect is None:
             archive = mock.MagicMock(
                 return_value={
