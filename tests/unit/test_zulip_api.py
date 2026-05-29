@@ -648,6 +648,21 @@ def test_list_subscribers_handles_missing_user_metadata() -> None:
     assert subs[1] == {"user_id": 999, "full_name": None, "email": None}
 
 
+def test_list_subscribers_empty_skips_member_fetch() -> None:
+    """Empty subscriber lists return without fetching all members."""
+    from lftools_uv.api.endpoints.zulip import list_subscribers
+
+    client = _subscribers_client(
+        streams_active=SUBS_STREAMS,
+        streams_archived=SUBS_STREAMS_ARCHIVED,
+        subscribers_by_stream={1: []},
+        members=SUBS_MEMBERS,
+    )
+
+    assert list_subscribers(client, name="general") == []
+    client.get_members.assert_not_called()
+
+
 def test_list_subscribers_requires_one_target() -> None:
     """Exactly one of name/channel_id must be supplied."""
     from lftools_uv.api.endpoints.zulip import list_subscribers
@@ -663,8 +678,9 @@ def test_list_subscribers_requires_one_target() -> None:
     with pytest.raises(ZulipValidationError):
         _ = list_subscribers(client, name="general", channel_id=1)
 
-def test_list_subscribers_rejects_non_numeric_id() -> None:
-    """Non-integer subscriber ids must raise ZulipAPIError, not be skipped."""
+
+def test_list_subscribers_rejects_non_integer_id() -> None:
+    """Non-integer subscriber ids must raise ZulipAPIError."""
     from lftools_uv.api.endpoints.zulip import list_subscribers
 
     client = mock.MagicMock()
@@ -673,7 +689,7 @@ def test_list_subscribers_rejects_non_numeric_id() -> None:
         if url == "streams" and method == "GET":
             return {"result": "success", "streams": SUBS_STREAMS}
         if url == "streams/1/members" and method == "GET":
-            return {"result": "success", "subscribers": [10, "not-a-number", 20]}
+            return {"result": "success", "subscribers": [10, "20"]}
         raise AssertionError(f"unexpected endpoint: {method} {url}")
 
     client.call_endpoint.side_effect = side_effect
