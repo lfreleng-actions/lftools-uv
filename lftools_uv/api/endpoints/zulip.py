@@ -1363,34 +1363,31 @@ def unsubscribe_users(
             "errors": errors,
         }
 
-    try:
-        response = client.call_endpoint(
-            url="users/me/subscriptions",
-            method="DELETE",
-            request={
-                "subscriptions": [resolved_target_name],
-                "principals": principals,
-            },
-        )
-    except Exception as exc:  # pragma: no cover - network errors
-        raise ZulipAPIError(f"Failed to unsubscribe users: {exc}") from exc
-
-    if not isinstance(response, dict) or response.get("result") != "success":
-        msg = (response or {}).get("msg") if isinstance(response, dict) else None
-        raise ZulipAPIError(f"Unexpected unsubscribe response: {msg or response!r}")
-
-    removed_set = {str(item) for item in response.get("removed", []) or []}
-    not_removed_set = {str(item) for item in response.get("not_removed", []) or []}
-
     for original, principal in resolved_pairs:
-        principal_str = str(principal)
-        if principal_str in removed_set:
+        try:
+            response = client.call_endpoint(
+                url="users/me/subscriptions",
+                method="DELETE",
+                request={
+                    "subscriptions": [resolved_target_name],
+                    "principals": [principal],
+                },
+            )
+        except Exception as exc:  # pragma: no cover - network errors
+            raise ZulipAPIError(f"Failed to unsubscribe users: {exc}") from exc
+
+        if not isinstance(response, dict) or response.get("result") != "success":
+            msg = (response or {}).get("msg") if isinstance(response, dict) else None
+            raise ZulipAPIError(f"Unexpected unsubscribe response: {msg or response!r}")
+
+        removed_set = {str(item) for item in response.get("removed", []) or []}
+        not_removed_set = {str(item) for item in response.get("not_removed", []) or []}
+
+        if resolved_target_name in removed_set:
             results.append({"user": original, "status": "unsubscribed"})
-        elif principal_str in not_removed_set:
+        elif resolved_target_name in not_removed_set:
             results.append({"user": original, "status": "not_subscribed"})
         else:
-            # Neither list mentioned this principal — treat as an error
-            # so the operator notices an unexpected server response.
             errors.append(
                 {
                     "user": original,

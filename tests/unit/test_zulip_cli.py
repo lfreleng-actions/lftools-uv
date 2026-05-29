@@ -1413,11 +1413,14 @@ def _build_client(*, removed: list[Any], not_removed: list[Any]) -> Any:
         if url == "streams" and method == "GET":
             return {"result": "success", "streams": _STREAMS}
         if url == "users/me/subscriptions" and method == "DELETE":
+            request = request or {}
+            subscription = (request.get("subscriptions") or [""])[0]
+            principal = (request.get("principals") or [None])[0]
             return {
                 "result": "success",
                 "msg": "",
-                "removed": list(removed),
-                "not_removed": list(not_removed),
+                "removed": [subscription] if principal in removed else [],
+                "not_removed": [subscription] if principal in not_removed else [],
             }
         raise AssertionError(f"Unexpected endpoint: {method} {url}")
 
@@ -1577,6 +1580,20 @@ def test_channel_unsubscribe_rejects_missing_user_json(monkeypatch: pytest.Monke
     assert payload["status"] == "error"
     assert payload["channel_name"] == "general"
     assert "at least one user" in payload["errors"][0]["error"]
+    assert result.stderr == ""
+
+
+def test_channel_unsubscribe_rejects_no_user_with_channel_id_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The zero-target --channel-id case also returns JSON."""
+    client = _build_client(removed=[], not_removed=[])
+    result = _invoke_unsubscribe(monkeypatch, client, ["--channel-id", "42", "--by-email", "--json"])
+    assert result.exit_code == 1
+    payload = _json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["channel_id"] is None
+    assert "At least one user" in payload["errors"][0]["error"]
     assert result.stderr == ""
 
 

@@ -828,8 +828,8 @@ def channel_subscribe(
 @channel_app.command("unsubscribe")
 def channel_unsubscribe(
     ctx: typer.Context,
-    targets: list[str] = typer.Argument(
-        ...,
+    targets: list[str] | None = typer.Argument(
+        None,
         metavar="[CHANNEL] USER [USER...]",
         help=(
             "When --channel-id is absent, the first value is the channel "
@@ -874,18 +874,20 @@ def channel_unsubscribe(
             emit_error(message)
         raise typer.Exit(code=1)
 
+    target_values = list(targets or [])
+
     # Split positional targets into channel + users.
     if channel_id is not None:
         channel_name: str | None = None
-        users = list(targets)
+        users = target_values
     else:
-        if len(targets) < 2:
-            channel_for_error = targets[0] if targets else ""
+        if len(target_values) < 2:
+            channel_for_error = target_values[0] if target_values else ""
             fail_validation(
                 "Provide a channel name (or --channel-id) and at least one user",
                 channel_name=channel_for_error,
             )
-        channel_name, *users = targets
+        channel_name, *users = target_values
 
     # Validate id-mode mutex: exactly one of --by-email/--by-id/--by-name.
     mode_flags = [

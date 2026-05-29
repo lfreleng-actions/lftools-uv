@@ -1580,11 +1580,16 @@ def _unsubscribe_client(
         if url == "streams" and method == "GET":
             return {"result": "success", "streams": streams}
         if url == "users/me/subscriptions" and method == "DELETE":
+            request = request or {}
+            subscription = (request.get("subscriptions") or [""])[0]
+            principal = (request.get("principals") or [None])[0]
+            removed_streams = [subscription] if principal in (removed or []) else []
+            not_removed_streams = [subscription] if principal in (not_removed or []) else []
             return {
                 "result": result,
                 "msg": msg,
-                "removed": list(removed or []),
-                "not_removed": list(not_removed or []),
+                "removed": removed_streams,
+                "not_removed": not_removed_streams,
             }
         raise AssertionError(f"Unexpected endpoint call: {method} {url}")
 
@@ -1863,7 +1868,7 @@ def test_unsubscribe_users_resolved_channel_skips_resolution() -> None:
             return {
                 "result": "success",
                 "msg": "",
-                "removed": ["bob@example.com"],
+                "removed": ["general"],
                 "not_removed": [],
             }
         raise AssertionError(f"Unexpected endpoint call: {method} {url}")
