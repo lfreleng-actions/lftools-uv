@@ -2063,8 +2063,6 @@ def test_channel_update_subscribe_requires_private_type(monkeypatch: pytest.Monk
             "channel",
             "update",
             "general",
-            "--description",
-            "new description",
             "--subscribe",
             "alice@example.com",
             "--by-email",

@@ -1191,12 +1191,12 @@ def channel_update(  # noqa: PLR0913 - CLI parity with contract
             allow_group,
             can_remove_subscribers_group,
         )
-    )
+    ) or bool(subscribe)
     if not any_setting:
         emit_error(
             "channel update requires at least one setting to change "
             "(--name, --description, --type, --topic-policy, --allow-group, "
-            "or --can-remove-subscribers-group)"
+            "--subscribe, or --can-remove-subscribers-group)"
         )
         raise typer.Exit(code=1)
 
