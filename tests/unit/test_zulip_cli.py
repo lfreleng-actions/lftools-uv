@@ -194,7 +194,7 @@ def test_channel_list_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
     """``--json`` emits the documented envelope with normalized fields."""
     _patched_client(monkeypatch, _LIST_RESPONSE)
     runner = CliRunner()
-    result = runner.invoke(zulip_app, ["channel", "list", "--json"])
+    result = runner.invoke(zulip_app, ["--json", "channel", "list"])
     assert result.exit_code == 0, result.stdout
     payload = _json.loads(result.stdout)
     assert "channels" in payload
@@ -203,6 +203,25 @@ def test_channel_list_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
     assert by_id[2]["type"] == "private"
     assert by_id[1]["subscriber_count"] == 42
     assert by_id[1]["is_archived"] is False
+
+
+def test_channel_list_accepts_global_zuliprc(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--zuliprc`` is accepted before the channel subcommands."""
+    seen: dict[str, Any] = {}
+    fake = mock.MagicMock()
+    fake.call_endpoint.return_value = {"result": "success", "streams": []}
+
+    def _get_client(**kwargs: Any) -> mock.MagicMock:
+        seen.update(kwargs)
+        return fake
+
+    monkeypatch.setattr(zulip_mod, "get_client", _get_client)
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["--zuliprc", "custom.rc", "channel", "list"])
+
+    assert result.exit_code == 0, result.stdout
+    assert str(seen["zuliprc"]) == "custom.rc"
 
 
 def test_channel_list_include_archived_adds_status_column(
@@ -269,7 +288,7 @@ def test_channel_list_empty_json(monkeypatch: pytest.MonkeyPatch) -> None:
     """``--json`` on an empty server returns ``{"channels": []}``."""
     _patched_client(monkeypatch, {"result": "success", "streams": []})
     runner = CliRunner()
-    result = runner.invoke(zulip_app, ["channel", "list", "--json"])
+    result = runner.invoke(zulip_app, ["--json", "channel", "list"])
     assert result.exit_code == 0, result.stdout
     assert _json.loads(result.stdout) == {"channels": []}
 

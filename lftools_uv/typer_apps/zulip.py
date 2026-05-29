@@ -166,13 +166,31 @@ def bulk_mutation_result(
 
 
 @zulip_app.callback()
-def zulip_callback(ctx: typer.Context) -> None:
+def zulip_callback(
+    ctx: typer.Context,
+    zuliprc: Path | None = typer.Option(
+        None,
+        "--zuliprc",
+        help="Path to a zuliprc configuration file (FR-011 precedence applies).",
+        callback=zuliprc_callback,
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit machine-readable JSON instead of a table.",
+    ),
+) -> None:
     """Top-level callback for the Zulip command group.
 
     When the optional ``zulip`` extra is not installed, abort
     immediately with the canonical FR-022 error so that every
     subcommand presents the same guidance to the user.
     """
+    ctx.obj = {
+        **(ctx.obj or {}),
+        "zuliprc": zuliprc,
+        "json_output": json_output,
+    }
     # Allow ``--help`` (including nested subcommand help) to render even
     # when the optional extra is missing. Typer sets resilient_parsing
     # while it is walking the command tree for help discovery.
@@ -201,31 +219,22 @@ zulip_app.add_typer(channel_app, name="channel")
 
 @channel_app.command("list")
 def channel_list(
-    zuliprc: Path | None = typer.Option(
-        None,
-        "--zuliprc",
-        help="Path to a zuliprc configuration file (FR-011 precedence applies).",
-        callback=zuliprc_callback,
-    ),
+    ctx: typer.Context,
     include_archived: bool = typer.Option(
         False,
         "--include-archived",
         help="Include archived channels in the output.",
     ),
-    json_output: bool = typer.Option(
-        False,
-        "--json",
-        help="Emit machine-readable JSON instead of a table.",
-    ),
 ) -> None:
     """List channels visible to the authenticated user (US1)."""
+    options = ctx.obj or {}
     try:
-        client = get_client(zuliprc=zuliprc)
+        client = get_client(zuliprc=options.get("zuliprc"))
         channels = list_channels(client, include_archived=include_archived)
     except ZulipError as exc:
         raise handle_zulip_error(exc) from exc
 
-    if json_output:
+    if options.get("json_output"):
         emit_json({"channels": channels})
         return
 
