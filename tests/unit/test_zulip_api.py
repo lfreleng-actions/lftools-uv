@@ -1229,7 +1229,7 @@ def test_subscribe_users_single_email_success() -> None:
         MEMBERS,
         {
             "result": "success",
-            "subscribed": {"bob@example.com": ["general"]},
+            "subscribed": {"general": ["bob@example.com"]},
             "already_subscribed": {},
             "unauthorized": [],
         },
@@ -1264,8 +1264,8 @@ def test_subscribe_users_bulk_mixed_outcomes() -> None:
         MEMBERS,
         {
             "result": "success",
-            "subscribed": {"alice@example.com": ["general"]},
-            "already_subscribed": {"bob@example.com": ["general"]},
+            "subscribed": {"general": ["alice@example.com"]},
+            "already_subscribed": {"general": ["bob@example.com"]},
             "unauthorized": [],
         },
     )
@@ -1290,7 +1290,7 @@ def test_subscribe_users_already_subscribed_only() -> None:
         {
             "result": "success",
             "subscribed": {},
-            "already_subscribed": {"bob@example.com": ["general"]},
+            "already_subscribed": {"general": ["bob@example.com"]},
             "unauthorized": [],
         },
     )
@@ -1312,7 +1312,7 @@ def test_subscribe_users_partial_unauthorized() -> None:
         MEMBERS,
         {
             "result": "success",
-            "subscribed": {"alice@example.com": ["general"]},
+            "subscribed": {"general": ["alice@example.com"]},
             "already_subscribed": {},
             "unauthorized": ["bob@example.com"],
         },
@@ -1344,7 +1344,7 @@ def test_subscribe_users_by_id_resolves_to_email_principals() -> None:
         MEMBERS,
         {
             "result": "success",
-            "subscribed": {"bob@example.com": ["general"]},
+            "subscribed": {"general": ["bob@example.com"]},
             "already_subscribed": {},
             "unauthorized": [],
         },
@@ -1400,7 +1400,7 @@ def test_subscribe_users_by_channel_id() -> None:
         MEMBERS,
         {
             "result": "success",
-            "subscribed": {"bob@example.com": ["general"]},
+            "subscribed": {"general": ["bob@example.com"]},
             "already_subscribed": {},
             "unauthorized": [],
         },
@@ -1417,7 +1417,7 @@ def test_subscribe_users_channel_name_numeric_string() -> None:
         MEMBERS,
         {
             "result": "success",
-            "subscribed": {"bob@example.com": ["123"]},
+            "subscribed": {"123": ["bob@example.com"]},
             "already_subscribed": {},
             "unauthorized": [],
         },
@@ -1459,7 +1459,7 @@ def test_subscribe_users_skips_resolve_channel_when_stream_supplied() -> None:
     }
     client.call_endpoint.return_value = {
         "result": "success",
-        "subscribed": {"bob@example.com": ["general"]},
+        "subscribed": {"general": ["bob@example.com"]},
         "already_subscribed": {},
         "unauthorized": [],
     }
@@ -1537,7 +1537,7 @@ def test_subscribe_users_rejects_malformed_unauthorized_field() -> None:
     }
     client.call_endpoint.return_value = {
         "result": "success",
-        "subscribed": {"bob@example.com": ["general"]},
+        "subscribed": {"general": ["bob@example.com"]},
         "already_subscribed": {},
         "unauthorized": {"bob@example.com": "denied"},  # WRONG: should be a list
     }

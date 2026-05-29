@@ -1181,8 +1181,18 @@ def subscribe_users(
         raise ZulipAPIError(
             f"Malformed subscribe response: 'unauthorized' must be a list, got {type(unauthorized_raw).__name__}"
         )
-    subscribed: dict[str, Any] = subscribed_raw
-    already: dict[str, Any] = already_raw
+
+    def _channel_users(field_name: str, mapping: dict[str, Any]) -> set[str]:
+        users = mapping.get(channel_name, [])
+        if not isinstance(users, list):
+            raise ZulipAPIError(
+                f"Malformed subscribe response: '{field_name}[{channel_name}]' must be a list, "
+                f"got {type(users).__name__}"
+            )
+        return {str(user) for user in users}
+
+    subscribed = _channel_users("subscribed", subscribed_raw)
+    already = _channel_users("already_subscribed", already_raw)
     unauthorized: list[Any] = unauthorized_raw
 
     results: list[dict[str, Any]] = []

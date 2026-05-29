@@ -634,7 +634,7 @@ def channel_subscribe(
             "positional arguments are user identifiers."
         ),
     ),
-    channel_id: int | None = typer.Option(
+    channel_id: str | None = typer.Option(
         None,
         "--channel-id",
         help="Target channel by numeric ID. When set, all positional arguments are interpreted as USER identifiers (no positional CHANNEL is accepted).",
@@ -657,10 +657,15 @@ def channel_subscribe(
     targets_list: list[str] = list(targets or [])
     channel_arg: str | int
     if channel_id is not None:
+        try:
+            parsed_channel_id = int(channel_id)
+        except ValueError:
+            emit_error("--channel-id must be a numeric channel ID.")
+            raise typer.Exit(code=1) from None
         if not targets_list:
             emit_error("Provide at least one USER, or omit --channel-id and pass [CHANNEL] USER...")
             raise typer.Exit(code=1)
-        channel_arg = channel_id
+        channel_arg = parsed_channel_id
         user_idents = targets_list
     else:
         if len(targets_list) < 2:

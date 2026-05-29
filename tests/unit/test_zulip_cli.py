@@ -1212,6 +1212,16 @@ def test_channel_subscribe_channel_id_with_zero_users_errors() -> None:
     assert result.exit_code == 1
 
 
+def test_channel_subscribe_channel_id_invalid_exits_1() -> None:
+    """Non-numeric ``--channel-id`` values follow the exit-1 contract."""
+    result, _ = _invoke_subscribe(
+        ["--channel-id", "not-a-number", "bob@example.com", "--by-email"],
+        subscribe_return=_bulk_ok(),
+    )
+    assert result.exit_code == 1
+    assert "--channel-id must be a numeric channel ID" in result.stderr
+
+
 def test_channel_subscribe_include_archived_forwarded() -> None:
     """`--include-archived` is forwarded to subscribe_users as a kwarg."""
     result, sub = _invoke_subscribe(
