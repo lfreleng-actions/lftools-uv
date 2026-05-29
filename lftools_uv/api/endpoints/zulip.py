@@ -1910,18 +1910,19 @@ def archive_channel(
     result_field = response.get("result")
     if result_field != "success":
         # The Zulip server reports an already-deactivated stream via
-        # ``code == "STREAM_DEACTIVATED"`` (or a ``msg`` mentioning the
-        # channel is deactivated). Treat that as an idempotent success;
-        # any other non-success response is a genuine API error.
+        # ``code == "STREAM_DEACTIVATED"``. Treat only that documented
+        # code as idempotent success; any other non-success response is a
+        # genuine API error.
         code = str(response.get("code", ""))
         msg = str(response.get("msg", ""))
-        if code == "STREAM_DEACTIVATED" or "deactivated" in msg.lower():
+        if code == "STREAM_DEACTIVATED":
             log.debug(
                 "Server reports channel %r already deactivated; treating as success",
                 name,
             )
         else:
-            raise ZulipAPIError(f"Failed to archive channel {name!r}: {response!r}")
+            detail = msg or repr(response)
+            raise ZulipAPIError(f"Failed to archive channel {name!r}: {detail}")
 
     return {
         "status": "success",

@@ -2660,6 +2660,24 @@ def test_archive_channel_unexpected_error_response() -> None:
         _ = archive_channel(client, "boom")
 
 
+def test_archive_channel_deactivated_msg_without_code_raises() -> None:
+    """Only STREAM_DEACTIVATED is treated as idempotent success."""
+    from lftools_uv.api.endpoints.zulip import ZulipAPIError, archive_channel
+
+    active = [{"stream_id": 6, "name": "boom", "is_archived": False}]
+    client = _archive_client(
+        active,
+        active,
+        delete_response={
+            "result": "error",
+            "code": "BAD_REQUEST",
+            "msg": "Cannot complete deactivated channel request.",
+        },
+    )
+    with pytest.raises(ZulipAPIError, match="deactivated channel request"):
+        _ = archive_channel(client, "boom")
+
+
 def test_archive_channel_malformed_non_dict_response() -> None:
     """A non-dict DELETE response is treated as a hard API error."""
     from lftools_uv.api.endpoints.zulip import ZulipAPIError, archive_channel
