@@ -783,6 +783,12 @@ def list_subscribers(
     if not subscriber_ids:
         return []
 
+    normalized_ids: list[int] = []
+    for raw_id in subscriber_ids:
+        if not isinstance(raw_id, int) or isinstance(raw_id, bool):
+            raise ZulipAPIError(f"Malformed subscriber id in payload: {raw_id!r}")
+        normalized_ids.append(raw_id)
+
     # Build a user_id → member dict lookup so enrichment is O(N+M).
     members = _fetch_users(client)
     by_id: dict[int, dict[str, Any]] = {}
@@ -792,10 +798,7 @@ def list_subscribers(
             by_id[uid] = member
 
     enriched: list[dict[str, Any]] = []
-    for raw_id in subscriber_ids:
-        if not isinstance(raw_id, int) or isinstance(raw_id, bool):
-            raise ZulipAPIError(f"Malformed subscriber id in payload: {raw_id!r}")
-        uid = raw_id
+    for uid in normalized_ids:
         member_record = by_id.get(uid)
         if member_record is None:
             enriched.append({"user_id": uid, "full_name": None, "email": None})
