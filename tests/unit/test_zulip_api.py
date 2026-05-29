@@ -1834,7 +1834,7 @@ def test_unsubscribe_users_requires_at_least_one_user() -> None:
         _ = unsubscribe_users(client, channel="general", users=[], id_mode="email")
 
 
-def test_unsubscribe_users_api_error_marks_all_errors() -> None:
+def test_unsubscribe_users_api_error_raises() -> None:
     """A non-success Zulip response surfaces as :class:`ZulipAPIError`."""
     client = _unsubscribe_client(
         ACTIVE_STREAMS,
