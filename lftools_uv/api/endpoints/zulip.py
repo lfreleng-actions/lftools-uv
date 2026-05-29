@@ -306,7 +306,7 @@ def get_client(zuliprc: Path | None = None, *, config: ZulipConfig | None = None
 #:   ``can_access_group``.
 #: * Feature level 161 — ``can_remove_subscribers_group`` permission.
 #: * Feature level 334 — ``topic_policy`` per-channel field.
-#: * Feature level 59 — stream reactivation (unarchive) endpoint.
+#: * Feature level 59 — stream reactivation via stream update API.
 FEATURE_LEVELS: dict[str, int] = {
     "web-public": 12,
     "can-access-group": 197,
@@ -1955,8 +1955,8 @@ def unarchive_channel(
     with the FR-018 advisory message suggesting ``--include-archived``.
 
     Already-active channels are handled idempotently: the function
-    returns a success ``MutationResult`` without contacting the
-    reactivate endpoint, so retries are safe (FR-013 idempotency).
+    returns a success ``MutationResult`` without contacting the stream
+    update API, so retries are safe (FR-013 idempotency).
 
     Returns the canonical ``MutationResult`` dict:
     ``{"status": "success", "channel_id": int, "channel_name": str,
@@ -1971,7 +1971,7 @@ def unarchive_channel(
             (FR-018 message includes ``--include-archived`` hint when
             the channel exists only in the archived set).
         ZulipAPIError: if the Zulip server returns a non-success
-            reactivate response.
+            stream update response.
     """
     if (channel is None) == (channel_id is None):
         raise ZulipValidationError("unarchive_channel requires exactly one of 'channel' or 'channel_id'")
@@ -1994,8 +1994,8 @@ def unarchive_channel(
         raise ZulipAPIError(f"Resolved channel missing numeric stream_id: {stream!r}")
     stream_name = str(stream.get("name", ""))
 
-    # Idempotent no-op: already-active channels skip the reactivate POST
-    # entirely so retries after a partial failure are safe.
+    # Idempotent no-op: already-active channels skip the PATCH entirely so
+    # retries after a partial failure are safe.
     if not stream.get("is_archived", False):
         return {
             "status": "success",
@@ -2006,9 +2006,9 @@ def unarchive_channel(
 
     try:
         response = client.call_endpoint(
-            url=f"streams/{stream_id}/unarchive",
-            method="POST",
-            request={},
+            url=f"streams/{stream_id}",
+            method="PATCH",
+            request={"is_archived": False},
         )
     except Exception as exc:  # pragma: no cover - network errors
         raise ZulipAPIError(f"Failed to unarchive channel {stream_name!r}: {exc}") from exc

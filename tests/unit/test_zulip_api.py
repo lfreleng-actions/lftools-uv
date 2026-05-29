@@ -2726,7 +2726,7 @@ def _unarchive_client(
     * ``streams`` GETs respond with ``active`` or ``archived`` based on
       the ``include_archived`` request flag (matching the foundation
       ``_fetch_streams`` contract).
-    * ``streams/<id>/unarchive`` POSTs return
+    * ``streams/<id>`` PATCHes with ``is_archived=False`` return
       ``reactivate_response`` when provided, else a success stub.
     """
     client = mock.MagicMock()
@@ -2744,7 +2744,7 @@ def _unarchive_client(
             if request and request.get("include_archived"):
                 return {"result": "success", "streams": archived_list}
             return {"result": "success", "streams": active_list}
-        if url.startswith("streams/") and url.endswith("/unarchive") and method == "POST":
+        if url.startswith("streams/") and method == "PATCH" and request == {"is_archived": False}:
             return default_reactivate
         raise AssertionError(f"Unexpected call: {url} {method} {request!r}")
 
@@ -2767,13 +2767,12 @@ def test_unarchive_channel_success_by_name() -> None:
     assert result["channel_name"] == "old-channel"
     assert result["operation"] == "unarchive"
 
-    # Verify the reactivate endpoint was called with the correct URL.
-    reactivate_calls = [
-        call for call in client.call_endpoint.call_args_list if call.kwargs.get("url", "").endswith("/unarchive")
-    ]
+    # Verify the stream update endpoint was called with the correct payload.
+    reactivate_calls = [call for call in client.call_endpoint.call_args_list if call.kwargs.get("method") == "PATCH"]
     assert len(reactivate_calls) == 1
-    assert reactivate_calls[0].kwargs["url"] == "streams/99/unarchive"
-    assert reactivate_calls[0].kwargs["method"] == "POST"
+    assert reactivate_calls[0].kwargs["url"] == "streams/99"
+    assert reactivate_calls[0].kwargs["method"] == "PATCH"
+    assert reactivate_calls[0].kwargs["request"] == {"is_archived": False}
 
 
 def test_unarchive_channel_already_active_is_noop() -> None:
@@ -2787,10 +2786,8 @@ def test_unarchive_channel_already_active_is_noop() -> None:
     assert result["channel_id"] == 1
     assert result["operation"] == "unarchive"
 
-    # Reactivate endpoint must NOT have been hit for an already-active channel.
-    reactivate_calls = [
-        call for call in client.call_endpoint.call_args_list if call.kwargs.get("url", "").endswith("/unarchive")
-    ]
+    # Stream update endpoint must NOT have been hit for an already-active channel.
+    reactivate_calls = [call for call in client.call_endpoint.call_args_list if call.kwargs.get("method") == "PATCH"]
     assert reactivate_calls == []
 
 
