@@ -220,7 +220,7 @@ SPDX-FileCopyrightText: 2026 The Linux Foundation
 
 ### Tests for User Story 8
 
-- [X] T048 [P] [US8] Write CLI tests for `channel update` in tests/unit/test_zulip_cli.py — test name update, description update, type change (all transitions), topic-policy set/clear, --allow-group with type change to private, lockout prevention, no-op success, --json output, feature-level errors, --can-remove-subscribers-group, at-least-one-setting validation
+- [X] T048 [P] [US8] Write CLI tests for `channel update` in tests/unit/test_zulip_cli.py — test name update, description update, type change (all transitions), topic-policy set/clear, --allow-group with type change to private, lockout prevention, no-op rejection, --json output, feature-level errors, --can-remove-subscribers-group, at-least-one-setting validation
 - [X] T049 [P] [US8] Write API tests for `update_channel()` in tests/unit/test_zulip_api.py — mock Zulip PATCH endpoint, test all parameter combinations, group-setting-update wrapper format `{"new": value}`, lockout validation for type-to-private, feature-level checks
 
 ### Implementation for User Story 8
