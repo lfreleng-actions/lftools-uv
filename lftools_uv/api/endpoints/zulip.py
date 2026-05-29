@@ -1761,6 +1761,8 @@ def update_channel(
     # lockout-prevention bypass without actually subscribing would
     # still lock the channel out.
     # ------------------------------------------------------------------
+    if subscribe_list and channel_type != "private":
+        raise ZulipValidationError("--subscribe is only valid when using --type private")
     if subscribe_list and user_id_mode is None:
         raise ZulipValidationError("--subscribe requires one of --by-email/--by-id/--by-name")
     if subscribe_list:

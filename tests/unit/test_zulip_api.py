@@ -2312,6 +2312,19 @@ def test_update_channel_type_to_private_with_subscribe_satisfies_lockout() -> No
     assert 100 in sub_request["principals"]
 
 
+def test_update_channel_rejects_subscribe_without_private_type() -> None:
+    """``subscribe_user_specs`` is only valid for type→private updates."""
+    client = _update_client()
+    with pytest.raises(ZulipValidationError, match="--type private"):
+        _ = update_channel(
+            client,
+            name="general",
+            description="new description",
+            subscribe_user_specs=["alice@example.com"],
+            user_id_mode="email",
+        )
+
+
 def test_update_channel_type_to_private_with_allow_group_satisfies_lockout() -> None:
     """type→private with non-Nobody --allow-group satisfies lockout."""
     client = _update_client(subscribers=[])

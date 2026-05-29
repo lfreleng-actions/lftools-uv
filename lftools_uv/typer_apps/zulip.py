@@ -1218,6 +1218,9 @@ def channel_update(  # noqa: PLR0913 - CLI parity with contract
     if by_count > 1:
         emit_error("Specify only one of --by-email, --by-id, --by-name")
         raise typer.Exit(code=1)
+    if subscribe and channel_type != "private":
+        emit_error("--subscribe is only valid when using --type private")
+        raise typer.Exit(code=1)
     if subscribe and by_count == 0:
         emit_error("--subscribe requires one of --by-email, --by-id, --by-name")
         raise typer.Exit(code=1)

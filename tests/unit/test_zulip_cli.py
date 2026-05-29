@@ -2053,6 +2053,27 @@ def test_channel_update_subscribe_requires_id_mode(monkeypatch: pytest.MonkeyPat
     assert "by-email" in result.output or "by-email" in (result.stderr or "")
 
 
+def test_channel_update_subscribe_requires_private_type(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--subscribe`` is scoped to type-to-private lockout prevention."""
+    _patch_update(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        [
+            "channel",
+            "update",
+            "general",
+            "--description",
+            "new description",
+            "--subscribe",
+            "alice@example.com",
+            "--by-email",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "--type private" in result.output or "--type private" in (result.stderr or "")
+
+
 def test_channel_update_subscribe_with_by_email(monkeypatch: pytest.MonkeyPatch) -> None:
     """Multi-valued ``--subscribe`` plus ``--by-email`` forwards correctly."""
     fake = _patch_update(monkeypatch)
