@@ -265,8 +265,8 @@ def get_client(zuliprc: Path | None = None, *, config: ZulipConfig | None = None
     if zuliprc is not None and config is not None:
         raise ZulipValidationError("Pass either 'zuliprc' or 'config', not both")
     resolved = config or resolve_config(zuliprc)
+    zulip_module = _require_zulip()
     if resolved.config_path is not None:
-        zulip_module = _require_zulip()
         return zulip_module.Client(config_file=str(resolved.config_path))
     # No zuliprc file — all three credential fields must be populated.
     missing: list[str] = []
@@ -278,7 +278,6 @@ def get_client(zuliprc: Path | None = None, *, config: ZulipConfig | None = None
         missing.append("site")
     if missing:
         raise ZulipConfigError(f"Incomplete Zulip credentials from {resolved.source}: missing {', '.join(missing)}")
-    zulip_module = _require_zulip()
     return zulip_module.Client(
         email=resolved.email,
         api_key=resolved.api_key,

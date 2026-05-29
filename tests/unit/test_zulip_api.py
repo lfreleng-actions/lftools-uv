@@ -365,8 +365,9 @@ def test_resolve_users_id_mode_requires_numeric() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_get_client_rejects_incomplete_credentials() -> None:
+def test_get_client_rejects_incomplete_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     """``get_client`` errors clearly when synthesized creds are incomplete."""
+    monkeypatch.setattr("lftools_uv.api.endpoints.zulip._zulip_module", mock.MagicMock())
     config = ZulipConfig(email="bot@example.com", source="lftools.ini[zulip]")
     with pytest.raises(ZulipConfigError, match="missing api_key, site"):
         _ = get_client(config=config)
