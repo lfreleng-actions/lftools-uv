@@ -1611,6 +1611,7 @@ def update_channel(
     # ------------------------------------------------------------------
     # Argument validation
     # ------------------------------------------------------------------
+    subscribe_list: list[str] = list(subscribe_user_specs or [])
     settings_specified = any(
         v is not None
         for v in (
@@ -1621,12 +1622,12 @@ def update_channel(
             allow_group,
             can_remove_subscribers_group,
         )
-    )
+    ) or bool(subscribe_list)
     if not settings_specified:
         raise ZulipValidationError(
             "channel update requires at least one setting to change "
             "(--name, --description, --type, --topic-policy, --allow-group, "
-            "or --can-remove-subscribers-group)"
+            "--subscribe, or --can-remove-subscribers-group)"
         )
 
     valid_channel_types = {"public", "private", "web-public"}
@@ -1707,8 +1708,6 @@ def update_channel(
     # ------------------------------------------------------------------
     # Resolve --allow-group (with lockout-aware allow_nobody)
     # ------------------------------------------------------------------
-    subscribe_list: list[str] = list(subscribe_user_specs or [])
-
     # ``allow_group`` is always resolved with allow_nobody=True; the
     # lockout-prevention block below decides whether a Nobody-only
     # value is acceptable in the current context. (Per spec, Nobody is

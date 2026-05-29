@@ -2319,7 +2319,6 @@ def test_update_channel_rejects_subscribe_without_private_type() -> None:
         _ = update_channel(
             client,
             name="general",
-            description="new description",
             subscribe_user_specs=["alice@example.com"],
             user_id_mode="email",
         )
