@@ -372,7 +372,7 @@ def test_user_list_table_default(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_user_list_table_optional_columns(monkeypatch: pytest.MonkeyPatch) -> None:
     """``--include-bots`` / ``--include-deactivated`` add labeled columns."""
-    _patched_client(monkeypatch, CLI_MEMBERS)
+    _patched_user_client(monkeypatch, CLI_MEMBERS)
     runner = CliRunner()
     result = runner.invoke(
         zulip_app,
