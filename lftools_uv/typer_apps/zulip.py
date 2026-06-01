@@ -859,8 +859,10 @@ def channel_unsubscribe(
     # there by the CLI unit tests.
     from lftools_uv.api.endpoints import zulip as zulip_api
 
+    options = ctx.obj or {}
+
     def fail_validation(message: str, *, channel_name: str = "") -> None:
-        if as_json:
+        if options.get("json_output"):
             emit_json(
                 bulk_mutation_result(
                     operation="unsubscribe",
@@ -906,7 +908,6 @@ def channel_unsubscribe(
     if not users:
         fail_validation("At least one user identifier is required", channel_name=channel_name or "")
 
-    options = ctx.obj or {}
     try:
         client = get_client(zuliprc=options.get("zuliprc"))
     except ZulipError as exc:

@@ -1709,13 +1709,13 @@ def test_channel_unsubscribe_json_error_client_init_failure(
     result = runner.invoke(
         zulip_app,
         [
+            "--json",
             "channel",
             "unsubscribe",
             "--channel-id",
             "42",
             "bob@example.com",
             "--by-email",
-            "--json",
         ],
     )
     assert result.exit_code == 1
