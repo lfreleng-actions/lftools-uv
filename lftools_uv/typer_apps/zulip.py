@@ -350,9 +350,7 @@ def group_list(
 
     Shows both custom user groups and built-in system role groups
     (Owners, Administrators, Moderators, Full Members, Members,
-    Everyone, Nobody). All listed groups are valid inputs for the
-    ``--allow-group`` and ``--can-remove-subscribers-group`` flags on
-    channel create/update.
+    Everyone, Nobody), including their display names and member counts.
     """
     options = ctx.obj or {}
     try:
