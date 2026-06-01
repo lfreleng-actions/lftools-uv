@@ -140,13 +140,13 @@ SPDX-FileCopyrightText: 2026 The Linux Foundation
 
 ### Tests for User Story 4
 
-- [ ] T032 [P] [US4] Write CLI tests for `channel create` in tests/unit/test_zulip_cli.py — test public create success, private create with --subscribe, private create without subscribers (lockout error), --allow-group usage, --allow-group Nobody rejection, ambiguity errors, --announce/--no-announce mutual exclusivity, --topic-policy validation, --json output, web-public feature-level error, --can-remove-subscribers-group usage
-- [ ] T033 [P] [US4] Write API tests for `create_channel()` in tests/unit/test_zulip_api.py — mock Zulip subscribe endpoint, test all parameter combinations, lockout validation, feature-level checks, group-setting value construction (simple and complex forms)
+- [X] T032 [P] [US4] Write CLI tests for `channel create` in tests/unit/test_zulip_cli.py — test public create success, private create with --subscribe, private create without subscribers (lockout error), --allow-group usage, --allow-group Nobody rejection, ambiguity errors, --announce/--no-announce mutual exclusivity, --topic-policy validation, --json output, web-public feature-level error, --can-remove-subscribers-group usage
+- [X] T033 [P] [US4] Write API tests for `create_channel()` in tests/unit/test_zulip_api.py — mock Zulip subscribe endpoint, test all parameter combinations, lockout validation, feature-level checks, group-setting value construction (simple and complex forms)
 
 ### Implementation for User Story 4
 
-- [ ] T034 [US4] Implement `create_channel()` in lftools_uv/api/endpoints/zulip.py — validate inputs (lockout prevention for private, Nobody exclusion, announce mutex, topic-policy values), check feature levels (web-public, topic-policy, group-access, can-remove-subscribers-group), resolve users and groups, build Zulip API payload with correct group-setting value format (raw for POST), call POST `/users/me/subscriptions`, return MutationResult
-- [ ] T035 [US4] Implement `channel create` CLI command in lftools_uv/typer_apps/zulip.py — add `create` command to `channel` sub-app with positional `name`, `--description`, `--type`, `--subscribe` (multi), `--by-email`/`--by-id`/`--by-name`, `--allow-group`, `--can-remove-subscribers-group`, `--announce`/`--no-announce`, `--topic-policy` flags, format success/error output, handle `--json` with standard mutation schema
+- [X] T034 [US4] Implement `create_channel()` in lftools_uv/api/endpoints/zulip.py — validate inputs (lockout prevention for private, Nobody exclusion, announce mutex, topic-policy values), check feature levels (web-public, topic-policy, group-access, can-remove-subscribers-group), resolve users and groups, build Zulip API payload with correct group-setting value format (raw for POST), call POST `/users/me/subscriptions`, return MutationResult
+- [X] T035 [US4] Implement `channel create` CLI command in lftools_uv/typer_apps/zulip.py — add `create` command to `channel` sub-app with positional `name`, `--description`, `--type`, `--subscribe` (multi), `--by-email`/`--by-id`/`--by-name`, `--allow-group`, `--can-remove-subscribers-group`, `--announce`/`--no-announce`, `--topic-policy` flags, format success/error output, handle `--json` with standard mutation schema
 
 **Checkpoint**: User Story 4 is fully functional — `lftools-uv zulip channel create` works for all channel types
 
