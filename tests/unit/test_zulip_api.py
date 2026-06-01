@@ -663,6 +663,36 @@ def test_list_subscribers_empty_skips_member_fetch() -> None:
     client.get_members.assert_not_called()
 
 
+def test_list_subscribers_rejects_bool_stream_id() -> None:
+    """Boolean stream IDs are malformed, not numeric channel IDs."""
+    from lftools_uv.api.endpoints.zulip import list_subscribers
+
+    client = _subscribers_client(
+        streams_active=[{**SUBS_STREAMS[0], "stream_id": True}],
+        streams_archived=SUBS_STREAMS_ARCHIVED,
+        subscribers_by_stream={},
+        members=SUBS_MEMBERS,
+    )
+
+    with pytest.raises(ZulipAPIError, match="numeric stream_id"):
+        _ = list_subscribers(client, name="general")
+    client.get_members.assert_not_called()
+
+
+def test_list_subscribers_ignores_bool_member_ids() -> None:
+    """Boolean member IDs must not overwrite real integer IDs."""
+    from lftools_uv.api.endpoints.zulip import list_subscribers
+
+    client = _subscribers_client(
+        streams_active=SUBS_STREAMS,
+        streams_archived=SUBS_STREAMS_ARCHIVED,
+        subscribers_by_stream={1: [1]},
+        members=[{"user_id": True, "full_name": "Bool User", "email": "bool@example.com"}],
+    )
+
+    assert list_subscribers(client, name="general") == [{"user_id": 1, "full_name": None, "email": None}]
+
+
 def test_list_subscribers_requires_one_target() -> None:
     """Exactly one of name/channel_id must be supplied."""
     from lftools_uv.api.endpoints.zulip import list_subscribers

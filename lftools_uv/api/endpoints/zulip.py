@@ -765,7 +765,7 @@ def list_subscribers(
         include_archived=include_archived,
     )
     stream_id = stream.get("stream_id")
-    if not isinstance(stream_id, int):
+    if not isinstance(stream_id, int) or isinstance(stream_id, bool):
         raise ZulipAPIError(f"Resolved channel missing numeric stream_id: {stream!r}")
 
     try:
@@ -794,7 +794,7 @@ def list_subscribers(
     by_id: dict[int, dict[str, Any]] = {}
     for member in members:
         uid = member.get("user_id")
-        if isinstance(uid, int):
+        if isinstance(uid, int) and not isinstance(uid, bool):
             by_id[uid] = member
 
     enriched: list[dict[str, Any]] = []
