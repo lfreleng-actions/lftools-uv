@@ -39,6 +39,7 @@ from lftools_uv.api.endpoints.zulip import (
     get_client,
     get_server_feature_level,
     list_channels,
+    list_groups,
     list_users,
     resolve_channel,
     resolve_groups,
@@ -632,3 +633,232 @@ def test_list_users_propagates_api_errors() -> None:
     client.get_members.return_value = {"result": "error", "msg": "boom"}
     with pytest.raises(ZulipAPIError):
         _ = list_users(client)
+
+
+# ---------------------------------------------------------------------------
+# T029 — list_groups (US3)
+# ---------------------------------------------------------------------------
+
+
+LIST_GROUPS = [
+    {
+        "id": 10,
+        "name": "engineering",
+        "description": "Engineering team",
+        "members": [1, 2, 3],
+        "is_system_group": False,
+    },
+    {
+        "id": 11,
+        "name": "design",
+        "description": "Designers",
+        "members": [4, 5],
+        "is_system_group": False,
+    },
+    {
+        "id": 12,
+        "name": "Design",
+        "description": "Duplicate design (case collision)",
+        "members": [6],
+        "is_system_group": False,
+    },
+    {
+        "id": 20,
+        "name": "role:owners",
+        "description": "Owners of this organization",
+        "members": [1],
+        "is_system_group": True,
+    },
+    {
+        "id": 21,
+        "name": "role:administrators",
+        "description": "Administrators of this organization",
+        "members": [1, 2],
+        "is_system_group": True,
+    },
+    {
+        "id": 22,
+        "name": "role:fullmembers",
+        "description": "Full members",
+        "members": [1, 2, 3, 4],
+        "is_system_group": True,
+    },
+    {
+        "id": 23,
+        "name": "role:nobody",
+        "description": "Nobody",
+        "members": [],
+        "is_system_group": True,
+    },
+]
+
+
+def _list_groups_client(groups: list[dict[str, Any]]) -> Any:
+    """Return a mock client whose ``user_groups`` endpoint returns ``groups``."""
+    client = mock.MagicMock()
+    client.call_endpoint.return_value = {
+        "result": "success",
+        "user_groups": groups,
+    }
+    return client
+
+
+def test_list_groups_returns_custom_and_system() -> None:
+    """All custom and system role groups are returned with normalized fields."""
+    client = _list_groups_client(LIST_GROUPS)
+    groups = list_groups(client)
+    # Verify the helper hit the user_groups endpoint.
+    client.call_endpoint.assert_called_once()
+    args, kwargs = client.call_endpoint.call_args
+    call = {**kwargs, **dict(zip(["url", "method"], args, strict=False))}
+    assert call.get("url") == "user_groups"
+    assert call.get("method") == "GET"
+    # Custom and system groups both present.
+    types = {g["type"] for g in groups}
+    assert types == {"custom", "system"}
+    # Every group has the standard shape.
+    for group in groups:
+        assert set(group.keys()) >= {
+            "group_id",
+            "name",
+            "description",
+            "member_count",
+            "type",
+        }
+        assert isinstance(group["group_id"], int)
+        assert isinstance(group["member_count"], int)
+
+
+def test_list_groups_system_groups_use_display_names() -> None:
+    """System role groups appear with their display names, not ``role:`` API names."""
+    client = _list_groups_client(LIST_GROUPS)
+    groups = list_groups(client)
+    system_names = {g["name"] for g in groups if g["type"] == "system"}
+    # No internal ``role:`` strings leak to the caller.
+    assert not any(n.startswith("role:") for n in system_names)
+    # Expected display names from the spec mapping appear.
+    assert {"Owners", "Administrators", "Full Members", "Nobody"} <= system_names
+
+
+def test_list_groups_member_counts() -> None:
+    """``member_count`` is derived from the ``members`` array length."""
+    client = _list_groups_client(LIST_GROUPS)
+    groups = list_groups(client)
+    by_id = {g["group_id"]: g for g in groups}
+    assert by_id[10]["member_count"] == 3
+    assert by_id[20]["member_count"] == 1
+    assert by_id[23]["member_count"] == 0
+
+
+def test_list_groups_preserves_falsy_descriptions() -> None:
+    """Falsy non-None descriptions are coerced with ``str(...)``."""
+    client = _list_groups_client(
+        [{"id": 1, "name": "zero", "description": 0, "members": []}],
+    )
+    assert list_groups(client)[0]["description"] == "0"
+
+
+def test_list_groups_filter_by_group_id() -> None:
+    """``group_id`` filter narrows the result to exactly one group."""
+    client = _list_groups_client(LIST_GROUPS)
+    groups = list_groups(client, group_id=21)
+    assert len(groups) == 1
+    assert groups[0]["group_id"] == 21
+    assert groups[0]["name"] == "Administrators"
+    assert groups[0]["type"] == "system"
+
+
+def test_list_groups_filter_by_group_id_not_found() -> None:
+    """An unknown ``group_id`` returns an empty list (no error)."""
+    client = _list_groups_client(LIST_GROUPS)
+    assert list_groups(client, group_id=9999) == []
+
+
+def test_list_groups_filter_by_group_name_custom() -> None:
+    """``group_name`` filter matches custom groups case-insensitively."""
+    client = _list_groups_client(LIST_GROUPS)
+    groups = list_groups(client, group_name="ENGINEERING")
+    assert len(groups) == 1
+    assert groups[0]["group_id"] == 10
+    assert groups[0]["type"] == "custom"
+
+
+def test_list_groups_filter_by_group_name_system() -> None:
+    """``group_name`` filter matches system role display names."""
+    client = _list_groups_client(LIST_GROUPS)
+    groups = list_groups(client, group_name="administrators")
+    assert len(groups) == 1
+    assert groups[0]["group_id"] == 21
+    assert groups[0]["name"] == "Administrators"
+
+
+def test_list_groups_filter_by_group_name_not_found() -> None:
+    """An unmatched ``group_name`` returns an empty list (no error)."""
+    client = _list_groups_client(LIST_GROUPS)
+    assert list_groups(client, group_name="nonesuch") == []
+
+
+def test_list_groups_ambiguous_group_name_raises() -> None:
+    """A case-insensitive collision under ``group_name`` raises ambiguity."""
+    client = _list_groups_client(LIST_GROUPS)
+    with pytest.raises(ZulipAmbiguityError) as exc:
+        _ = list_groups(client, group_name="design")
+    assert {m["group_id"] for m in exc.value.matches} == {11, 12}
+
+
+def test_list_groups_mutually_exclusive_filters() -> None:
+    """``group_name`` and ``group_id`` cannot be combined."""
+    client = _list_groups_client(LIST_GROUPS)
+    with pytest.raises(ZulipValidationError):
+        _ = list_groups(client, group_name="design", group_id=11)
+
+
+def test_list_groups_api_error_on_unexpected_response() -> None:
+    """A malformed Zulip response surfaces as :class:`ZulipAPIError`."""
+    client = mock.MagicMock()
+    client.call_endpoint.return_value = {"result": "error", "msg": "boom"}
+    with pytest.raises(ZulipAPIError):
+        _ = list_groups(client)
+
+
+def test_list_groups_uses_known_system_role_mapping() -> None:
+    """The SYSTEM_ROLE_GROUPS table is the canonical mapping source."""
+    client = _list_groups_client(LIST_GROUPS)
+    groups = list_groups(client)
+    for group in groups:
+        if group["type"] == "system":
+            # Display name (lowercased) must round-trip via SYSTEM_ROLE_GROUPS.
+            display = group["name"].casefold()
+            assert display in SYSTEM_ROLE_GROUPS
+
+
+def test_list_groups_rejects_malformed_entry() -> None:
+    """A non-dict entry in the user_groups payload raises ZulipAPIError."""
+    client = mock.MagicMock()
+    client.call_endpoint.return_value = {
+        "result": "success",
+        "user_groups": [{"id": 1, "name": "ok"}, "not-a-dict"],
+    }
+    with pytest.raises(ZulipAPIError):
+        _ = list_groups(client)
+
+
+def test_list_groups_rejects_missing_id() -> None:
+    """A group object lacking a numeric ``id`` raises ZulipAPIError."""
+    client = mock.MagicMock()
+    client.call_endpoint.return_value = {
+        "result": "success",
+        "user_groups": [{"name": "no-id"}],
+    }
+    with pytest.raises(ZulipAPIError, match="numeric 'id'"):
+        _ = list_groups(client)
+
+
+def test_system_role_display_names_round_trip() -> None:
+    """SYSTEM_ROLE_DISPLAY_NAMES is consistent with SYSTEM_ROLE_GROUPS."""
+    from lftools_uv.api.endpoints.zulip import SYSTEM_ROLE_DISPLAY_NAMES
+
+    assert set(SYSTEM_ROLE_DISPLAY_NAMES.keys()) == set(SYSTEM_ROLE_GROUPS.values())
+    # Every display name folds back to a key in SYSTEM_ROLE_GROUPS.
+    for display in SYSTEM_ROLE_DISPLAY_NAMES.values():
+        assert display.casefold() in SYSTEM_ROLE_GROUPS

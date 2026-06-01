@@ -522,6 +522,23 @@ SYSTEM_ROLE_GROUPS: dict[str, str] = {
 }
 
 
+#: Reverse of :data:`SYSTEM_ROLE_GROUPS`: maps the Zulip ``role:`` API name
+#: to the human-facing display name presented in ``group list`` output and
+#: accepted by ``--allow-group``/``--can-remove-subscribers-group``.
+#:
+#: Derived from :data:`SYSTEM_ROLE_GROUPS` to avoid drift — display names
+#: are Title Case versions of the lowercase keys, with the historical
+#: ``Full Members`` two-word form preserved.
+def _build_system_role_display_names() -> dict[str, str]:
+    overrides = {"full members": "Full Members"}
+    return {
+        api_name: overrides.get(display.lower(), display.title()) for display, api_name in SYSTEM_ROLE_GROUPS.items()
+    }
+
+
+SYSTEM_ROLE_DISPLAY_NAMES: dict[str, str] = _build_system_role_display_names()
+
+
 def _fetch_groups(client: Any) -> list[dict[str, Any]]:
     """Return the raw user_groups listing from the Zulip server."""
     try:
@@ -749,3 +766,95 @@ def list_users(
             continue
         result.append(_normalize_user(member))
     return result
+
+
+# ---------------------------------------------------------------------------
+# Group listing (US3)
+# ---------------------------------------------------------------------------
+
+
+def _normalize_group(raw: dict[str, Any]) -> dict[str, Any]:
+    """Normalize a raw ``user_groups`` API entry to the lftools schema.
+
+    Maps system role groups to their display names per
+    :data:`SYSTEM_ROLE_DISPLAY_NAMES`; custom group names pass through
+    unchanged. ``member_count`` is derived from the ``members`` array
+    length, or ``0`` when the server omits ``members``.
+
+    Raises :class:`ZulipAPIError` when required fields are missing or
+    have unexpected types — ``id`` must be an int, ``name`` must be a
+    non-empty string, ``members`` must be a list when present, and
+    ``is_system_group`` (when present) must be a ``bool``. The
+    ``description`` field is coerced to a string (Zulip historically
+    returns an empty string when not set, but ``None`` is also
+    tolerated).
+    """
+    raw_id = raw.get("id")
+    if not isinstance(raw_id, int):
+        raise ZulipAPIError(f"Group object missing numeric 'id': {raw!r}")
+    api_name = raw.get("name")
+    if not isinstance(api_name, str) or not api_name:
+        raise ZulipAPIError(f"Group object missing string 'name': {raw!r}")
+    members = raw.get("members", [])
+    if not isinstance(members, list):
+        raise ZulipAPIError(f"Group object has non-list 'members': {raw!r}")
+    is_system_raw = raw.get("is_system_group", False)
+    if not isinstance(is_system_raw, bool):
+        raise ZulipAPIError(f"Group object has non-boolean 'is_system_group': {raw!r}")
+    if is_system_raw:
+        display = SYSTEM_ROLE_DISPLAY_NAMES.get(api_name, api_name)
+    else:
+        display = api_name
+    description = raw.get("description")
+    return {
+        "group_id": raw_id,
+        "name": display,
+        "description": "" if description is None else str(description),
+        "member_count": len(members),
+        "type": "system" if is_system_raw else "custom",
+    }
+
+
+def list_groups(
+    client: Any,
+    *,
+    group_name: str | None = None,
+    group_id: int | None = None,
+) -> list[dict[str, Any]]:
+    """List Zulip user groups (custom and system role groups).
+
+    Returns a list of normalized group dicts with keys ``group_id``,
+    ``name``, ``description``, ``member_count``, and ``type`` (either
+    ``"custom"`` or ``"system"``). System role groups are returned with
+    their human display name (e.g. ``"Administrators"``) rather than
+    the internal ``role:administrators`` API name.
+
+    ``group_name`` and ``group_id`` are mutually exclusive filters.
+    ``group_name`` matching is case-insensitive against the display
+    name and applies after the system-role name mapping; a collision
+    that resolves to more than one group raises
+    :class:`ZulipAmbiguityError` with the matches listed.
+    """
+    if group_name is not None and group_id is not None:
+        raise ZulipValidationError("Specify only one of --group-name or --group-id, not both")
+    raw_groups = _fetch_groups(client)
+    normalized: list[dict[str, Any]] = []
+    for raw in raw_groups:
+        if not isinstance(raw, dict):
+            raise ZulipAPIError(f"Malformed user_groups entry (not a dict): {raw!r}")
+        normalized.append(_normalize_group(raw))
+
+    if group_id is not None:
+        return [g for g in normalized if g["group_id"] == group_id]
+
+    if group_name is not None:
+        target = group_name.casefold()
+        matches = [g for g in normalized if str(g["name"]).casefold() == target]
+        if len(matches) > 1:
+            raise ZulipAmbiguityError(
+                f"Group name {group_name!r} matched {len(matches)} groups; use --group-id to disambiguate",
+                matches=[{"group_id": m["group_id"], "name": m["name"]} for m in matches],
+            )
+        return matches
+
+    return normalized
