@@ -779,11 +779,11 @@ def _normalize_group(raw: dict[str, Any]) -> dict[str, Any]:
     Maps system role groups to their display names per
     :data:`SYSTEM_ROLE_DISPLAY_NAMES`; custom group names pass through
     unchanged. ``member_count`` is derived from the ``members`` array
-    length.
+    length, or ``0`` when the server omits ``members``.
 
     Raises :class:`ZulipAPIError` when required fields are missing or
     have unexpected types — ``id`` must be an int, ``name`` must be a
-    non-empty string, ``members`` must be a list, and
+    non-empty string, ``members`` must be a list when present, and
     ``is_system_group`` (when present) must be a ``bool``. The
     ``description`` field is coerced to a string (Zulip historically
     returns an empty string when not set, but ``None`` is also
