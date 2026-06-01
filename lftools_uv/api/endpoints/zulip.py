@@ -805,11 +805,11 @@ def _normalize_group(raw: dict[str, Any]) -> dict[str, Any]:
         display = SYSTEM_ROLE_DISPLAY_NAMES.get(api_name, api_name)
     else:
         display = api_name
-    description = raw.get("description", "") or ""
+    description = raw.get("description")
     return {
         "group_id": raw_id,
         "name": display,
-        "description": str(description),
+        "description": "" if description is None else str(description),
         "member_count": len(members),
         "type": "system" if is_system_raw else "custom",
     }

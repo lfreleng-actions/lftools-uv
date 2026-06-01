@@ -750,6 +750,14 @@ def test_list_groups_member_counts() -> None:
     assert by_id[23]["member_count"] == 0
 
 
+def test_list_groups_preserves_falsy_descriptions() -> None:
+    """Falsy non-None descriptions are coerced with ``str(...)``."""
+    client = _list_groups_client(
+        [{"id": 1, "name": "zero", "description": 0, "members": []}],
+    )
+    assert list_groups(client)[0]["description"] == "0"
+
+
 def test_list_groups_filter_by_group_id() -> None:
     """``group_id`` filter narrows the result to exactly one group."""
     client = _list_groups_client(LIST_GROUPS)

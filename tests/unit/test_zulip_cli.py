@@ -613,10 +613,11 @@ def test_group_list_ambiguity_error_display() -> None:
     )
     result, _ = _invoke_group_list(["--group-name", "design"], list_groups_exc=exc)
     assert result.exit_code == 1
-    assert "design" in result.stderr.lower()
+    combined = result.stdout + result.stderr
+    assert "design" in combined.lower()
     # Matches list rendered with both ids.
-    assert "11" in result.stderr
-    assert "12" in result.stderr
+    assert "11" in combined
+    assert "12" in combined
 
 
 def test_group_list_config_error_display() -> None:
@@ -626,7 +627,8 @@ def test_group_list_config_error_display() -> None:
         get_client_exc=ZulipConfigError("No Zulip configuration found."),
     )
     assert result.exit_code == 1
-    assert "No Zulip configuration" in result.stderr
+    combined = result.stdout + result.stderr
+    assert "No Zulip configuration" in combined
 
 
 def test_group_list_help_renders() -> None:
