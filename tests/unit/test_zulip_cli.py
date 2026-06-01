@@ -628,8 +628,9 @@ def test_group_list_config_error_display() -> None:
     assert "No Zulip configuration" in combined
 
 
-def test_group_list_help_renders() -> None:
+def test_group_list_help_renders(monkeypatch: pytest.MonkeyPatch) -> None:
     """``zulip group list --help`` produces usable help text."""
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
     runner = CliRunner()
     result = runner.invoke(
         zulip_app,
@@ -640,3 +641,317 @@ def test_group_list_help_renders() -> None:
     cleaned = clean_cli_output(result.stdout)
     assert "--group-name" in cleaned
     assert "--group-id" in cleaned
+
+
+# ---------------------------------------------------------------------------
+# T032 — ``zulip channel create`` (US4)
+# ---------------------------------------------------------------------------
+
+
+CREATE_STREAMS = [
+    {"stream_id": 100, "name": "new-project", "description": "", "is_archived": False},
+]
+
+CREATE_MEMBERS = [
+    {
+        "user_id": 10,
+        "full_name": "Alice Smith",
+        "email": "alice@example.com",
+        "delivery_email": "alice@example.com",
+        "is_bot": False,
+        "is_active": True,
+    },
+    {
+        "user_id": 11,
+        "full_name": "Bob Jones",
+        "email": "bob@example.com",
+        "delivery_email": "bob@example.com",
+        "is_bot": False,
+        "is_active": True,
+    },
+]
+
+CREATE_CLI_GROUPS = [
+    {"id": 10, "name": "engineering", "is_system_group": False, "members": [1, 2]},
+    {"id": 20, "name": "role:administrators", "is_system_group": True, "members": [1]},
+    {"id": 21, "name": "role:nobody", "is_system_group": True, "members": []},
+    {"id": 22, "name": "role:members", "is_system_group": True, "members": [1, 2, 3]},
+]
+
+
+def _create_cli_client(
+    *,
+    feature_level: int = 400,
+    streams: list[dict[str, Any]] | None = None,
+    members: list[dict[str, Any]] | None = None,
+    groups: list[dict[str, Any]] | None = None,
+    subscribe_response: dict[str, Any] | None = None,
+) -> Any:
+    """Return a mock client for channel create CLI tests."""
+    client = mock.MagicMock()
+    client.get_server_settings.return_value = {
+        "result": "success",
+        "zulip_feature_level": feature_level,
+    }
+    client.get_members.return_value = {
+        "result": "success",
+        "members": members or CREATE_MEMBERS,
+    }
+
+    def call_endpoint_side_effect(*, url: str, method: str, request: Any = None) -> Any:
+        if url == "users/me/subscriptions" and method == "POST":
+            return subscribe_response or {"result": "success", "subscribed": {}}
+        if url == "streams" and method == "GET":
+            return {"result": "success", "streams": streams or CREATE_STREAMS}
+        if url == "user_groups" and method == "GET":
+            return {"result": "success", "user_groups": groups or CREATE_CLI_GROUPS}
+        if url.startswith("streams/") and method == "PATCH":
+            return {"result": "success"}
+        return {"result": "error", "msg": f"unexpected endpoint: {url}"}
+
+    client.call_endpoint.side_effect = call_endpoint_side_effect
+    return client
+
+
+def _invoke_create(
+    args: list[str],
+    *,
+    client: Any = None,
+    feature_level: int = 400,
+    json_output: bool = False,
+) -> Any:
+    """Invoke ``zulip channel create`` with mocked API layer."""
+    runner = CliRunner()
+    global_args = ["--json"] if json_output else []
+    if client is None:
+        client = _create_cli_client(feature_level=feature_level)
+    with (
+        mock.patch.object(zulip_mod, "get_client", return_value=client),
+        mock.patch.object(zulip_mod, "zulip_available", return_value=True),
+    ):
+        result = runner.invoke(zulip_app, [*global_args, "channel", "create", *args])
+        return result
+
+
+def test_channel_create_public_success() -> None:
+    """Public channel creation succeeds with just a name."""
+    result = _invoke_create(["new-project"])
+    assert result.exit_code == 0, result.output
+    assert "Created public channel" in result.output or "new-project" in result.output
+
+
+def test_channel_create_public_json_output() -> None:
+    """``--json`` output follows the mutation result schema."""
+    result = _invoke_create(["new-project"], json_output=True)
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["status"] == "success"
+    assert payload["channel_name"] == "new-project"
+    assert payload["operation"] == "create"
+    assert payload["type"] == "public"
+    assert "channel_id" in payload
+
+
+def test_channel_create_private_with_subscribe() -> None:
+    """Private channel with --subscribe succeeds (lockout prevention met)."""
+    result = _invoke_create(
+        [
+            "new-project",
+            "--type",
+            "private",
+            "--subscribe",
+            "alice@example.com",
+            "--by-email",
+        ]
+    )
+    assert result.exit_code == 0, result.output
+
+
+def test_channel_create_private_without_subscribers_fails() -> None:
+    """Private channel without subscribers raises lockout error."""
+    result = _invoke_create(["new-project", "--type", "private"])
+    assert result.exit_code == 1
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "lockout" in combined.lower() or "subscribe" in combined.lower()
+
+
+def test_channel_create_private_with_allow_group() -> None:
+    """Private channel with --allow-group (non-Nobody) succeeds."""
+    result = _invoke_create(
+        [
+            "new-project",
+            "--type",
+            "private",
+            "--allow-group",
+            "engineering",
+        ]
+    )
+    assert result.exit_code == 0, result.output
+
+
+def test_channel_create_private_with_nobody_fails() -> None:
+    """Private channel with --allow-group Nobody fails lockout prevention."""
+    result = _invoke_create(
+        [
+            "new-project",
+            "--type",
+            "private",
+            "--allow-group",
+            "Nobody",
+        ]
+    )
+    assert result.exit_code == 1
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "nobody" in combined.lower() or "lockout" in combined.lower()
+
+
+def test_channel_create_announce_mutex() -> None:
+    """--announce and --no-announce are mutually exclusive."""
+    result = _invoke_create(["new-project", "--announce", "--no-announce"])
+    assert result.exit_code == 1
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "mutually exclusive" in combined.lower()
+
+
+def test_channel_create_invalid_topic_policy() -> None:
+    """Invalid --topic-policy value is rejected."""
+    result = _invoke_create(["new-project", "--topic-policy", "invalid"])
+    assert result.exit_code == 1
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "invalid" in combined.lower() or "topic-policy" in combined.lower()
+
+
+def test_channel_create_valid_topic_policies() -> None:
+    """All valid --topic-policy values are accepted."""
+    for policy in ["allow", "deny", "follow-default"]:
+        result = _invoke_create(["new-project", "--topic-policy", policy])
+        assert result.exit_code == 0, f"Failed for policy={policy}: {result.output}"
+
+
+def test_channel_create_web_public_feature_level_error() -> None:
+    """Web-public channel fails when feature level is too low."""
+    result = _invoke_create(
+        ["new-project", "--type", "web-public"],
+        feature_level=10,
+    )
+    assert result.exit_code == 1
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "feature level" in combined.lower()
+
+
+def test_channel_create_invalid_type() -> None:
+    """Invalid --type value is rejected."""
+    result = _invoke_create(["new-project", "--type", "invalid"])
+    assert result.exit_code == 1
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "invalid" in combined.lower() or "type" in combined.lower()
+
+
+def test_channel_create_subscribe_requires_id_mode() -> None:
+    """--subscribe requires one of --by-email/--by-id/--by-name."""
+    result = _invoke_create(
+        [
+            "new-project",
+            "--type",
+            "private",
+            "--subscribe",
+            "alice@example.com",
+        ]
+    )
+    assert result.exit_code == 1
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "by-email" in combined.lower() or "by-id" in combined.lower()
+
+
+def test_channel_create_id_mode_mutex() -> None:
+    """--by-email, --by-id, and --by-name are mutually exclusive."""
+    result = _invoke_create(
+        [
+            "new-project",
+            "--type",
+            "private",
+            "--subscribe",
+            "alice@example.com",
+            "--by-email",
+            "--by-id",
+        ]
+    )
+    assert result.exit_code == 1
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "mutually exclusive" in combined.lower()
+
+
+def test_channel_create_with_description() -> None:
+    """--description is passed to the channel."""
+    result = _invoke_create(["new-project", "--description", "Test channel"], json_output=True)
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["status"] == "success"
+
+
+def test_channel_create_can_remove_subscribers_group() -> None:
+    """--can-remove-subscribers-group is accepted."""
+    result = _invoke_create(
+        [
+            "new-project",
+            "--can-remove-subscribers-group",
+            "Administrators",
+        ]
+    )
+    assert result.exit_code == 0, result.output
+
+
+def test_channel_create_user_ambiguity_error() -> None:
+    """Ambiguous user name raises error with match listing."""
+    # Create members with duplicate names
+    ambiguous_members = [
+        {
+            "user_id": 10,
+            "full_name": "Alice Smith",
+            "email": "alice@example.com",
+            "delivery_email": "alice@example.com",
+            "is_bot": False,
+            "is_active": True,
+        },
+        {
+            "user_id": 11,
+            "full_name": "Alice Smith",
+            "email": "alice2@example.com",
+            "delivery_email": "alice2@example.com",
+            "is_bot": False,
+            "is_active": True,
+        },
+    ]
+    client = _create_cli_client(members=ambiguous_members)
+    result = _invoke_create(
+        [
+            "new-project",
+            "--type",
+            "private",
+            "--subscribe",
+            "Alice Smith",
+            "--by-name",
+        ],
+        client=client,
+    )
+    assert result.exit_code == 1
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "ambig" in combined.lower() or "alice" in combined.lower()
+
+
+def test_channel_create_help_renders(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``zulip channel create --help`` produces usable help text."""
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        ["channel", "create", "--help"],
+        env={"COLUMNS": "200", "NO_COLOR": "1", "TERM": "dumb"},
+    )
+    assert result.exit_code == 0, result.output
+    cleaned = clean_cli_output(result.output)
+    assert "--type" in cleaned
+    assert "--subscribe" in cleaned
+    assert "--allow-group" in cleaned
+    assert "--announce" in cleaned
+    assert "--topic-policy" in cleaned
