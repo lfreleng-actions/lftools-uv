@@ -1353,7 +1353,7 @@ def test_channel_subscribe_human_mode_surfaces_ambiguity_matches() -> None:
     )
     assert result.exit_code == 1
     # Both candidate emails must appear in the rendered output.
-    out = result.stdout + result.output
+    out = result.output
     assert "bob.smith@example.com" in out
     assert "bob.jones@example.com" in out
 
