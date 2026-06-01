@@ -947,23 +947,22 @@ def test_create_channel_private_without_subscribers_raises_lockout() -> None:
         create_channel(client, name="private-no-subs", channel_type="private")
 
 
-def test_create_channel_private_with_nobody_raises_lockout() -> None:
-    """Private channel with allow-group Nobody alone raises lockout error."""
+def test_create_channel_private_no_subscribers_no_group_raises_lockout() -> None:
+    """Private channel without subscribers or allow-group raises lockout error."""
     from lftools_uv.api.endpoints.zulip import create_channel
 
     client = _create_channel_client()
-    with pytest.raises(ZulipLockoutError, match="Nobody"):
+    with pytest.raises(ZulipLockoutError, match="lockout"):
         create_channel(
             client,
-            name="private-nobody",
+            name="private-locked",
             channel_type="private",
-            allow_group_value=21,  # Nobody's group ID
-            allow_group_is_nobody=True,
+            # No subscribers, no allow_group_value
         )
 
 
 def test_create_channel_private_with_allow_group_succeeds() -> None:
-    """Private channel with non-Nobody allow-group succeeds."""
+    """Private channel with allow-group succeeds."""
     from lftools_uv.api.endpoints.zulip import create_channel
 
     client = _create_channel_client()
@@ -972,7 +971,6 @@ def test_create_channel_private_with_allow_group_succeeds() -> None:
         name="new-channel",
         channel_type="private",
         allow_group_value=10,  # engineering group
-        allow_group_is_nobody=False,
     )
     assert result["status"] == "success"
     assert result["type"] == "private"

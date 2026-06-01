@@ -884,7 +884,6 @@ def create_channel(
     channel_type: Literal["public", "private", "web-public"] = "public",
     subscribe_user_ids: list[int] | None = None,
     allow_group_value: GroupSettingValue | None = None,
-    allow_group_is_nobody: bool = False,
     can_remove_subscribers_group_value: GroupSettingValue | None = None,
     announce: bool | None = None,
     topic_policy: str | None = None,
@@ -905,8 +904,8 @@ def create_channel(
         List of user IDs to subscribe on creation.
     allow_group_value
         Resolved group-setting value for ``can_access_group`` field.
-    allow_group_is_nobody
-        ``True`` when the resolved allow-group is exactly ``Nobody``.
+        For private channels, callers should validate this is not the
+        ``Nobody`` group before calling (to prevent lockout).
     can_remove_subscribers_group_value
         Resolved group-setting value for ``can_remove_subscribers_group``.
     announce
@@ -952,17 +951,14 @@ def create_channel(
     if can_remove_subscribers_group_value is not None:
         check_feature_level(client, FEATURE_LEVELS["can-remove-subscribers-group"], "can-remove-subscribers-group")
 
-    # Lockout prevention for private channels
+    # Lockout prevention for private channels:
+    # Require at least one subscriber OR a non-None allow_group_value.
+    # Callers must validate that allow_group_value is not the Nobody group
+    # before calling (the CLI does this via resolve_groups with allow_nobody=False).
     has_subscribers = bool(subscribe_user_ids)
-    has_non_nobody_group = allow_group_value is not None and not allow_group_is_nobody
+    has_allow_group = allow_group_value is not None
 
-    if channel_type == "private" and not has_subscribers and not has_non_nobody_group:
-        if allow_group_is_nobody:
-            raise ZulipLockoutError(
-                "'Nobody' does not satisfy lockout prevention — it disables "
-                "the permission entirely. Specify --subscribe users or a "
-                "non-Nobody --allow-group."
-            )
+    if channel_type == "private" and not has_subscribers and not has_allow_group:
         raise ZulipLockoutError(
             "Private channels require at least one --subscribe user or a non-Nobody --allow-group to prevent lockout."
         )
@@ -986,26 +982,6 @@ def create_channel(
     elif announce is False:
         request["announce"] = False
     # None = API default (no key)
-
-    if topic_policy is not None:
-        request["message_retention_days"] = None  # not used, but topic policy needs stream_post_policy
-        # Zulip uses stream_post_policy for topic enforcement in older APIs;
-        # newer APIs use can_add_custom_emoji_group etc.
-        # Actually, per Zulip API docs, the field is `can_remove_subscribers_group`
-        # and topic policy uses different approach. Let me check the actual API.
-        # For now, we pass the raw topic_policy value if supported.
-        # The Zulip subscribe API doesn't actually support topic_policy directly;
-        # it must be set via update after creation OR use newer fields.
-        # For feature level 334+, use `stream_post_policy` or similar.
-        # Since the spec says topic_policy maps to allow/deny/follow-default,
-        # and Zulip's create stream doesn't directly support it, we need to
-        # create first then update. However, checking the Zulip API docs...
-        # Actually, the Zulip API for creating streams does NOT support
-        # stream_post_policy directly in the subscribe endpoint. It must be
-        # set via PATCH /streams/{stream_id} after creation.
-        # For this implementation, we'll document this limitation and set it
-        # via a follow-up PATCH call if topic_policy is specified.
-        pass
 
     if allow_group_value is not None:
         request["can_access_group"] = allow_group_value
@@ -1037,14 +1013,15 @@ def create_channel(
         # Channel was created but we can't find it - unusual edge case
         stream_id = None
 
-    # If topic_policy was requested, apply it via PATCH
+    # If topic_policy was requested, apply it via PATCH using the topics_policy field
+    # (introduced in Zulip feature level 334)
     if topic_policy is not None and stream_id is not None:
         topic_policy_value = TOPIC_POLICY_MAP[topic_policy]
         try:
             patch_response = client.call_endpoint(
                 url=f"streams/{stream_id}",
                 method="PATCH",
-                request={"stream_post_policy": topic_policy_value},
+                request={"topics_policy": topic_policy_value},
             )
             if not isinstance(patch_response, dict) or patch_response.get("result") != "success":
                 log.warning(

@@ -403,20 +403,12 @@ def channel_create(
             subscribe_user_ids = [u["user_id"] for u in resolved_users]
 
         # Resolve allow-group if provided
+        # For private channels, resolve_groups with allow_nobody=False will raise
+        # ZulipLockoutError if the only group is Nobody - this is the lockout check
         allow_group_value = None
-        allow_group_is_nobody = False
         if allow_group:
-            # For private channels, use allow_nobody=False to trigger lockout check
-            # For other types, allow Nobody
             allow_nobody = channel_type != "private"
-            try:
-                resolved_groups, allow_group_value = resolve_groups(client, allow_group, allow_nobody=allow_nobody)
-                # Check if the only group is Nobody
-                if len(resolved_groups) == 1 and resolved_groups[0].get("name") == "role:nobody":
-                    allow_group_is_nobody = True
-            except ZulipLockoutError:
-                # Re-raise with CLI-friendly message
-                raise
+            _, allow_group_value = resolve_groups(client, allow_group, allow_nobody=allow_nobody)
 
         # Resolve can-remove-subscribers-group if provided
         can_remove_value = None
@@ -430,7 +422,6 @@ def channel_create(
             channel_type=channel_type,  # type: ignore[arg-type]
             subscribe_user_ids=subscribe_user_ids,
             allow_group_value=allow_group_value,
-            allow_group_is_nobody=allow_group_is_nobody,
             can_remove_subscribers_group_value=can_remove_value,
             announce=announce_value,
             topic_policy=topic_policy,
