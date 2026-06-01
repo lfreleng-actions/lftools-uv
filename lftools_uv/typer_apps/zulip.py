@@ -496,9 +496,12 @@ def user_list(
         "--include-deactivated",
         help="Include deactivated user accounts in the output.",
     ),
+    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON instead of a table."),
 ) -> None:
     """List users on the Zulip server (US2)."""
-    options = ctx.obj or {}
+    options = {**(ctx.obj or {})}
+    if json_output:
+        options["json_output"] = True
     try:
         client = get_client(zuliprc=options.get("zuliprc"))
         users = list_users(
@@ -557,6 +560,7 @@ def group_list(
         "--group-id",
         help="Filter by numeric group ID.",
     ),
+    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON instead of a table."),
 ) -> None:
     """List user groups on the Zulip server.
 
@@ -564,7 +568,9 @@ def group_list(
     (Owners, Administrators, Moderators, Full Members, Members,
     Everyone, Nobody), including their display names and member counts.
     """
-    options = ctx.obj or {}
+    options = {**(ctx.obj or {})}
+    if json_output:
+        options["json_output"] = True
     try:
         client = get_client(zuliprc=options.get("zuliprc"))
         groups = list_groups(

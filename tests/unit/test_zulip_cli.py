@@ -388,11 +388,12 @@ def test_user_list_table_optional_columns(monkeypatch: pytest.MonkeyPatch) -> No
     assert "Deactivated" in result.stdout
 
 
-def test_user_list_json_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("args", (["--json", "user", "list"], ["user", "list", "--json"]))
+def test_user_list_json_envelope(monkeypatch: pytest.MonkeyPatch, args: list[str]) -> None:
     """``--json`` emits the canonical ``{"users": [...]}`` envelope."""
     _patched_user_client(monkeypatch, CLI_MEMBERS)
     runner = CliRunner()
-    result = runner.invoke(zulip_app, ["--json", "user", "list"])
+    result = runner.invoke(zulip_app, args)
     assert result.exit_code == 0, result.stdout
     payload = json.loads(result.stdout)
     assert "users" in payload
