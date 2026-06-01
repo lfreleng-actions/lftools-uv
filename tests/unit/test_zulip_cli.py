@@ -554,7 +554,7 @@ def test_group_list_json_output_schema() -> None:
     """``--json`` emits the standard ``{"groups": [...]}`` schema."""
     result, _ = _invoke_group_list(["--json"], list_groups_return=_FAKE_GROUPS)
     assert result.exit_code == 0, result.stdout
-    payload = _json.loads(result.stdout)
+    payload = json.loads(result.stdout)
     assert set(payload.keys()) == {"groups"}
     assert payload["groups"] == _FAKE_GROUPS
 
