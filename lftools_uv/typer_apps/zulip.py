@@ -34,6 +34,8 @@ from tabulate import tabulate
 
 from lftools_uv.api.endpoints.zulip import (
     ZulipError,
+    get_client,
+    list_channels,
     zulip_available,
 )
 
@@ -164,13 +166,31 @@ def bulk_mutation_result(
 
 
 @zulip_app.callback()
-def zulip_callback(ctx: typer.Context) -> None:
+def zulip_callback(
+    ctx: typer.Context,
+    zuliprc: Path | None = typer.Option(
+        None,
+        "--zuliprc",
+        help="Path to a zuliprc configuration file (FR-011 precedence applies).",
+        callback=zuliprc_callback,
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit machine-readable JSON instead of a table.",
+    ),
+) -> None:
     """Top-level callback for the Zulip command group.
 
     When the optional ``zulip`` extra is not installed, abort
     immediately with the canonical FR-022 error so that every
     subcommand presents the same guidance to the user.
     """
+    ctx.obj = {
+        **(ctx.obj or {}),
+        "zuliprc": zuliprc,
+        "json_output": json_output,
+    }
     # Allow ``--help`` (including nested subcommand help) to render even
     # when the optional extra is missing. Typer sets resilient_parsing
     # while it is walking the command tree for help discovery.
@@ -182,3 +202,54 @@ def zulip_callback(ctx: typer.Context) -> None:
     if not zulip_available():
         typer.echo(MISSING_EXTRA_MESSAGE, err=True)
         raise typer.Exit(code=1)
+
+
+# ---------------------------------------------------------------------------
+# US1 — channel list (T023)
+# ---------------------------------------------------------------------------
+
+
+channel_app = typer.Typer(
+    name="channel",
+    help="Manage Zulip channels.",
+    no_args_is_help=True,
+)
+zulip_app.add_typer(channel_app, name="channel")
+
+
+@channel_app.command("list")
+def channel_list(
+    ctx: typer.Context,
+    include_archived: bool = typer.Option(
+        False,
+        "--include-archived",
+        help="Include archived channels in the output.",
+    ),
+) -> None:
+    """List channels visible to the authenticated user (US1)."""
+    options = ctx.obj or {}
+    try:
+        client = get_client(zuliprc=options.get("zuliprc"))
+        channels = list_channels(client, include_archived=include_archived)
+    except ZulipError as exc:
+        raise handle_zulip_error(exc) from exc
+
+    if options.get("json_output"):
+        emit_json({"channels": channels})
+        return
+
+    headers = ["Name", "Description", "Type", "Subscribers"]
+    if include_archived:
+        headers.append("Status")
+    rows: list[list[Any]] = []
+    for c in channels:
+        row: list[Any] = [
+            c.get("name", ""),
+            c.get("description", ""),
+            c.get("type", ""),
+            c.get("subscriber_count", 0),
+        ]
+        if include_archived:
+            row.append("archived" if c.get("is_archived") else "active")
+        rows.append(row)
+    emit_table(rows, headers)

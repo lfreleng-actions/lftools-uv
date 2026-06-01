@@ -17,9 +17,15 @@ alongside the user-story slices that introduce them.
 
 from __future__ import annotations
 
+import json as _json
+from typing import Any
+from unittest import mock
+
 import pytest
 from typer.testing import CliRunner
 
+import lftools_uv.typer_apps.zulip as zulip_mod
+from lftools_uv.api.endpoints.zulip import ZulipConfigError
 from lftools_uv.typer_apps.zulip import (
     MISSING_EXTRA_MESSAGE,
     bulk_mutation_result,
@@ -50,8 +56,6 @@ def test_zulip_help_works_without_extra(monkeypatch: pytest.MonkeyPatch) -> None
     enforcing the FR-022 extra-required guard. Otherwise users could not
     discover commands until after installing the extra.
     """
-    import lftools_uv.typer_apps.zulip as zulip_mod
-
     monkeypatch.setattr(zulip_mod, "zulip_available", lambda: False)
     runner = CliRunner()
     result = runner.invoke(zulip_app, ["--help"])
@@ -129,3 +133,177 @@ def test_bulk_mutation_result_error_status() -> None:
         errors=[{"user": "b", "error": "not found"}],
     )
     assert payload["status"] == "error"
+
+
+# ---------------------------------------------------------------------------
+# T020 — channel list command
+# ---------------------------------------------------------------------------
+
+
+_LIST_RESPONSE = {
+    "result": "success",
+    "streams": [
+        {
+            "stream_id": 1,
+            "name": "general",
+            "description": "General discussion",
+            "invite_only": False,
+            "is_web_public": False,
+            "is_archived": False,
+            "subscriber_count": 42,
+        },
+        {
+            "stream_id": 2,
+            "name": "secret",
+            "description": "private things",
+            "invite_only": True,
+            "is_web_public": False,
+            "is_archived": False,
+            "subscriber_count": 5,
+        },
+    ],
+}
+
+
+def _patched_client(monkeypatch: pytest.MonkeyPatch, response: dict[str, Any]) -> mock.MagicMock:
+    """Patch ``get_client`` and return the fake client used by tests."""
+    fake = mock.MagicMock()
+    fake.call_endpoint.return_value = response
+    monkeypatch.setattr(zulip_mod, "get_client", lambda **_kw: fake)
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
+    return fake
+
+
+def test_channel_list_table_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default invocation prints a table with the documented columns."""
+    _patched_client(monkeypatch, _LIST_RESPONSE)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "list"])
+    assert result.exit_code == 0, result.stdout
+    assert "Name" in result.stdout
+    assert "Description" in result.stdout
+    assert "Type" in result.stdout
+    assert "Subscribers" in result.stdout
+    assert "general" in result.stdout
+    assert "secret" in result.stdout
+    # Status column is hidden unless --include-archived
+    assert "Status" not in result.stdout
+
+
+def test_channel_list_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--json`` emits the documented envelope with normalized fields."""
+    _patched_client(monkeypatch, _LIST_RESPONSE)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["--json", "channel", "list"])
+    assert result.exit_code == 0, result.stdout
+    payload = _json.loads(result.stdout)
+    assert "channels" in payload
+    by_id = {c["stream_id"]: c for c in payload["channels"]}
+    assert by_id[1]["type"] == "public"
+    assert by_id[2]["type"] == "private"
+    assert by_id[1]["subscriber_count"] == 42
+    assert by_id[1]["is_archived"] is False
+
+
+def test_channel_list_accepts_global_zuliprc(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--zuliprc`` is accepted before the channel subcommands."""
+    seen: dict[str, Any] = {}
+    fake = mock.MagicMock()
+    fake.call_endpoint.return_value = {"result": "success", "streams": []}
+
+    def _get_client(**kwargs: Any) -> mock.MagicMock:
+        seen.update(kwargs)
+        return fake
+
+    monkeypatch.setattr(zulip_mod, "get_client", _get_client)
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["--zuliprc", "custom.rc", "channel", "list"])
+
+    assert result.exit_code == 0, result.stdout
+    assert str(seen["zuliprc"]) == "custom.rc"
+
+
+def test_channel_list_include_archived_adds_status_column(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``--include-archived`` adds Status, includes archived rows, and
+    propagates ``include_archived=True`` to the underlying API call."""
+    active = list(_LIST_RESPONSE["streams"])
+    archived_extra = {
+        "stream_id": 9,
+        "name": "old",
+        "description": "",
+        "invite_only": False,
+        "is_web_public": False,
+        "is_archived": True,
+        "subscriber_count": 0,
+    }
+    fake = mock.MagicMock()
+
+    def _side_effect(*, url: str, method: str, request: dict[str, Any] | None = None) -> dict[str, Any]:
+        assert url == "streams"
+        assert method == "GET"
+        if request and request.get("include_archived"):
+            return {"result": "success", "streams": active + [archived_extra]}
+        return {"result": "success", "streams": active}
+
+    fake.call_endpoint.side_effect = _side_effect
+    monkeypatch.setattr(zulip_mod, "get_client", lambda **_kw: fake)
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
+
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "list", "--include-archived"])
+    assert result.exit_code == 0, result.stdout
+    assert "Status" in result.stdout
+    assert "old" in result.stdout
+    assert "archived" in result.stdout
+    # The CLI must have propagated the flag to the API request.
+    seen_archived = any(
+        (call.kwargs.get("request") or {}).get("include_archived") is True for call in fake.call_endpoint.call_args_list
+    )
+    assert seen_archived, "expected --include-archived to set include_archived=True on the API request"
+
+
+def test_channel_list_blocked_without_extra(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When the zulip extra is missing, the FR-022 guard fires (exit code 1)."""
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: False)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "list"])
+    assert result.exit_code == 1
+    assert "zulip extra" in result.stderr or "zulip extra" in result.stdout
+
+
+def test_channel_list_empty_table(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An empty channel list still prints headers and exits 0."""
+    _patched_client(monkeypatch, {"result": "success", "streams": []})
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "list"])
+    assert result.exit_code == 0, result.stdout
+    assert "Name" in result.stdout
+    assert "general" not in result.stdout
+
+
+def test_channel_list_empty_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--json`` on an empty server returns ``{"channels": []}``."""
+    _patched_client(monkeypatch, {"result": "success", "streams": []})
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["--json", "channel", "list"])
+    assert result.exit_code == 0, result.stdout
+    assert _json.loads(result.stdout) == {"channels": []}
+
+
+def test_channel_list_config_error_surfaces(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``ZulipConfigError`` from ``get_client`` is rendered via emit_error."""
+
+    def _raise(**_kw: Any) -> Any:
+        raise ZulipConfigError("zuliprc not found at any of the expected paths")
+
+    monkeypatch.setattr(zulip_mod, "get_client", _raise)
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "list"])
+    assert result.exit_code == 1
+    combined = result.stdout + result.stderr
+    assert "zuliprc not found" in combined
+    assert "Error:" in combined

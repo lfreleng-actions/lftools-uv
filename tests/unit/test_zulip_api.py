@@ -28,6 +28,7 @@ from lftools_uv.api.endpoints.zulip import (
     FEATURE_LEVELS,
     SYSTEM_ROLE_GROUPS,
     ZulipAmbiguityError,
+    ZulipAPIError,
     ZulipConfig,
     ZulipConfigError,
     ZulipFeatureLevelError,
@@ -37,6 +38,7 @@ from lftools_uv.api.endpoints.zulip import (
     check_feature_level,
     get_client,
     get_server_feature_level,
+    list_channels,
     resolve_channel,
     resolve_groups,
     resolve_users,
@@ -363,8 +365,9 @@ def test_resolve_users_id_mode_requires_numeric() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_get_client_rejects_incomplete_credentials() -> None:
+def test_get_client_rejects_incomplete_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     """``get_client`` errors clearly when synthesized creds are incomplete."""
+    monkeypatch.setattr("lftools_uv.api.endpoints.zulip._zulip_module", mock.MagicMock())
     config = ZulipConfig(email="bot@example.com", source="lftools.ini[zulip]")
     with pytest.raises(ZulipConfigError, match="missing api_key, site"):
         _ = get_client(config=config)
@@ -380,3 +383,124 @@ def test_get_client_rejects_both_inputs() -> None:
     )
     with pytest.raises(ZulipValidationError):
         _ = get_client(zuliprc=mock.MagicMock(), config=config)
+
+
+# ---------------------------------------------------------------------------
+# T021 — list_channels()
+# ---------------------------------------------------------------------------
+
+
+LIST_ACTIVE = [
+    {
+        "stream_id": 1,
+        "name": "general",
+        "description": "General discussion",
+        "invite_only": False,
+        "is_web_public": False,
+        "is_archived": False,
+        "subscriber_count": 42,
+    },
+    {
+        "stream_id": 2,
+        "name": "secret",
+        "description": "private",
+        "invite_only": True,
+        "is_web_public": False,
+        "is_archived": False,
+        "subscriber_count": 5,
+    },
+    {
+        "stream_id": 3,
+        "name": "announce",
+        "description": "",
+        "invite_only": False,
+        "is_web_public": True,
+        "is_archived": False,
+        "subscriber_count": 100,
+    },
+]
+
+LIST_ARCHIVED = LIST_ACTIVE + [
+    {
+        "stream_id": 99,
+        "name": "old",
+        "description": "",
+        "invite_only": False,
+        "is_web_public": False,
+        "is_archived": True,
+        "subscriber_count": 0,
+    },
+]
+
+
+def test_list_channels_active_only_by_default() -> None:
+    """Without ``include_archived``, only active streams are returned."""
+    client = _streams_client(LIST_ACTIVE, LIST_ARCHIVED)
+    channels = list_channels(client)
+    assert [c["stream_id"] for c in channels] == [1, 2, 3]
+    assert all(not c["is_archived"] for c in channels)
+
+
+def test_list_channels_normalizes_type() -> None:
+    """Each stream maps to one of public / private / web-public."""
+    client = _streams_client(LIST_ACTIVE, LIST_ARCHIVED)
+    by_id = {c["stream_id"]: c for c in list_channels(client)}
+    assert by_id[1]["type"] == "public"
+    assert by_id[2]["type"] == "private"
+    assert by_id[3]["type"] == "web-public"
+
+
+def test_list_channels_include_archived_returns_all() -> None:
+    """``include_archived=True`` returns the archived superset."""
+    client = _streams_client(LIST_ACTIVE, LIST_ARCHIVED)
+    channels = list_channels(client, include_archived=True)
+    assert {c["stream_id"] for c in channels} == {1, 2, 3, 99}
+
+
+def test_list_channels_empty_list() -> None:
+    """An empty server returns an empty list, not an error."""
+    client = _streams_client([], [])
+    assert list_channels(client) == []
+
+
+def test_list_channels_propagates_api_error() -> None:
+    """API failures bubble up as ``ZulipAPIError``."""
+    client = mock.MagicMock()
+    client.call_endpoint.return_value = {"result": "error", "msg": "boom"}
+    with pytest.raises(ZulipAPIError):
+        _ = list_channels(client)
+
+
+def test_list_channels_keeps_description_and_count() -> None:
+    """The returned dict carries description and subscriber_count."""
+    client = _streams_client(LIST_ACTIVE, LIST_ARCHIVED)
+    by_id = {c["stream_id"]: c for c in list_channels(client)}
+    assert by_id[1]["description"] == "General discussion"
+    assert by_id[1]["subscriber_count"] == 42
+    assert by_id[1]["name"] == "general"
+
+
+def test_list_channels_defaults_missing_subscriber_count_to_zero() -> None:
+    """A stream without ``subscriber_count`` normalizes to 0, not None."""
+    streams = [
+        {
+            "stream_id": 7,
+            "name": "no-count",
+            "description": "",
+            "invite_only": False,
+            "is_web_public": False,
+            "is_archived": False,
+            # no subscriber_count
+        },
+    ]
+    client = _streams_client(streams, streams)
+    out = list_channels(client)
+    assert out[0]["subscriber_count"] == 0
+
+
+def test_list_channels_rejects_missing_stream_id() -> None:
+    """A stream lacking a numeric stream_id raises ``ZulipAPIError``."""
+    bad = [{"name": "no-id", "description": "", "invite_only": False}]
+    client = _streams_client(bad, bad)
+    with pytest.raises(ZulipAPIError):
+        _ = list_channels(client)
