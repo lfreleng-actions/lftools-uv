@@ -977,10 +977,6 @@ def _invoke_subscribe(
     """
     runner = CliRunner()
     command_args = list(args)
-    global_args: list[str] = []
-    if "--json" in command_args:
-        command_args.remove("--json")
-        global_args.append("--json")
     with (
         mock.patch("lftools_uv.typer_apps.zulip.get_client") as get_client,
         mock.patch("lftools_uv.typer_apps.zulip.resolve_channel") as resolve_chan,
@@ -999,7 +995,7 @@ def _invoke_subscribe(
             subscribe.side_effect = subscribe_side_effect
         else:
             subscribe.return_value = subscribe_return
-        result = runner.invoke(zulip_app, [*global_args, "channel", "subscribe", *command_args])
+        result = runner.invoke(zulip_app, ["channel", "subscribe", *command_args])
     return result, subscribe
 
 

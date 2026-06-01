@@ -643,6 +643,7 @@ def channel_subscribe(
     by_id: bool = typer.Option(False, "--by-id", help="Identify users by numeric user ID."),
     by_name: bool = typer.Option(False, "--by-name", help="Identify users by full name."),
     include_archived: bool = typer.Option(False, "--include-archived", help="Permit operating on archived channels."),
+    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON instead of a table."),
 ) -> None:
     """Subscribe users to a channel (FR-005, US5)."""
     id_mode = _resolve_id_mode(by_email, by_id, by_name)
@@ -679,7 +680,9 @@ def channel_subscribe(
         channel_arg = targets_list[0]
         user_idents = targets_list[1:]
 
-    options = ctx.obj or {}
+    options = {**(ctx.obj or {})}
+    if json_output:
+        options["json_output"] = True
     # Two-stage resolution so that --json error payloads can include
     # accurate channel context:
     #   Stage 1 — resolve the channel. If this fails, channel_id MUST be
