@@ -265,8 +265,8 @@ def get_client(zuliprc: Path | None = None, *, config: ZulipConfig | None = None
     if zuliprc is not None and config is not None:
         raise ZulipValidationError("Pass either 'zuliprc' or 'config', not both")
     resolved = config or resolve_config(zuliprc)
-    zulip_module = _require_zulip()
     if resolved.config_path is not None:
+        zulip_module = _require_zulip()
         return zulip_module.Client(config_file=str(resolved.config_path))
     # No zuliprc file — all three credential fields must be populated.
     missing: list[str] = []
@@ -278,6 +278,7 @@ def get_client(zuliprc: Path | None = None, *, config: ZulipConfig | None = None
         missing.append("site")
     if missing:
         raise ZulipConfigError(f"Incomplete Zulip credentials from {resolved.source}: missing {', '.join(missing)}")
+    zulip_module = _require_zulip()
     return zulip_module.Client(
         email=resolved.email,
         api_key=resolved.api_key,
@@ -685,3 +686,66 @@ def list_channels(client: Any, *, include_archived: bool = False) -> list[dict[s
     """
     streams = _fetch_streams(client, include_archived=include_archived)
     return [_normalize_channel(s) for s in streams]
+
+
+# ---------------------------------------------------------------------------
+# User listing (US2)
+# ---------------------------------------------------------------------------
+
+
+def _normalize_user(member: dict[str, Any]) -> dict[str, Any]:
+    """Project a raw Zulip ``members`` entry to the CLI/JSON contract shape.
+
+    Matches the schema documented in ``contracts/cli-commands.md`` for
+    ``zulip user list``: ``user_id``, ``full_name``, ``email``,
+    ``is_bot``, ``is_active``.
+
+    Behavioural notes:
+
+    * ``full_name`` / ``email`` are coerced via ``str(...)``; only an
+      explicit ``None`` (or missing key) collapses to ``""`` so that
+      legitimate falsy-but-stringifiable values are preserved.
+    * ``user_id`` is required and validated to be an ``int``; the
+      Zulip API guarantees this, so a missing or non-numeric value
+      indicates a malformed payload and raises
+      :class:`ZulipAPIError`.
+    """
+    user_id = member.get("user_id")
+    if not isinstance(user_id, int):
+        raise ZulipAPIError(f"Malformed user payload: missing/invalid user_id in {member!r}")
+    full_name = member.get("full_name")
+    email = member.get("email")
+    return {
+        "user_id": user_id,
+        "full_name": "" if full_name is None else str(full_name),
+        "email": "" if email is None else str(email),
+        "is_bot": bool(member.get("is_bot", False)),
+        "is_active": bool(member.get("is_active", True)),
+    }
+
+
+def list_users(
+    client: Any,
+    *,
+    include_bots: bool = False,
+    include_deactivated: bool = False,
+) -> list[dict[str, Any]]:
+    """List users on the Zulip server (US2).
+
+    Defaults exclude bot accounts and deactivated users, matching the
+    CLI's default behavior. Pass ``include_bots=True`` /
+    ``include_deactivated=True`` to relax those filters independently.
+
+    Returns a list of normalized user dicts in the order the server
+    returned them. Raises :class:`ZulipAPIError` on transport / server
+    errors.
+    """
+    members = _fetch_users(client)
+    result: list[dict[str, Any]] = []
+    for member in members:
+        if not include_bots and member.get("is_bot", False):
+            continue
+        if not include_deactivated and not member.get("is_active", True):
+            continue
+        result.append(_normalize_user(member))
+    return result
