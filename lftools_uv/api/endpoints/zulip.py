@@ -836,7 +836,7 @@ def list_groups(
     :class:`ZulipAmbiguityError` with the matches listed.
     """
     if group_name is not None and group_id is not None:
-        raise ZulipValidationError("Specify only one of 'group_name' or 'group_id', not both")
+        raise ZulipValidationError("Specify only one of --group-name or --group-id, not both")
     raw_groups = _fetch_groups(client)
     normalized: list[dict[str, Any]] = []
     for raw in raw_groups:
