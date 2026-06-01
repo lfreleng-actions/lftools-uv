@@ -28,6 +28,7 @@ import lftools_uv.typer_apps.zulip as zulip_mod
 from lftools_uv.api.endpoints.zulip import (
     ZulipAmbiguityError,
     ZulipConfigError,
+    ZulipNotFoundError,
 )
 from lftools_uv.typer_apps.zulip import (
     MISSING_EXTRA_MESSAGE,
