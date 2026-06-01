@@ -511,17 +511,14 @@ _FAKE_GROUPS = [
 def _invoke_group_list(
     args: list[str],
     *,
+    json_output: bool = False,
     list_groups_return: Any = None,
     list_groups_exc: BaseException | None = None,
     get_client_exc: BaseException | None = None,
 ) -> Any:
     """Invoke ``zulip group list`` with the API layer fully mocked."""
     runner = CliRunner()
-    global_args: list[str] = []
-    command_args = list(args)
-    if "--json" in command_args:
-        command_args.remove("--json")
-        global_args.append("--json")
+    global_args = ["--json"] if json_output else []
     with (
         mock.patch.object(zulip_mod, "get_client") as get_client_mock,
         mock.patch.object(zulip_mod, "list_groups") as list_groups_mock,
@@ -535,7 +532,7 @@ def _invoke_group_list(
             list_groups_mock.side_effect = list_groups_exc
         else:
             list_groups_mock.return_value = list_groups_return or []
-        result = runner.invoke(zulip_app, [*global_args, "group", "list", *command_args])
+        result = runner.invoke(zulip_app, [*global_args, "group", "list", *args])
         return result, list_groups_mock
 
 
@@ -551,8 +548,8 @@ def test_group_list_table_output() -> None:
 
 
 def test_group_list_json_output_schema() -> None:
-    """``--json`` emits the standard ``{"groups": [...]}`` schema."""
-    result, _ = _invoke_group_list(["--json"], list_groups_return=_FAKE_GROUPS)
+    """Global ``--json`` emits the standard ``{"groups": [...]}`` schema."""
+    result, _ = _invoke_group_list([], json_output=True, list_groups_return=_FAKE_GROUPS)
     assert result.exit_code == 0, result.stdout
     payload = json.loads(result.stdout)
     assert set(payload.keys()) == {"groups"}
@@ -613,7 +610,7 @@ def test_group_list_ambiguity_error_display() -> None:
     )
     result, _ = _invoke_group_list(["--group-name", "design"], list_groups_exc=exc)
     assert result.exit_code == 1
-    combined = result.stdout + result.stderr
+    combined = result.output + (getattr(result, "stderr", "") or "")
     assert "design" in combined.lower()
     # Matches list rendered with both ids.
     assert "11" in combined
@@ -627,7 +624,7 @@ def test_group_list_config_error_display() -> None:
         get_client_exc=ZulipConfigError("No Zulip configuration found."),
     )
     assert result.exit_code == 1
-    combined = result.stdout + result.stderr
+    combined = result.output + (getattr(result, "stderr", "") or "")
     assert "No Zulip configuration" in combined
 
 
