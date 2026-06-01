@@ -1956,7 +1956,9 @@ def unarchive_channel(
 
     Already-active channels are handled idempotently: the function
     returns a success ``MutationResult`` without contacting the stream
-    update API, so retries are safe (FR-013 idempotency).
+    update API, so retries are safe (FR-013 idempotency). Archived
+    channels are reactivated with ``PATCH streams/{stream_id}`` and
+    ``{"is_archived": False}``.
 
     Returns the canonical ``MutationResult`` dict:
     ``{"status": "success", "channel_id": int, "channel_name": str,

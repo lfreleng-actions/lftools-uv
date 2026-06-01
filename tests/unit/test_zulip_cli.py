@@ -2416,7 +2416,7 @@ def test_channel_unarchive_success_with_yes_and_include_archived(
     assert result.exit_code == 0, result.stdout
     unarchive_mock.assert_called_once()
     kwargs = unarchive_mock.call_args.kwargs
-    assert kwargs.get("channel") == "restored-project" or unarchive_mock.call_args.args[1:2] == ("restored-project",)
+    assert kwargs.get("channel") == "restored-project"
     assert kwargs.get("include_archived") is True
 
 

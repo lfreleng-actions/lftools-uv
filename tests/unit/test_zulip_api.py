@@ -2723,9 +2723,9 @@ def _unarchive_client(
     """Return a mock client wired for ``unarchive_channel`` tests.
 
     * ``server_settings`` returns the chosen ``feature_level``.
-    * ``streams`` GETs respond with ``active`` or ``archived`` based on
-      the ``include_archived`` request flag (matching the foundation
-      ``_fetch_streams`` contract).
+    * ``streams`` GETs return ``active`` by default, or the combined
+      active + archived listing when ``include_archived`` is requested
+      (matching the foundation ``_fetch_streams`` contract).
     * ``streams/<id>`` PATCHes with ``is_archived=False`` return
       ``reactivate_response`` when provided, else a success stub.
     """
@@ -2742,7 +2742,7 @@ def _unarchive_client(
     def side_effect(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
         if url == "streams" and method == "GET":
             if request and request.get("include_archived"):
-                return {"result": "success", "streams": archived_list}
+                return {"result": "success", "streams": active_list + archived_list}
             return {"result": "success", "streams": active_list}
         if url.startswith("streams/") and method == "PATCH" and request == {"is_archived": False}:
             return default_reactivate
