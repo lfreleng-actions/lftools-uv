@@ -1255,7 +1255,7 @@ def test_channel_subscribe_json_channel_not_found() -> None:
         resolve_channel_side_effect=zulip_api.ZulipNotFoundError("Channel 'unknown-channel' not found"),
     )
     assert result.exit_code == 1
-    payload = _json.loads(result.stdout)
+    payload = json.loads(result.stdout)
     assert payload["status"] == "error"
     assert payload["channel_id"] is None
     assert payload["channel_name"] == "unknown-channel"
@@ -1280,7 +1280,7 @@ def test_channel_subscribe_json_channel_id_not_found() -> None:
         resolve_channel_side_effect=zulip_api.ZulipNotFoundError("No channel with id 9999"),
     )
     assert result.exit_code == 1
-    payload = _json.loads(result.stdout)
+    payload = json.loads(result.stdout)
     assert payload["status"] == "error"
     assert payload["channel_id"] is None
     assert payload["operation"] == "subscribe"
@@ -1303,7 +1303,7 @@ def test_channel_subscribe_json_user_resolution_error_keeps_channel_context() ->
         subscribe_side_effect=zulip_api.ZulipNotFoundError("No user found matching 'ghost@example.com'"),
     )
     assert result.exit_code == 1
-    payload = _json.loads(result.stdout)
+    payload = json.loads(result.stdout)
     assert payload["status"] == "error"
     # Channel context is preserved because it was resolved before the
     # downstream user-resolution failure.
@@ -1327,7 +1327,7 @@ def test_channel_subscribe_json_ambiguity_surfaces_matches() -> None:
         subscribe_side_effect=zulip_api.ZulipAmbiguityError("Ambiguous full_name match for 'Bob'", matches=matches),
     )
     assert result.exit_code == 1
-    payload = _json.loads(result.stdout)
+    payload = json.loads(result.stdout)
     assert payload["status"] == "error"
     assert payload["channel_id"] == 42
     assert payload["errors"][0]["matches"] == matches

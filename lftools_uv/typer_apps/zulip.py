@@ -27,7 +27,7 @@ import json
 import logging
 from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 import typer
 from tabulate import tabulate
@@ -601,6 +601,7 @@ def group_list(
         for group in groups
     ]
     emit_table(rows, headers=headers)
+
 
 # T036 — `channel subscribe` CLI (US5)
 # ---------------------------------------------------------------------------
