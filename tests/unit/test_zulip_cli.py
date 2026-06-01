@@ -198,15 +198,16 @@ def test_channel_list_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
     """``--json`` emits the documented envelope with normalized fields."""
     _patched_channel_client(monkeypatch, _LIST_RESPONSE)
     runner = CliRunner()
-    result = runner.invoke(zulip_app, ["--json", "channel", "list"])
-    assert result.exit_code == 0, result.stdout
-    payload = json.loads(result.stdout)
-    assert "channels" in payload
-    by_id = {c["stream_id"]: c for c in payload["channels"]}
-    assert by_id[1]["type"] == "public"
-    assert by_id[2]["type"] == "private"
-    assert by_id[1]["subscriber_count"] == 42
-    assert by_id[1]["is_archived"] is False
+    for args in (["--json", "channel", "list"], ["channel", "list", "--json"]):
+        result = runner.invoke(zulip_app, args)
+        assert result.exit_code == 0, result.stdout
+        payload = json.loads(result.stdout)
+        assert "channels" in payload
+        by_id = {c["stream_id"]: c for c in payload["channels"]}
+        assert by_id[1]["type"] == "public"
+        assert by_id[2]["type"] == "private"
+        assert by_id[1]["subscriber_count"] == 42
+        assert by_id[1]["is_archived"] is False
 
 
 def test_channel_list_accepts_global_zuliprc(monkeypatch: pytest.MonkeyPatch) -> None:

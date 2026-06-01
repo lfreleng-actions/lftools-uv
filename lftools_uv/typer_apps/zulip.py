@@ -239,9 +239,12 @@ def channel_list(
         "--include-archived",
         help="Include archived channels in the output.",
     ),
+    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON instead of a table."),
 ) -> None:
     """List channels visible to the authenticated user (US1)."""
-    options = ctx.obj or {}
+    options = {**(ctx.obj or {})}
+    if json_output:
+        options["json_output"] = True
     try:
         client = get_client(zuliprc=options.get("zuliprc"))
         channels = list_channels(client, include_archived=include_archived)
