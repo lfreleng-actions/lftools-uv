@@ -1006,15 +1006,19 @@ def create_channel(
     # Extract the stream_id from the response
     # The subscriptions endpoint returns subscriptions in the response as a dict
     # mapping email -> list of stream names. We need to fetch the stream to get its ID.
+    warnings: list[str] = []
     try:
         stream = resolve_channel(client, name=name)
         stream_id = stream["stream_id"]
     except ZulipNotFoundError:
         # Channel was created but we can't find it - unusual edge case
         stream_id = None
+        if topic_policy is not None:
+            warnings.append(f"Channel created but could not locate to apply topic-policy '{topic_policy}'")
 
     # If topic_policy was requested, apply it via PATCH using the topics_policy field
     # (introduced in Zulip feature level 334)
+    topic_policy_applied = False
     if topic_policy is not None and stream_id is not None:
         topic_policy_value = TOPIC_POLICY_MAP[topic_policy]
         try:
@@ -1023,19 +1027,31 @@ def create_channel(
                 method="PATCH",
                 request={"topics_policy": topic_policy_value},
             )
-            if not isinstance(patch_response, dict) or patch_response.get("result") != "success":
-                log.warning(
-                    "Failed to set topic_policy on channel %s: %s",
-                    name,
-                    patch_response.get("msg") if isinstance(patch_response, dict) else patch_response,
-                )
+            if isinstance(patch_response, dict) and patch_response.get("result") == "success":
+                topic_policy_applied = True
+            else:
+                patch_msg = patch_response.get("msg") if isinstance(patch_response, dict) else str(patch_response)
+                warnings.append(f"Failed to apply topic-policy '{topic_policy}': {patch_msg}")
+                log.warning("Failed to set topic_policy on channel %s: %s", name, patch_msg)
         except Exception as exc:  # pragma: no cover
+            warnings.append(f"Failed to apply topic-policy '{topic_policy}': {exc}")
             log.warning("Failed to set topic_policy on channel %s: %s", name, exc)
 
-    return {
-        "status": "success",
+    # Determine overall status
+    status = "success"
+    if warnings:
+        status = "partial"
+
+    result: dict[str, Any] = {
+        "status": status,
         "channel_id": stream_id,
         "channel_name": name,
         "operation": "create",
         "type": channel_type,
     }
+    if topic_policy is not None:
+        result["topic_policy_applied"] = topic_policy_applied
+    if warnings:
+        result["warnings"] = warnings
+
+    return result

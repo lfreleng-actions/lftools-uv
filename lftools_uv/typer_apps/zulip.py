@@ -85,6 +85,15 @@ def emit_error(message: str) -> None:
     typer.echo(f"Error: {message}", err=True)
 
 
+def emit_warning(message: str) -> None:
+    """Write a warning message to stderr.
+
+    Used for partial failures where the primary operation succeeded but
+    a secondary operation (like applying topic-policy) failed.
+    """
+    typer.echo(f"Warning: {message}", err=True)
+
+
 def handle_zulip_error(exc: ZulipError) -> typer.Exit:
     """Format a :class:`ZulipError` for the CLI and return ``typer.Exit``.
 
@@ -443,9 +452,17 @@ def channel_create(
 
     if options.get("json_output"):
         emit_json(result)
+        # Exit with code 1 if partial failure
+        if result.get("status") == "partial":
+            raise typer.Exit(code=1)
         return
 
     typer.echo(f"Created {channel_type} channel '{name}' (ID: {result.get('channel_id')})")
+    # Emit warnings if present
+    if result.get("warnings"):
+        for warning in result["warnings"]:
+            emit_warning(warning)
+        raise typer.Exit(code=1)
 
 
 # ---------------------------------------------------------------------------

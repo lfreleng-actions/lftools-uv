@@ -887,6 +887,7 @@ def _create_channel_client(
     subscribe_response: dict[str, Any] | None = None,
     streams_response: list[dict[str, Any]] | None = None,
     groups: list[dict[str, Any]] | None = None,
+    patch_response: dict[str, Any] | None = None,
 ) -> Any:
     """Return a mock client for create_channel tests."""
     client = mock.MagicMock()
@@ -899,11 +900,12 @@ def _create_channel_client(
         if url == "users/me/subscriptions" and method == "POST":
             return subscribe_response or {"result": "success", "subscribed": {}}
         if url == "streams" and method == "GET":
-            return {"result": "success", "streams": streams_response or CREATE_ACTIVE_STREAMS}
+            streams = CREATE_ACTIVE_STREAMS if streams_response is None else streams_response
+            return {"result": "success", "streams": streams}
         if url == "user_groups" and method == "GET":
             return {"result": "success", "user_groups": groups or CREATE_GROUPS}
         if url.startswith("streams/") and method == "PATCH":
-            return {"result": "success"}
+            return patch_response or {"result": "success"}
         return {"result": "error", "msg": f"unexpected endpoint: {url}"}
 
     client.call_endpoint.side_effect = call_endpoint_side_effect
@@ -1137,3 +1139,39 @@ def test_create_channel_valid_topic_policies() -> None:
         client = _create_channel_client()
         result = create_channel(client, name="new-channel", topic_policy=policy)
         assert result["status"] == "success"
+
+
+def test_create_channel_topic_policy_patch_failure_returns_partial() -> None:
+    """When topic_policy PATCH fails, result status is 'partial' with warnings."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client(patch_response={"result": "error", "msg": "permission denied"})
+    result = create_channel(client, name="new-channel", topic_policy="deny")
+    assert result["status"] == "partial"
+    assert result["topic_policy_applied"] is False
+    assert "warnings" in result
+    assert any("permission denied" in w for w in result["warnings"])
+
+
+def test_create_channel_topic_policy_applied_true_on_success() -> None:
+    """When topic_policy PATCH succeeds, topic_policy_applied is True."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client()
+    result = create_channel(client, name="new-channel", topic_policy="allow")
+    assert result["status"] == "success"
+    assert result["topic_policy_applied"] is True
+    assert "warnings" not in result
+
+
+def test_create_channel_stream_not_found_with_topic_policy_partial() -> None:
+    """When channel can't be found and topic_policy requested, return partial."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    # Empty streams list means resolve_channel will fail
+    client = _create_channel_client(streams_response=[])
+    result = create_channel(client, name="new-channel", topic_policy="deny")
+    assert result["status"] == "partial"
+    assert result["channel_id"] is None
+    assert "warnings" in result
+    assert any("could not locate" in w for w in result["warnings"])
