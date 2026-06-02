@@ -853,11 +853,8 @@ def channel_unsubscribe(
     ),
 ) -> None:
     """Unsubscribe one or more users from a channel."""
-    # The endpoints module is imported lazily to avoid a potential
-    # circular import at module-load time (the CLI module and the
-    # endpoints module both reference shared types). ``get_client`` is
-    # already imported at the top of this module and is monkeypatched
-    # there by the CLI unit tests.
+    # Import the endpoint module as a namespace so tests can monkeypatch
+    # its helpers while keeping ``get_client`` patched on this module.
     from lftools_uv.api.endpoints import zulip as zulip_api
 
     options = ctx.obj or {}
