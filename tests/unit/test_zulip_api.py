@@ -862,3 +862,316 @@ def test_system_role_display_names_round_trip() -> None:
     # Every display name folds back to a key in SYSTEM_ROLE_GROUPS.
     for display in SYSTEM_ROLE_DISPLAY_NAMES.values():
         assert display.casefold() in SYSTEM_ROLE_GROUPS
+
+
+# ---------------------------------------------------------------------------
+# T033 — create_channel API (US4)
+# ---------------------------------------------------------------------------
+
+
+CREATE_GROUPS = [
+    {"id": 10, "name": "engineering", "is_system_group": False},
+    {"id": 20, "name": "role:administrators", "is_system_group": True},
+    {"id": 21, "name": "role:nobody", "is_system_group": True},
+    {"id": 22, "name": "role:members", "is_system_group": True},
+]
+
+CREATE_ACTIVE_STREAMS = [
+    {"stream_id": 100, "name": "new-channel", "description": "", "is_archived": False},
+]
+
+
+def _create_channel_client(
+    *,
+    feature_level: int = 400,
+    subscribe_response: dict[str, Any] | None = None,
+    streams_response: list[dict[str, Any]] | None = None,
+    groups: list[dict[str, Any]] | None = None,
+    patch_response: dict[str, Any] | None = None,
+) -> Any:
+    """Return a mock client for create_channel tests."""
+    client = mock.MagicMock()
+    client.get_server_settings.return_value = {
+        "result": "success",
+        "zulip_feature_level": feature_level,
+    }
+
+    def call_endpoint_side_effect(*, url: str, method: str, request: Any = None) -> Any:
+        if url == "users/me/subscriptions" and method == "POST":
+            return subscribe_response or {"result": "success", "subscribed": {}}
+        if url == "streams" and method == "GET":
+            streams = CREATE_ACTIVE_STREAMS if streams_response is None else streams_response
+            return {"result": "success", "streams": streams}
+        if url == "user_groups" and method == "GET":
+            return {"result": "success", "user_groups": groups or CREATE_GROUPS}
+        if url.startswith("streams/") and method == "PATCH":
+            return patch_response or {"result": "success"}
+        return {"result": "error", "msg": f"unexpected endpoint: {url}"}
+
+    client.call_endpoint.side_effect = call_endpoint_side_effect
+    return client
+
+
+def test_create_channel_public_success() -> None:
+    """Public channel creation succeeds with minimal parameters."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client()
+    result = create_channel(client, name="new-channel")
+    assert result["status"] == "success"
+    assert result["channel_name"] == "new-channel"
+    assert result["operation"] == "create"
+    assert result["type"] == "public"
+    assert result["channel_id"] == 100
+
+
+def test_create_channel_private_with_subscribers() -> None:
+    """Private channel with subscribers succeeds (lockout prevention met)."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client()
+    result = create_channel(
+        client,
+        name="new-channel",
+        channel_type="private",
+        subscribe_user_ids=[1, 2],
+    )
+    assert result["status"] == "success"
+    assert result["type"] == "private"
+
+
+def test_create_channel_private_without_subscribers_raises_lockout() -> None:
+    """Private channel without subscribers or allow-group raises lockout error."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client()
+    with pytest.raises(ZulipLockoutError, match="lockout"):
+        create_channel(client, name="private-no-subs", channel_type="private")
+
+
+def test_create_channel_private_no_subscribers_no_group_raises_lockout() -> None:
+    """Private channel without subscribers or allow-group raises lockout error."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client()
+    with pytest.raises(ZulipLockoutError, match="lockout"):
+        create_channel(
+            client,
+            name="private-locked",
+            channel_type="private",
+            # No subscribers, no allow_group_value
+        )
+
+
+def test_create_channel_private_with_allow_group_succeeds() -> None:
+    """Private channel with allow-group succeeds."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client()
+    result = create_channel(
+        client,
+        name="new-channel",
+        channel_type="private",
+        allow_group_value=10,  # engineering group
+    )
+    assert result["status"] == "success"
+    assert result["type"] == "private"
+
+
+def test_create_channel_web_public_checks_feature_level() -> None:
+    """Web-public channels require sufficient feature level."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    # Feature level below web-public threshold (12)
+    client = _create_channel_client(feature_level=10)
+    with pytest.raises(ZulipFeatureLevelError) as exc:
+        create_channel(client, name="public-channel", channel_type="web-public")
+    assert exc.value.required == FEATURE_LEVELS["web-public"]
+    assert exc.value.actual == 10
+
+
+def test_create_channel_topic_policy_checks_feature_level() -> None:
+    """topic-policy requires sufficient feature level."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    # Feature level below topic-policy threshold (334)
+    client = _create_channel_client(feature_level=300)
+    with pytest.raises(ZulipFeatureLevelError) as exc:
+        create_channel(client, name="with-policy", topic_policy="deny")
+    assert exc.value.required == FEATURE_LEVELS["topic-policy"]
+
+
+def test_create_channel_can_remove_subscribers_group_checks_feature_level() -> None:
+    """can-remove-subscribers-group requires sufficient feature level."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    # Feature level below threshold (161)
+    client = _create_channel_client(feature_level=100)
+    with pytest.raises(ZulipFeatureLevelError) as exc:
+        create_channel(
+            client,
+            name="with-removal-perm",
+            can_remove_subscribers_group_value=10,
+        )
+    assert exc.value.required == FEATURE_LEVELS["can-remove-subscribers-group"]
+
+
+def test_create_channel_can_access_group_checks_feature_level() -> None:
+    """can-access-group requires sufficient feature level."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    # Feature level below threshold (197)
+    client = _create_channel_client(feature_level=100)
+    with pytest.raises(ZulipFeatureLevelError) as exc:
+        create_channel(
+            client,
+            name="with-access-group",
+            allow_group_value=10,
+        )
+    assert exc.value.required == FEATURE_LEVELS["can-access-group"]
+
+
+def test_create_channel_invalid_topic_policy_rejected() -> None:
+    """Invalid topic-policy value raises validation error."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client()
+    with pytest.raises(ZulipValidationError, match="Invalid topic-policy"):
+        create_channel(client, name="bad-policy", topic_policy="invalid")
+
+
+def test_create_channel_with_description() -> None:
+    """Channel description is included in the request."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client()
+    result = create_channel(client, name="new-channel", description="Test description")
+    assert result["status"] == "success"
+    # Verify the subscription request included the description
+    calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
+    assert len(calls) == 1
+    request = calls[0].kwargs.get("request", {})
+    assert request["subscriptions"][0]["description"] == "Test description"
+
+
+def test_create_channel_with_announce_true() -> None:
+    """announce=True is passed to the API."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client()
+    create_channel(client, name="new-channel", announce=True)
+    calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
+    request = calls[0].kwargs.get("request", {})
+    assert request.get("announce") is True
+
+
+def test_create_channel_with_announce_false() -> None:
+    """announce=False is passed to the API."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client()
+    create_channel(client, name="new-channel", announce=False)
+    calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
+    request = calls[0].kwargs.get("request", {})
+    assert request.get("announce") is False
+
+
+def test_create_channel_passes_group_setting_value_simple() -> None:
+    """Single group produces simple integer value in request."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client()
+    create_channel(
+        client,
+        name="new-channel",
+        allow_group_value=42,
+    )
+    calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
+    request = calls[0].kwargs.get("request", {})
+    assert request.get("can_access_group") == 42
+
+
+def test_create_channel_passes_group_setting_value_complex() -> None:
+    """Multiple groups produce complex object in request."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    complex_value = {"direct_members": [], "direct_subgroups": [10, 20]}
+    client = _create_channel_client()
+    create_channel(
+        client,
+        name="new-channel",
+        allow_group_value=complex_value,
+    )
+    calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
+    request = calls[0].kwargs.get("request", {})
+    assert request.get("can_access_group") == complex_value
+
+
+def test_create_channel_passes_can_remove_subscribers_group() -> None:
+    """can_remove_subscribers_group is passed to the API."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client()
+    create_channel(
+        client,
+        name="new-channel",
+        can_remove_subscribers_group_value=22,
+    )
+    calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
+    request = calls[0].kwargs.get("request", {})
+    assert request.get("can_remove_subscribers_group") == 22
+
+
+def test_create_channel_api_error_handled() -> None:
+    """API errors are raised as ZulipAPIError."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client(subscribe_response={"result": "error", "msg": "name already taken"})
+    with pytest.raises(ZulipAPIError, match="name already taken"):
+        create_channel(client, name="duplicate")
+
+
+def test_create_channel_valid_topic_policies() -> None:
+    """All valid topic-policy values are accepted."""
+    from lftools_uv.api.endpoints.zulip import VALID_TOPIC_POLICIES, create_channel
+
+    for policy in VALID_TOPIC_POLICIES:
+        client = _create_channel_client()
+        result = create_channel(client, name="new-channel", topic_policy=policy)
+        assert result["status"] == "success"
+
+
+def test_create_channel_topic_policy_patch_failure_returns_partial() -> None:
+    """When topic_policy PATCH fails, result status is 'partial' with warnings."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client(patch_response={"result": "error", "msg": "permission denied"})
+    result = create_channel(client, name="new-channel", topic_policy="deny")
+    assert result["status"] == "partial"
+    assert result["topic_policy_applied"] is False
+    assert "warnings" in result
+    assert any("permission denied" in w for w in result["warnings"])
+
+
+def test_create_channel_topic_policy_applied_true_on_success() -> None:
+    """When topic_policy PATCH succeeds, topic_policy_applied is True."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client()
+    result = create_channel(client, name="new-channel", topic_policy="allow")
+    assert result["status"] == "success"
+    assert result["topic_policy_applied"] is True
+    assert "warnings" not in result
+
+
+def test_create_channel_stream_not_found_with_topic_policy_partial() -> None:
+    """When channel can't be found and topic_policy requested, return partial."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    # Empty streams list means resolve_channel will fail
+    client = _create_channel_client(streams_response=[])
+    result = create_channel(client, name="new-channel", topic_policy="deny")
+    assert result["status"] == "partial"
+    assert result["channel_id"] is None
+    assert "warnings" in result
+    assert any("could not locate" in w for w in result["warnings"])
