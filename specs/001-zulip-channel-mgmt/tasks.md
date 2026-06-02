@@ -160,13 +160,13 @@ SPDX-FileCopyrightText: 2026 The Linux Foundation
 
 ### Tests for User Story 5
 
-- [ ] T036 [P] [US5] Write CLI tests for `channel subscribe` in tests/unit/test_zulip_cli.py — test single user by email, bulk users, --by-id, --by-name, ambiguity error, missing identifier flag error, already-subscribed no-op, --json bulk output, channel-id vs positional, numeric channel name handling
-- [ ] T037 [P] [US5] Write API tests for `subscribe_users()` in tests/unit/test_zulip_api.py — mock Zulip subscribe endpoint, test single/bulk, already-subscribed, invalid user, partial success
+- [x] T036 [P] [US5] Write CLI tests for `channel subscribe` in tests/unit/test_zulip_cli.py — test single user by email, bulk users, --by-id, --by-name, ambiguity error, missing identifier flag error, already-subscribed no-op, --json bulk output, channel-id vs positional, numeric channel name handling
+- [x] T037 [P] [US5] Write API tests for `subscribe_users()` in tests/unit/test_zulip_api.py — mock Zulip subscribe endpoint, test single/bulk, already-subscribed, invalid user, partial success
 
 ### Implementation for User Story 5
 
-- [ ] T038 [US5] Implement `subscribe_users(client, channel, users, id_mode)` in lftools_uv/api/endpoints/zulip.py — resolve channel target, resolve user identifiers per id_mode, call Zulip subscribe API (up to 50 users per spec constraint), handle partial results, return bulk MutationResult with results/errors
-- [ ] T039 [US5] Implement `channel subscribe` CLI command in lftools_uv/typer_apps/zulip.py — add `subscribe` command with positional `[channel] USER [USER...]` signature, `--channel-id`, `--by-email`/`--by-id`/`--by-name` flags, `--include-archived`, `--json`, handle first-positional-is-channel logic when --channel-id absent
+- [x] T038 [US5] Implement `subscribe_users(client, channel, users, id_mode)` in lftools_uv/api/endpoints/zulip.py — resolve channel target, resolve user identifiers per id_mode, call Zulip subscribe API (up to 50 users per spec constraint), handle partial results, return bulk MutationResult with results/errors
+- [x] T039 [US5] Implement `channel subscribe` CLI command in lftools_uv/typer_apps/zulip.py — add `subscribe` command with positional `[channel] USER [USER...]` signature, `--channel-id`, `--by-email`/`--by-id`/`--by-name` flags, `--include-archived`, `--json`, handle first-positional-is-channel logic when --channel-id absent
 
 **Checkpoint**: User Story 5 is fully functional — `lftools-uv zulip channel subscribe` works independently
 

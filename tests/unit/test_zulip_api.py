@@ -44,6 +44,7 @@ from lftools_uv.api.endpoints.zulip import (
     resolve_channel,
     resolve_groups,
     resolve_users,
+    subscribe_users,
 )
 
 # ---------------------------------------------------------------------------
@@ -1175,3 +1176,379 @@ def test_create_channel_stream_not_found_with_topic_policy_partial() -> None:
     assert result["channel_id"] is None
     assert "warnings" in result
     assert any("could not locate" in w for w in result["warnings"])
+
+
+# ---------------------------------------------------------------------------
+# T037 — Subscribe users (US5)
+# ---------------------------------------------------------------------------
+
+
+_SUBSCRIBE_STREAMS = [
+    {
+        "stream_id": 42,
+        "name": "general",
+        "description": "",
+        "invite_only": False,
+        "is_archived": False,
+    },
+    {
+        "stream_id": 99,
+        "name": "123",
+        "description": "Numeric-name channel",
+        "invite_only": False,
+        "is_archived": False,
+    },
+]
+
+
+def _subscribe_client(
+    streams: list[dict[str, Any]],
+    members: list[dict[str, Any]],
+    subscribe_response: dict[str, Any],
+) -> Any:
+    """Mock client wiring streams, members, and the subscribe endpoint."""
+    client = mock.MagicMock()
+    client.get_members.return_value = {"result": "success", "members": members}
+
+    def _call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> dict[str, Any]:
+        if url == "streams" and method == "GET":
+            return {"result": "success", "streams": streams}
+        if url == "users/me/subscriptions" and method == "POST":
+            client._last_subscribe_request = request
+            return subscribe_response
+        raise AssertionError(f"Unexpected endpoint call: {method} {url}")
+
+    client.call_endpoint.side_effect = _call_endpoint
+    return client
+
+
+def test_subscribe_users_single_email_success() -> None:
+    """Subscribing a single user by email returns a success bulk result."""
+    client = _subscribe_client(
+        _SUBSCRIBE_STREAMS,
+        MEMBERS,
+        {
+            "result": "success",
+            "subscribed": {"general": ["bob@example.com"]},
+            "already_subscribed": {},
+            "unauthorized": [],
+        },
+    )
+    result = subscribe_users(
+        client,
+        "general",
+        ["bob@example.com"],
+        id_mode="email",
+    )
+    assert result["status"] == "success"
+    assert result["channel_id"] == 42
+    assert result["channel_name"] == "general"
+    assert result["operation"] == "subscribe"
+    assert result["results"] == [{"user": "bob@example.com", "status": "subscribed"}]
+    assert result["errors"] == []
+    # Verify the request payload encodes the resolved channel name and
+    # the resolved user email exactly per the API contract.
+    req = client._last_subscribe_request
+    import json as _json
+
+    subs = _json.loads(req["subscriptions"])
+    principals = _json.loads(req["principals"])
+    assert subs == [{"name": "general"}]
+    assert principals == ["bob@example.com"]
+
+
+def test_subscribe_users_bulk_mixed_outcomes() -> None:
+    """Bulk subscribe with mixed subscribed/already_subscribed returns success."""
+    client = _subscribe_client(
+        _SUBSCRIBE_STREAMS,
+        MEMBERS,
+        {
+            "result": "success",
+            "subscribed": {"general": ["alice@example.com"]},
+            "already_subscribed": {"general": ["bob@example.com"]},
+            "unauthorized": [],
+        },
+    )
+    result = subscribe_users(
+        client,
+        "general",
+        ["alice@example.com", "bob@example.com"],
+        id_mode="email",
+    )
+    assert result["status"] == "success"
+    statuses = {r["user"]: r["status"] for r in result["results"]}
+    assert statuses["alice@example.com"] == "subscribed"
+    assert statuses["bob@example.com"] == "already_subscribed"
+    assert result["errors"] == []
+
+
+def test_subscribe_users_already_subscribed_only() -> None:
+    """All already-subscribed users still produce status=success (no-op)."""
+    client = _subscribe_client(
+        _SUBSCRIBE_STREAMS,
+        MEMBERS,
+        {
+            "result": "success",
+            "subscribed": {},
+            "already_subscribed": {"general": ["bob@example.com"]},
+            "unauthorized": [],
+        },
+    )
+    result = subscribe_users(
+        client,
+        "general",
+        ["bob@example.com"],
+        id_mode="email",
+    )
+    assert result["status"] == "success"
+    assert result["results"][0]["status"] == "already_subscribed"
+    assert result["errors"] == []
+
+
+def test_subscribe_users_partial_unauthorized() -> None:
+    """Unauthorized users are reported in errors with overall status=partial."""
+    client = _subscribe_client(
+        _SUBSCRIBE_STREAMS,
+        MEMBERS,
+        {
+            "result": "success",
+            "subscribed": {"general": ["alice@example.com"]},
+            "already_subscribed": {},
+            "unauthorized": ["bob@example.com"],
+        },
+    )
+    result = subscribe_users(
+        client,
+        "general",
+        ["alice@example.com", "bob@example.com"],
+        id_mode="email",
+    )
+    assert result["status"] == "partial"
+    by_user = {r["user"]: r for r in result["results"]}
+    assert by_user["alice@example.com"]["status"] == "subscribed"
+    error_users = {e["user"] for e in result["errors"]}
+    assert "bob@example.com" in error_users
+
+
+def test_subscribe_users_by_id_resolves_to_email_principals() -> None:
+    """``id_mode='id'`` resolves numeric IDs to user emails before send.
+
+    Zulip's stable identifier is the delivery_email, so even when the
+    caller supplies numeric user IDs, ``subscribe_users`` looks up the
+    resolved user object and sends its email as the principal. This
+    test asserts the actual JSON-encoded ``principals`` payload to
+    pin the contract down.
+    """
+    client = _subscribe_client(
+        _SUBSCRIBE_STREAMS,
+        MEMBERS,
+        {
+            "result": "success",
+            "subscribed": {"general": ["bob@example.com"]},
+            "already_subscribed": {},
+            "unauthorized": [],
+        },
+    )
+    result = subscribe_users(client, "general", ["200"], id_mode="id")
+    assert result["status"] == "success"
+
+    import json as _json
+
+    principals = _json.loads(client._last_subscribe_request["principals"])
+    # User id 200 in MEMBERS maps to bob@example.com.
+    assert principals == ["bob@example.com"]
+
+
+def test_subscribe_users_invalid_user_raises() -> None:
+    """An unknown user identifier raises before the subscribe call."""
+    client = _subscribe_client(
+        _SUBSCRIBE_STREAMS,
+        MEMBERS,
+        {"result": "success", "subscribed": {}, "already_subscribed": {}, "unauthorized": []},
+    )
+    with pytest.raises(ZulipNotFoundError):
+        _ = subscribe_users(client, "general", ["ghost@example.com"], id_mode="email")
+
+
+def test_subscribe_users_caps_at_50() -> None:
+    """Per-spec cap of 50 users per invocation is enforced client-side."""
+    client = _subscribe_client(
+        _SUBSCRIBE_STREAMS,
+        MEMBERS,
+        {"result": "success", "subscribed": {}, "already_subscribed": {}, "unauthorized": []},
+    )
+    too_many = [f"user{i}@example.com" for i in range(51)]
+    with pytest.raises(ZulipValidationError, match="50"):
+        _ = subscribe_users(client, "general", too_many, id_mode="email")
+
+
+def test_subscribe_users_empty_users_rejected() -> None:
+    """At least one user identifier must be provided."""
+    client = _subscribe_client(
+        _SUBSCRIBE_STREAMS,
+        MEMBERS,
+        {"result": "success", "subscribed": {}, "already_subscribed": {}, "unauthorized": []},
+    )
+    with pytest.raises(ZulipValidationError):
+        _ = subscribe_users(client, "general", [], id_mode="email")
+
+
+def test_subscribe_users_by_channel_id() -> None:
+    """Passing an int channel argument resolves via stream_id."""
+    client = _subscribe_client(
+        _SUBSCRIBE_STREAMS,
+        MEMBERS,
+        {
+            "result": "success",
+            "subscribed": {"general": ["bob@example.com"]},
+            "already_subscribed": {},
+            "unauthorized": [],
+        },
+    )
+    result = subscribe_users(client, 42, ["bob@example.com"], id_mode="email")
+    assert result["channel_id"] == 42
+    assert result["channel_name"] == "general"
+
+
+def test_subscribe_users_channel_name_numeric_string() -> None:
+    """A string channel argument that looks numeric still resolves by name."""
+    client = _subscribe_client(
+        _SUBSCRIBE_STREAMS,
+        MEMBERS,
+        {
+            "result": "success",
+            "subscribed": {"123": ["bob@example.com"]},
+            "already_subscribed": {},
+            "unauthorized": [],
+        },
+    )
+    result = subscribe_users(client, "123", ["bob@example.com"], id_mode="email")
+    assert result["channel_id"] == 99
+    assert result["channel_name"] == "123"
+
+
+def test_subscribe_users_api_error_response() -> None:
+    """A non-success response from the subscribe endpoint raises ZulipAPIError."""
+    client = _subscribe_client(
+        _SUBSCRIBE_STREAMS,
+        MEMBERS,
+        {"result": "error", "msg": "Invalid request"},
+    )
+    with pytest.raises(ZulipAPIError):
+        _ = subscribe_users(client, "general", ["bob@example.com"], id_mode="email")
+
+
+def test_subscribe_users_skips_resolve_channel_when_stream_supplied() -> None:
+    """`_resolved_stream=...` bypasses the internal resolve_channel call.
+
+    The CLI layer pre-resolves the channel so that ``--json`` error
+    payloads can include accurate channel context. Passing the already-
+    resolved stream into ``subscribe_users()`` MUST skip the duplicate
+    ``GET /streams`` round-trip that would otherwise occur.
+    """
+    from unittest import mock
+
+    from lftools_uv.api.endpoints.zulip import subscribe_users
+
+    client = mock.MagicMock()
+    client.get_members.return_value = {
+        "result": "success",
+        "members": [
+            {"user_id": 7, "email": "bob@example.com", "delivery_email": "bob@example.com", "full_name": "Bob"}
+        ],
+    }
+    client.call_endpoint.return_value = {
+        "result": "success",
+        "subscribed": {"general": ["bob@example.com"]},
+        "already_subscribed": {},
+        "unauthorized": [],
+    }
+
+    with mock.patch("lftools_uv.api.endpoints.zulip.resolve_channel") as resolve_chan:
+        result = subscribe_users(
+            client,
+            "general",
+            ["bob@example.com"],
+            id_mode="email",
+            _resolved_stream={"stream_id": 42, "name": "general"},
+        )
+
+    # resolve_channel MUST NOT be called when _resolved_stream is supplied.
+    resolve_chan.assert_not_called()
+    assert result["status"] == "success"
+    assert result["channel_id"] == 42
+    assert result["channel_name"] == "general"
+
+
+def test_subscribe_users_rejects_malformed_subscribed_field() -> None:
+    """A non-dict ``subscribed`` field is treated as a server contract error.
+
+    Defensive: protects against silent partial-failure attribution when
+    a server-side regression or proxy reshapes the response.
+    """
+    from unittest import mock
+
+    from lftools_uv.api.endpoints.zulip import (
+        ZulipAPIError,
+        subscribe_users,
+    )
+
+    client = mock.MagicMock()
+    client.get_members.return_value = {
+        "result": "success",
+        "members": [
+            {"user_id": 7, "email": "bob@example.com", "delivery_email": "bob@example.com", "full_name": "Bob"}
+        ],
+    }
+    client.call_endpoint.return_value = {
+        "result": "success",
+        "subscribed": ["bob@example.com"],  # WRONG: should be a dict
+        "already_subscribed": {},
+        "unauthorized": [],
+    }
+
+    import pytest
+
+    with pytest.raises(ZulipAPIError, match="'subscribed' must be a dict"):
+        subscribe_users(
+            client,
+            "general",
+            ["bob@example.com"],
+            id_mode="email",
+            _resolved_stream={"stream_id": 42, "name": "general"},
+        )
+
+
+def test_subscribe_users_rejects_malformed_unauthorized_field() -> None:
+    """A non-list ``unauthorized`` field is rejected as a contract error."""
+    from unittest import mock
+
+    from lftools_uv.api.endpoints.zulip import (
+        ZulipAPIError,
+        subscribe_users,
+    )
+
+    client = mock.MagicMock()
+    client.get_members.return_value = {
+        "result": "success",
+        "members": [
+            {"user_id": 7, "email": "bob@example.com", "delivery_email": "bob@example.com", "full_name": "Bob"}
+        ],
+    }
+    client.call_endpoint.return_value = {
+        "result": "success",
+        "subscribed": {"general": ["bob@example.com"]},
+        "already_subscribed": {},
+        "unauthorized": {"bob@example.com": "denied"},  # WRONG: should be a list
+    }
+
+    import pytest
+
+    with pytest.raises(ZulipAPIError, match="'unauthorized' must be a list"):
+        subscribe_users(
+            client,
+            "general",
+            ["bob@example.com"],
+            id_mode="email",
+            _resolved_stream={"stream_id": 42, "name": "general"},
+        )

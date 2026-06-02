@@ -198,15 +198,16 @@ def test_channel_list_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
     """``--json`` emits the documented envelope with normalized fields."""
     _patched_channel_client(monkeypatch, _LIST_RESPONSE)
     runner = CliRunner()
-    result = runner.invoke(zulip_app, ["--json", "channel", "list"])
-    assert result.exit_code == 0, result.stdout
-    payload = json.loads(result.stdout)
-    assert "channels" in payload
-    by_id = {c["stream_id"]: c for c in payload["channels"]}
-    assert by_id[1]["type"] == "public"
-    assert by_id[2]["type"] == "private"
-    assert by_id[1]["subscriber_count"] == 42
-    assert by_id[1]["is_archived"] is False
+    for args in (["--json", "channel", "list"], ["channel", "list", "--json"]):
+        result = runner.invoke(zulip_app, args)
+        assert result.exit_code == 0, result.stdout
+        payload = json.loads(result.stdout)
+        assert "channels" in payload
+        by_id = {c["stream_id"]: c for c in payload["channels"]}
+        assert by_id[1]["type"] == "public"
+        assert by_id[2]["type"] == "private"
+        assert by_id[1]["subscriber_count"] == 42
+        assert by_id[1]["is_archived"] is False
 
 
 def test_channel_list_accepts_global_zuliprc(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -387,11 +388,12 @@ def test_user_list_table_optional_columns(monkeypatch: pytest.MonkeyPatch) -> No
     assert "Deactivated" in result.stdout
 
 
-def test_user_list_json_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("args", (["--json", "user", "list"], ["user", "list", "--json"]))
+def test_user_list_json_envelope(monkeypatch: pytest.MonkeyPatch, args: list[str]) -> None:
     """``--json`` emits the canonical ``{"users": [...]}`` envelope."""
     _patched_user_client(monkeypatch, CLI_MEMBERS)
     runner = CliRunner()
-    result = runner.invoke(zulip_app, ["--json", "user", "list"])
+    result = runner.invoke(zulip_app, args)
     assert result.exit_code == 0, result.stdout
     payload = json.loads(result.stdout)
     assert "users" in payload
@@ -955,3 +957,414 @@ def test_channel_create_help_renders(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "--allow-group" in cleaned
     assert "--announce" in cleaned
     assert "--topic-policy" in cleaned
+
+
+# ---------------------------------------------------------------------------
+# T036 — `channel subscribe` CLI (US5)
+# ---------------------------------------------------------------------------
+
+
+def _invoke_subscribe(
+    args,
+    subscribe_return=None,
+    subscribe_side_effect=None,
+    resolve_channel_return=None,
+    resolve_channel_side_effect=None,
+):
+    """Invoke ``zulip channel subscribe`` with API helpers patched.
+
+    The CLI pre-resolves the channel so ``--json`` error payloads can
+    include accurate channel context. Tests patch both ``resolve_channel``
+    and ``subscribe_users``.
+    """
+    runner = CliRunner()
+    command_args = list(args)
+    with (
+        mock.patch("lftools_uv.typer_apps.zulip.get_client") as get_client,
+        mock.patch("lftools_uv.typer_apps.zulip.resolve_channel") as resolve_chan,
+        mock.patch("lftools_uv.typer_apps.zulip.subscribe_users") as subscribe,
+        mock.patch("lftools_uv.typer_apps.zulip.zulip_available", return_value=True),
+    ):
+        get_client.return_value = mock.MagicMock()
+        if resolve_channel_side_effect is not None:
+            resolve_chan.side_effect = resolve_channel_side_effect
+        else:
+            resolve_chan.return_value = resolve_channel_return or {
+                "stream_id": 42,
+                "name": "general",
+            }
+        if subscribe_side_effect is not None:
+            subscribe.side_effect = subscribe_side_effect
+        else:
+            subscribe.return_value = subscribe_return
+        result = runner.invoke(zulip_app, ["channel", "subscribe", *command_args])
+    return result, subscribe
+
+
+def _bulk_ok(channel_id=42, channel_name="general", users=("bob@example.com",)):
+    return {
+        "status": "success",
+        "channel_id": channel_id,
+        "channel_name": channel_name,
+        "operation": "subscribe",
+        "results": [{"user": u, "status": "subscribed"} for u in users],
+        "errors": [],
+    }
+
+
+def test_channel_subscribe_single_email_success() -> None:
+    """`channel subscribe general bob@example.com --by-email` succeeds."""
+    result, sub = _invoke_subscribe(
+        ["general", "bob@example.com", "--by-email"],
+        subscribe_return=_bulk_ok(),
+    )
+    assert result.exit_code == 0, result.stderr
+    # subscribe_users was called with channel='general' and one user.
+    args, kwargs = sub.call_args
+    # Allow either positional or keyword passing.
+    call = {**dict(zip(["client", "channel", "users", "id_mode"], args, strict=False)), **kwargs}
+    assert call["channel"] == "general"
+    assert list(call["users"]) == ["bob@example.com"]
+    assert call["id_mode"] == "email"
+
+
+def test_channel_subscribe_bulk_users() -> None:
+    """Multiple positional users are all passed to subscribe_users."""
+    result, sub = _invoke_subscribe(
+        ["general", "a@x.com", "b@x.com", "c@x.com", "--by-email"],
+        subscribe_return=_bulk_ok(users=("a@x.com", "b@x.com", "c@x.com")),
+    )
+    assert result.exit_code == 0, result.stderr
+    args, kwargs = sub.call_args
+    call = {**dict(zip(["client", "channel", "users", "id_mode"], args, strict=False)), **kwargs}
+    assert list(call["users"]) == ["a@x.com", "b@x.com", "c@x.com"]
+
+
+def test_channel_subscribe_by_id_flag() -> None:
+    """`--by-id` is forwarded as id_mode='id'."""
+    result, sub = _invoke_subscribe(
+        ["general", "200", "--by-id"],
+        subscribe_return=_bulk_ok(),
+    )
+    assert result.exit_code == 0, result.stderr
+    args, kwargs = sub.call_args
+    call = {**dict(zip(["client", "channel", "users", "id_mode"], args, strict=False)), **kwargs}
+    assert call["id_mode"] == "id"
+
+
+def test_channel_subscribe_by_name_flag() -> None:
+    """`--by-name` is forwarded as id_mode='name'."""
+    result, sub = _invoke_subscribe(
+        ["general", "Bob Jones", "--by-name"],
+        subscribe_return=_bulk_ok(),
+    )
+    assert result.exit_code == 0, result.stderr
+    args, kwargs = sub.call_args
+    call = {**dict(zip(["client", "channel", "users", "id_mode"], args, strict=False)), **kwargs}
+    assert call["id_mode"] == "name"
+
+
+def test_channel_subscribe_missing_identifier_flag_errors() -> None:
+    """Omitting all of --by-email/--by-id/--by-name exits with code 1.
+
+    The implementation routes this through ``emit_error()`` +
+    ``typer.Exit(1)`` to honour the cli-commands.md contract (exit
+    codes 0/1 only — never Click's default 2 for usage errors). We
+    don't assert on the error message text because Rich-panel rendering
+    on CI may wrap/truncate it; the exit code is the contract.
+    """
+    result, _ = _invoke_subscribe(
+        ["general", "bob@example.com"],
+        subscribe_return=_bulk_ok(),
+    )
+    assert result.exit_code == 1
+
+
+def test_channel_subscribe_multiple_identifier_flags_errors() -> None:
+    """Specifying more than one of the identifier flags exits with code 1."""
+    result, _ = _invoke_subscribe(
+        ["general", "bob@example.com", "--by-email", "--by-id"],
+        subscribe_return=_bulk_ok(),
+    )
+    assert result.exit_code == 1
+
+
+def test_channel_subscribe_ambiguity_error_exits_1() -> None:
+    """A ZulipAmbiguityError from the API surfaces as exit-code 1."""
+    import lftools_uv.api.endpoints.zulip as zulip_api
+
+    result, _ = _invoke_subscribe(
+        ["general", "Alice Smith", "--by-name"],
+        subscribe_side_effect=zulip_api.ZulipAmbiguityError(
+            "User name 'Alice Smith' matched 2 users; use --by-email or --by-id to disambiguate"
+        ),
+    )
+    assert result.exit_code == 1
+    combined = (result.stdout or "") + (result.stderr or "")
+    assert "Alice Smith" in combined
+
+
+def test_channel_subscribe_already_subscribed_noop_exit_0() -> None:
+    """An all-already-subscribed result still exits 0."""
+    result, _ = _invoke_subscribe(
+        ["general", "bob@example.com", "--by-email"],
+        subscribe_return={
+            "status": "success",
+            "channel_id": 42,
+            "channel_name": "general",
+            "operation": "subscribe",
+            "results": [{"user": "bob@example.com", "status": "already_subscribed"}],
+            "errors": [],
+        },
+    )
+    assert result.exit_code == 0, result.stderr
+
+
+def test_channel_subscribe_partial_exits_1() -> None:
+    """Partial results (some errors) exit with code 1."""
+    result, _ = _invoke_subscribe(
+        ["general", "a@x.com", "b@x.com", "--by-email"],
+        subscribe_return={
+            "status": "partial",
+            "channel_id": 42,
+            "channel_name": "general",
+            "operation": "subscribe",
+            "results": [{"user": "a@x.com", "status": "subscribed"}],
+            "errors": [{"user": "b@x.com", "error": "unauthorized"}],
+        },
+    )
+    assert result.exit_code == 1
+
+
+def test_channel_subscribe_json_bulk_output() -> None:
+    """`--json` emits the bulk-mutation payload verbatim."""
+    payload = _bulk_ok(users=("a@x.com", "b@x.com"))
+    result, _ = _invoke_subscribe(
+        ["general", "a@x.com", "b@x.com", "--by-email", "--json"],
+        subscribe_return=payload,
+    )
+    assert result.exit_code == 0, result.stderr
+    parsed = json.loads(result.stdout)
+    assert parsed["operation"] == "subscribe"
+    assert parsed["channel_name"] == "general"
+    assert {r["user"] for r in parsed["results"]} == {"a@x.com", "b@x.com"}
+
+
+def test_channel_subscribe_channel_id_flag_uses_id() -> None:
+    """`--channel-id` passes the int ID; all positionals are USERs."""
+    result, sub = _invoke_subscribe(
+        ["--channel-id", "42", "bob@example.com", "--by-email"],
+        subscribe_return=_bulk_ok(),
+    )
+    assert result.exit_code == 0, result.stderr
+    args, kwargs = sub.call_args
+    call = {**dict(zip(["client", "channel", "users", "id_mode"], args, strict=False)), **kwargs}
+    assert call["channel"] == 42
+    assert list(call["users"]) == ["bob@example.com"]
+
+
+def test_channel_subscribe_numeric_channel_name_treated_as_name() -> None:
+    """A positional channel like '123' is forwarded as a NAME string, not an id."""
+    result, sub = _invoke_subscribe(
+        ["123", "bob@example.com", "--by-email"],
+        subscribe_return=_bulk_ok(channel_id=99, channel_name="123"),
+    )
+    assert result.exit_code == 0, result.stderr
+    args, kwargs = sub.call_args
+    call = {**dict(zip(["client", "channel", "users", "id_mode"], args, strict=False)), **kwargs}
+    # CLI must NOT coerce the positional to int; the API layer accepts only
+    # ints for id-mode resolution.
+    assert call["channel"] == "123"
+    assert isinstance(call["channel"], str)
+
+
+def test_channel_subscribe_channel_without_users_errors() -> None:
+    """A single positional (channel only) with no USER args exits with code 1.
+
+    The contract requires at least one USER positional whenever
+    ``--channel-id`` is absent. Click parses ``['general']`` as a single
+    positional → the CLI sees one entry, no USERs, and aborts via
+    ``typer.Exit(1)`` (NOT Click's default 2 for usage errors), per
+    the cli-commands.md contract.
+    """
+    result, _ = _invoke_subscribe(
+        ["general", "--by-email"],
+        subscribe_return=_bulk_ok(),
+    )
+    assert result.exit_code == 1
+
+
+def test_channel_subscribe_channel_id_with_zero_users_errors() -> None:
+    """`--channel-id` with no USER positionals is a Click usage error.
+
+    With ``--channel-id``, ALL positionals are interpreted as USERs (per
+    the contract). Zero USERs must exit with code ``1`` (the contract
+    documents exit codes 0/1 only); we explicitly route this through
+    :func:`typer.Exit` rather than letting Click's required-argument
+    check exit with code 2.
+    """
+    result, _ = _invoke_subscribe(
+        ["--channel-id", "42", "--by-email"],
+        subscribe_return=_bulk_ok(),
+    )
+    assert result.exit_code == 1
+
+
+def test_channel_subscribe_channel_id_invalid_exits_1() -> None:
+    """Non-numeric ``--channel-id`` values follow the exit-1 contract."""
+    result, _ = _invoke_subscribe(
+        ["--channel-id", "not-a-number", "bob@example.com", "--by-email"],
+        subscribe_return=_bulk_ok(),
+    )
+    assert result.exit_code == 1
+    assert "--channel-id must be a numeric channel ID" in result.stderr
+
+
+def test_channel_subscribe_include_archived_forwarded() -> None:
+    """`--include-archived` is forwarded to subscribe_users as a kwarg."""
+    result, sub = _invoke_subscribe(
+        ["general", "bob@example.com", "--by-email", "--include-archived"],
+        subscribe_return=_bulk_ok(),
+    )
+    assert result.exit_code == 0, result.stderr
+    _, kwargs = sub.call_args
+    assert kwargs.get("include_archived") is True
+
+
+def test_channel_subscribe_include_archived_default_false() -> None:
+    """Without `--include-archived`, the flag defaults to False on the API."""
+    result, sub = _invoke_subscribe(
+        ["general", "bob@example.com", "--by-email"],
+        subscribe_return=_bulk_ok(),
+    )
+    assert result.exit_code == 0, result.stderr
+    _, kwargs = sub.call_args
+    assert kwargs.get("include_archived") is False
+
+
+def test_channel_subscribe_json_channel_not_found() -> None:
+    """`--json` with an unknown channel emits a structured error payload.
+
+    Contract: ``status='error'``, ``channel_id=null`` (when channel was
+    looked up by name), ``channel_name=<requested>``, empty ``results``,
+    and a single descriptive ``errors`` entry. Exits 1.
+    """
+    import lftools_uv.api.endpoints.zulip as zulip_api
+
+    result, _ = _invoke_subscribe(
+        ["unknown-channel", "bob@example.com", "--by-email", "--json"],
+        resolve_channel_side_effect=zulip_api.ZulipNotFoundError("Channel 'unknown-channel' not found"),
+    )
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["channel_id"] is None
+    assert payload["channel_name"] == "unknown-channel"
+    assert payload["operation"] == "subscribe"
+    assert payload["results"] == []
+    assert len(payload["errors"]) == 1
+    assert "unknown-channel" in payload["errors"][0]["error"]
+
+
+def test_channel_subscribe_json_channel_id_not_found() -> None:
+    """`--json` with an unknown numeric channel-id reports ``channel_id=null``.
+
+    Per FR-008 / data-model.md, ``channel_id`` must be ``None`` when the
+    target channel cannot be resolved — even if the caller supplied a
+    numeric ``--channel-id``. The schema reserves ``channel_id`` for
+    successfully-resolved channels only.
+    """
+    import lftools_uv.api.endpoints.zulip as zulip_api
+
+    result, _ = _invoke_subscribe(
+        ["--channel-id", "9999", "bob@example.com", "--by-email", "--json"],
+        resolve_channel_side_effect=zulip_api.ZulipNotFoundError("No channel with id 9999"),
+    )
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["channel_id"] is None
+    assert payload["operation"] == "subscribe"
+
+
+def test_channel_subscribe_json_user_resolution_error_keeps_channel_context() -> None:
+    """`--json` error AFTER channel resolves preserves channel context.
+
+    When the channel resolves successfully but a downstream failure
+    (e.g. user resolution) raises, the structured ``--json`` payload
+    MUST thread the resolved ``channel_id`` and ``channel_name``
+    through — otherwise consumers lose the ability to correlate the
+    error with its target stream.
+    """
+    import lftools_uv.api.endpoints.zulip as zulip_api
+
+    result, _ = _invoke_subscribe(
+        ["general", "ghost@example.com", "--by-email", "--json"],
+        resolve_channel_return={"stream_id": 42, "name": "general"},
+        subscribe_side_effect=zulip_api.ZulipNotFoundError("No user found matching 'ghost@example.com'"),
+    )
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "error"
+    # Channel context is preserved because it was resolved before the
+    # downstream user-resolution failure.
+    assert payload["channel_id"] == 42
+    assert payload["channel_name"] == "general"
+    assert payload["results"] == []
+    assert len(payload["errors"]) == 1
+
+
+def test_channel_subscribe_json_ambiguity_surfaces_matches() -> None:
+    """`--json` payload for ZulipAmbiguityError includes ``matches``."""
+    import lftools_uv.api.endpoints.zulip as zulip_api
+
+    matches = [
+        {"user_id": 1, "email": "bob.smith@example.com", "full_name": "Bob"},
+        {"user_id": 2, "email": "bob.jones@example.com", "full_name": "Bob"},
+    ]
+    result, _ = _invoke_subscribe(
+        ["general", "Bob", "--by-name", "--json"],
+        resolve_channel_return={"stream_id": 42, "name": "general"},
+        subscribe_side_effect=zulip_api.ZulipAmbiguityError("Ambiguous full_name match for 'Bob'", matches=matches),
+    )
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["channel_id"] == 42
+    assert payload["errors"][0]["matches"] == matches
+
+
+def test_channel_subscribe_human_mode_surfaces_ambiguity_matches() -> None:
+    """Non-JSON ambiguity errors render the candidates as a table.
+
+    The spec requires that the operator can see the disambiguation
+    candidates (user_id / email / full_name) when a name lookup is
+    ambiguous, not just a single-line error message.
+    """
+    import lftools_uv.api.endpoints.zulip as zulip_api
+
+    matches = [
+        {"user_id": 1, "email": "bob.smith@example.com", "full_name": "Bob"},
+        {"user_id": 2, "email": "bob.jones@example.com", "full_name": "Bob"},
+    ]
+    result, _ = _invoke_subscribe(
+        ["general", "Bob", "--by-name"],
+        resolve_channel_return={"stream_id": 42, "name": "general"},
+        subscribe_side_effect=zulip_api.ZulipAmbiguityError("Ambiguous full_name match for 'Bob'", matches=matches),
+    )
+    assert result.exit_code == 1
+    # Both candidate emails must appear in the rendered output.
+    out = result.output
+    assert "bob.smith@example.com" in out
+    assert "bob.jones@example.com" in out
+
+
+def test_channel_subscribe_table_headers_title_cased() -> None:
+    """Non-JSON success output uses title-cased headers (User, Status)."""
+    result, _ = _invoke_subscribe(
+        ["general", "bob@example.com", "--by-email"],
+        subscribe_return=_bulk_ok(),
+    )
+    assert result.exit_code == 0
+    assert "User" in result.stdout
+    assert "Status" in result.stdout
