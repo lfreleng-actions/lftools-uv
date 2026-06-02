@@ -1354,6 +1354,9 @@ def unsubscribe_users(
             # can match against the channel's subscriber list. Zulip
             # principals accept emails or user IDs interchangeably.
             principal = user.get("delivery_email") or user.get("email")
+            if not isinstance(principal, str) or not principal:
+                errors.append({"user": original, "error": f"Resolved user missing email: {user!r}"})
+                continue
         principals.append(principal)
         resolved_pairs.append((original, principal))
 

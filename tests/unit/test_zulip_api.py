@@ -1770,6 +1770,23 @@ def test_unsubscribe_users_name_ambiguity_lists_matches() -> None:
     assert "id: 100" in error["error"]
 
 
+def test_unsubscribe_users_rejects_resolved_user_without_email() -> None:
+    """Name/email modes require a usable email principal per resolved user."""
+    members = [{"user_id": 300, "full_name": "No Email", "is_bot": False, "is_active": True}]
+    client = _unsubscribe_client(ACTIVE_STREAMS, members, removed=[], not_removed=[])
+    payload = unsubscribe_users(
+        client,
+        channel="general",
+        users=["No Email"],
+        id_mode="name",
+    )
+    assert payload["status"] == "error"
+    assert payload["results"] == []
+    assert "missing email" in payload["errors"][0]["error"]
+    delete_calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
+    assert not delete_calls
+
+
 def test_unsubscribe_users_by_id_passes_principals_as_ints() -> None:
     """When id_mode='id', principals sent to Zulip are integer user ids."""
     client = _unsubscribe_client(

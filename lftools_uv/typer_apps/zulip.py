@@ -851,13 +851,21 @@ def channel_unsubscribe(
         "--include-archived",
         help="Search archived channels when resolving the channel target.",
     ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit machine-readable JSON instead of a table.",
+        hidden=True,
+    ),
 ) -> None:
     """Unsubscribe one or more users from a channel."""
     # Import the endpoint module as a namespace so tests can monkeypatch
     # its helpers while keeping ``get_client`` patched on this module.
     from lftools_uv.api.endpoints import zulip as zulip_api
 
-    options = ctx.obj or {}
+    options = {**(ctx.obj or {})}
+    if json_output:
+        options["json_output"] = True
 
     def fail_validation(message: str, *, channel_name: str = "") -> None:
         if options.get("json_output"):
