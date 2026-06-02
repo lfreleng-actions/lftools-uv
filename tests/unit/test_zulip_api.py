@@ -1834,6 +1834,18 @@ def test_unsubscribe_users_requires_at_least_one_user() -> None:
         _ = unsubscribe_users(client, channel="general", users=[], id_mode="email")
 
 
+def test_unsubscribe_users_rejects_more_than_fifty_users() -> None:
+    """Bulk unsubscribe enforces the shared 50-user invocation limit."""
+    client = _unsubscribe_client(ACTIVE_STREAMS, MEMBERS)
+    with pytest.raises(ZulipValidationError, match="at most 50 users"):
+        _ = unsubscribe_users(
+            client,
+            channel="general",
+            users=[f"user{i}@example.com" for i in range(51)],
+            id_mode="email",
+        )
+
+
 def test_unsubscribe_users_api_error_raises() -> None:
     """A non-success Zulip response surfaces as :class:`ZulipAPIError`."""
     client = _unsubscribe_client(

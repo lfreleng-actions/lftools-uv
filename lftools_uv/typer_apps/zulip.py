@@ -837,9 +837,10 @@ def channel_unsubscribe(
             "all values are users."
         ),
     ),
-    channel_id: int | None = typer.Option(
+    channel_id: str | None = typer.Option(
         None,
         "--channel-id",
+        metavar="INT",
         help="Target the channel by numeric ID instead of name.",
     ),
     by_email: bool = typer.Option(False, "--by-email", help="Identify users by email address."),
@@ -877,9 +878,15 @@ def channel_unsubscribe(
         raise typer.Exit(code=1)
 
     target_values = list(targets or [])
+    parsed_channel_id: int | None = None
+    if channel_id is not None:
+        try:
+            parsed_channel_id = int(channel_id)
+        except ValueError:
+            fail_validation("--channel-id must be a numeric channel ID.")
 
     # Split positional targets into channel + users.
-    if channel_id is not None:
+    if parsed_channel_id is not None:
         channel_name: str | None = None
         users = target_values
     else:
@@ -932,13 +939,13 @@ def channel_unsubscribe(
     # in the --json error payload. The contract documents
     # ``channel_id: null`` only for the case where the channel itself
     # could not be resolved.
-    resolved_channel_id: int | None = channel_id
+    resolved_channel_id: int | None = parsed_channel_id
     resolved_channel_name: str = channel_name or ""
     try:
         target = zulip_api.resolve_channel(
             client,
             name=channel_name,
-            channel_id=channel_id,
+            channel_id=parsed_channel_id,
             include_archived=include_archived,
         )
     except ZulipError as exc:
@@ -990,7 +997,7 @@ def channel_unsubscribe(
     else:
         rows = [(item["user"], item["status"]) for item in payload["results"]]
         rows.extend((item["user"], f"error: {item['error']}") for item in payload["errors"])
-        emit_table(rows, headers=["user", "status"])
+        emit_table(rows, headers=["User", "Status"])
 
     # Per the CLI contract, exit non-zero on ANY error condition. A
     # ``partial`` status means some operations failed, so it must also

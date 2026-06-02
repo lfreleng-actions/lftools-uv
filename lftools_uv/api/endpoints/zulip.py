@@ -1305,6 +1305,10 @@ def unsubscribe_users(
     user_list = list(users)
     if not user_list:
         raise ZulipValidationError("unsubscribe_users requires at least one user")
+    if len(user_list) > MAX_SUBSCRIBE_USERS:
+        raise ZulipValidationError(
+            f"unsubscribe_users accepts at most {MAX_SUBSCRIBE_USERS} users per invocation (got {len(user_list)})"
+        )
 
     if resolved_channel is not None:
         target = resolved_channel

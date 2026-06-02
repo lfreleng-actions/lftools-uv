@@ -1473,6 +1473,19 @@ def test_channel_unsubscribe_bulk(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "bob@example.com" in result.stdout
 
 
+def test_channel_unsubscribe_table_headers_title_cased(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Non-JSON unsubscribe output matches subscribe table headers."""
+    client = _build_client(removed=["bob@example.com"], not_removed=[])
+    result = _invoke_unsubscribe(
+        monkeypatch,
+        client,
+        ["general", "bob@example.com", "--by-email"],
+    )
+    assert result.exit_code == 0, result.stdout + (result.stderr or "")
+    assert "User" in result.stdout
+    assert "Status" in result.stdout
+
+
 def test_channel_unsubscribe_by_name_ambiguity(monkeypatch: pytest.MonkeyPatch) -> None:
     """An ambiguous --by-name lookup exits 1 with a clear error."""
     client = _build_client(removed=[], not_removed=[])
@@ -1536,6 +1549,24 @@ def test_channel_unsubscribe_by_channel_id(monkeypatch: pytest.MonkeyPatch) -> N
     payload = json.loads(result.stdout)
     assert payload["channel_id"] == 2
     assert payload["channel_name"] == "Engineering"
+
+
+def test_channel_unsubscribe_invalid_channel_id_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Invalid --channel-id exits 1 and preserves the JSON error schema."""
+    client = _build_client(removed=[], not_removed=[])
+    result = _invoke_unsubscribe(
+        monkeypatch,
+        client,
+        ["--channel-id", "not-an-int", "bob@example.com", "--by-email", "--json"],
+    )
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["channel_id"] is None
+    assert "numeric channel ID" in payload["errors"][0]["error"]
+    assert result.stderr == ""
 
 
 def test_channel_unsubscribe_requires_id_mode(monkeypatch: pytest.MonkeyPatch) -> None:
