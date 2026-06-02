@@ -470,8 +470,9 @@ def _resolve_single_user(
 
     Raises :class:`ZulipValidationError` for malformed input,
     :class:`ZulipNotFoundError` when the identifier matches nothing,
-    and :class:`ZulipAmbiguityError` (mode ``name`` only) when a
-    full-name lookup matches more than one user.
+    and :class:`ZulipAmbiguityError` when a lookup matches more than one
+    user. Ambiguity is normally expected only for full-name lookups, but
+    malformed member payloads can also duplicate email or ID matches.
     """
     ident = ident.strip()
     if not ident:
