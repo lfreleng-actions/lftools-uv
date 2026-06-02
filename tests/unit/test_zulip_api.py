@@ -1900,3 +1900,15 @@ def test_unsubscribe_users_resolved_channel_skips_resolution() -> None:
     assert payload["status"] == "success"
     assert payload["channel_id"] == 1
     assert payload["channel_name"] == "general"
+
+
+def test_unsubscribe_users_rejects_malformed_resolved_channel() -> None:
+    """A caller-supplied channel must include numeric id and string name."""
+    client = mock.MagicMock()
+    with pytest.raises(ZulipAPIError, match="Malformed stream object"):
+        _ = unsubscribe_users(
+            client,
+            ["bob@example.com"],
+            id_mode="email",
+            resolved_channel={"stream_id": "bad", "name": "general"},
+        )

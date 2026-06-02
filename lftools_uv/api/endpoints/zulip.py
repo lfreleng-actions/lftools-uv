@@ -1320,7 +1320,9 @@ def unsubscribe_users(
             include_archived=include_archived,
         )
     resolved_target_id = target.get("stream_id")
-    resolved_target_name = str(target.get("name", ""))
+    resolved_target_name = target.get("name")
+    if not isinstance(resolved_target_id, int) or not isinstance(resolved_target_name, str):
+        raise ZulipAPIError(f"Malformed stream object: {target!r}")
 
     # Resolve identifiers one-by-one so a single bad entry does not
     # abort the whole bulk operation. Per-user resolution failures are

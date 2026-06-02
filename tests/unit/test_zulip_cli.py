@@ -1652,8 +1652,8 @@ def test_channel_unsubscribe_partial_exits_one(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_channel_unsubscribe_json_error_payload(monkeypatch: pytest.MonkeyPatch) -> None:
-    """When --json is requested and the API errors, emit JSON to stdout."""
-    # Empty members list -> resolve_users raises ZulipNotFoundError.
+    """When user resolution fails under --json, emit bulk error JSON."""
+    # Empty members list -> per-user resolution returns an error result.
     client = mock.MagicMock()
 
     def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
