@@ -1373,6 +1373,9 @@ def unsubscribe_users(
             "errors": errors,
         }
 
+    # The DELETE response reports removed/not_removed by stream, not by
+    # principal, so request one principal at a time to preserve per-user
+    # results and partial-failure reporting.
     for original, principal in resolved_pairs:
         try:
             response = client.call_endpoint(
