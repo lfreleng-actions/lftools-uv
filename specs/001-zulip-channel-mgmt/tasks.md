@@ -180,13 +180,13 @@ SPDX-FileCopyrightText: 2026 The Linux Foundation
 
 ### Tests for User Story 6
 
-- [X] T040 [P] [US6] Write CLI tests for `channel unsubscribe` in tests/unit/test_zulip_cli.py — test single user, bulk, --by-name ambiguity, not-subscribed no-op, --json output
-- [X] T041 [P] [US6] Write API tests for `unsubscribe_users()` in tests/unit/test_zulip_api.py — mock Zulip unsubscribe endpoint, test single/bulk, not-subscribed, partial
+- [x] T040 [P] [US6] Write CLI tests for `channel unsubscribe` in tests/unit/test_zulip_cli.py — test single user, bulk, --by-name ambiguity, not-subscribed no-op, --json output
+- [x] T041 [P] [US6] Write API tests for `unsubscribe_users()` in tests/unit/test_zulip_api.py — mock Zulip unsubscribe endpoint, test single/bulk, not-subscribed, partial
 
 ### Implementation for User Story 6
 
-- [X] T042 [US6] Implement `unsubscribe_users(client, channel, users, id_mode)` in lftools_uv/api/endpoints/zulip.py — resolve channel target, resolve user identifiers, call Zulip unsubscribe API, handle partial results, return bulk MutationResult
-- [X] T043 [US6] Implement `channel unsubscribe` CLI command in lftools_uv/typer_apps/zulip.py — add `unsubscribe` command with same signature pattern as subscribe, handle `--json` with bulk mutation schema
+- [x] T042 [US6] Implement `unsubscribe_users(client, channel, users, id_mode)` in lftools_uv/api/endpoints/zulip.py — resolve channel target, resolve user identifiers, call Zulip unsubscribe API, handle partial results, return bulk MutationResult
+- [x] T043 [US6] Implement `channel unsubscribe` CLI command in lftools_uv/typer_apps/zulip.py — add `unsubscribe` command with same signature pattern as subscribe, handle `--json` with bulk mutation schema
 
 **Checkpoint**: User Story 6 is fully functional — `lftools-uv zulip channel unsubscribe` works independently
 
