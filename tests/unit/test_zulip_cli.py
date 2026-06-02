@@ -1438,11 +1438,7 @@ def _invoke_unsubscribe(monkeypatch: pytest.MonkeyPatch, client: Any, args: list
     monkeypatch.setattr(zulip_mod, "get_client", lambda *a, **kw: client)
     monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
     runner = CliRunner()
-    prefix: list[str] = []
-    if "--json" in args:
-        args = [arg for arg in args if arg != "--json"]
-        prefix.append("--json")
-    return runner.invoke(zulip_app, [*prefix, "channel", "unsubscribe", *args])
+    return runner.invoke(zulip_app, ["channel", "unsubscribe", *args])
 
 
 def test_channel_unsubscribe_single_user(monkeypatch: pytest.MonkeyPatch) -> None:
