@@ -239,7 +239,12 @@ def channel_list(
         "--include-archived",
         help="Include archived channels in the output.",
     ),
-    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON instead of a table."),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit machine-readable JSON instead of a table.",
+        hidden=True,
+    ),
 ) -> None:
     """List channels visible to the authenticated user (US1)."""
     options = {**(ctx.obj or {})}
@@ -496,7 +501,12 @@ def user_list(
         "--include-deactivated",
         help="Include deactivated user accounts in the output.",
     ),
-    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON instead of a table."),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit machine-readable JSON instead of a table.",
+        hidden=True,
+    ),
 ) -> None:
     """List users on the Zulip server (US2)."""
     options = {**(ctx.obj or {})}
@@ -560,7 +570,12 @@ def group_list(
         "--group-id",
         help="Filter by numeric group ID.",
     ),
-    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON instead of a table."),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit machine-readable JSON instead of a table.",
+        hidden=True,
+    ),
 ) -> None:
     """List user groups on the Zulip server.
 
@@ -654,7 +669,12 @@ def channel_subscribe(
     by_id: bool = typer.Option(False, "--by-id", help="Identify users by numeric user ID."),
     by_name: bool = typer.Option(False, "--by-name", help="Identify users by full name."),
     include_archived: bool = typer.Option(False, "--include-archived", help="Permit operating on archived channels."),
-    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON instead of a table."),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit machine-readable JSON instead of a table.",
+        hidden=True,
+    ),
 ) -> None:
     """Subscribe users to a channel (FR-005, US5)."""
     id_mode = _resolve_id_mode(by_email, by_id, by_name)
