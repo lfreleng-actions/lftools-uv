@@ -1414,8 +1414,8 @@ def _build_client(*, removed: list[Any], not_removed: list[Any]) -> Any:
             return {"result": "success", "streams": _STREAMS}
         if url == "users/me/subscriptions" and method == "DELETE":
             request = request or {}
-            subscriptions = _json.loads(request.get("subscriptions", "[]"))
-            principals = _json.loads(request.get("principals", "[]"))
+            subscriptions = json.loads(request.get("subscriptions", "[]"))
+            principals = json.loads(request.get("principals", "[]"))
             subscription = (subscriptions or [""])[0]
             principal = (principals or [None])[0]
             return {
@@ -1559,7 +1559,7 @@ def test_channel_unsubscribe_requires_id_mode_json(monkeypatch: pytest.MonkeyPat
         ["general", "bob@example.com", "--json"],
     )
     assert result.exit_code == 1
-    payload = _json.loads(result.stdout)
+    payload = json.loads(result.stdout)
     assert payload["status"] == "error"
     assert payload["channel_name"] == "general"
     assert "by-email" in payload["errors"][0]["error"]
@@ -1578,7 +1578,7 @@ def test_channel_unsubscribe_rejects_missing_user_json(monkeypatch: pytest.Monke
     client = _build_client(removed=[], not_removed=[])
     result = _invoke_unsubscribe(monkeypatch, client, ["general", "--by-email", "--json"])
     assert result.exit_code == 1
-    payload = _json.loads(result.stdout)
+    payload = json.loads(result.stdout)
     assert payload["status"] == "error"
     assert payload["channel_name"] == "general"
     assert "at least one user" in payload["errors"][0]["error"]
@@ -1592,7 +1592,7 @@ def test_channel_unsubscribe_rejects_no_user_with_channel_id_json(
     client = _build_client(removed=[], not_removed=[])
     result = _invoke_unsubscribe(monkeypatch, client, ["--channel-id", "42", "--by-email", "--json"])
     assert result.exit_code == 1
-    payload = _json.loads(result.stdout)
+    payload = json.loads(result.stdout)
     assert payload["status"] == "error"
     assert payload["channel_id"] is None
     assert "At least one user" in payload["errors"][0]["error"]
@@ -1615,7 +1615,7 @@ def test_channel_unsubscribe_partial_exits_one(monkeypatch: pytest.MonkeyPatch) 
             "--json",
         ],
     )
-    payload = _json.loads(result.stdout)
+    payload = json.loads(result.stdout)
     assert payload["status"] == "partial"
     assert result.exit_code == 1
 
@@ -1639,7 +1639,7 @@ def test_channel_unsubscribe_json_error_payload(monkeypatch: pytest.MonkeyPatch)
         ["general", "ghost@example.com", "--by-email", "--json"],
     )
     assert result.exit_code == 1
-    payload = _json.loads(result.stdout)
+    payload = json.loads(result.stdout)
     assert payload["status"] == "error"
     assert payload["operation"] == "unsubscribe"
     assert payload["channel_name"] == "general"
@@ -1679,7 +1679,7 @@ def test_channel_unsubscribe_json_error_after_channel_resolved(
         ["general", "bob@example.com", "--by-email", "--json"],
     )
     assert result.exit_code == 1
-    payload = _json.loads(result.stdout)
+    payload = json.loads(result.stdout)
     assert payload["status"] == "error"
     assert payload["operation"] == "unsubscribe"
     assert payload["channel_id"] == 1
@@ -1719,7 +1719,7 @@ def test_channel_unsubscribe_json_error_client_init_failure(
         ],
     )
     assert result.exit_code == 1
-    payload = _json.loads(result.stdout)
+    payload = json.loads(result.stdout)
     assert payload["status"] == "error"
     assert payload["channel_id"] is None
     assert payload["channel_name"] == ""
@@ -1749,7 +1749,7 @@ def test_channel_unsubscribe_json_error_channel_unresolved(
         ["nosuch", "bob@example.com", "--by-email", "--json"],
     )
     assert result.exit_code == 1
-    payload = _json.loads(result.stdout)
+    payload = json.loads(result.stdout)
     assert payload["status"] == "error"
     assert payload["channel_id"] is None
     assert payload["channel_name"] == "nosuch"
