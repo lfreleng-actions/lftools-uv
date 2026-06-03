@@ -265,9 +265,9 @@ def get_client(zuliprc: Path | None = None, *, config: ZulipConfig | None = None
     """
     if zuliprc is not None and config is not None:
         raise ZulipValidationError("Pass either 'zuliprc' or 'config', not both")
-    zulip_module = _require_zulip()
     resolved = config or resolve_config(zuliprc)
     if resolved.config_path is not None:
+        zulip_module = _require_zulip()
         return zulip_module.Client(config_file=str(resolved.config_path))
     # No zuliprc file — all three credential fields must be populated.
     missing: list[str] = []
@@ -279,6 +279,7 @@ def get_client(zuliprc: Path | None = None, *, config: ZulipConfig | None = None
         missing.append("site")
     if missing:
         raise ZulipConfigError(f"Incomplete Zulip credentials from {resolved.source}: missing {', '.join(missing)}")
+    zulip_module = _require_zulip()
     return zulip_module.Client(
         email=resolved.email,
         api_key=resolved.api_key,
@@ -1840,4 +1841,94 @@ def update_channel(
         "channel_id": stream_id,
         "channel_name": effective_name,
         "operation": "update",
+    }
+
+
+# US9 — Archive a channel (T054)
+# ---------------------------------------------------------------------------
+
+
+def archive_channel(
+    client: Any,
+    channel: str | int,
+    *,
+    include_archived: bool = False,
+) -> dict[str, Any]:
+    """Archive (deactivate) a Zulip channel.
+
+    Resolves ``channel`` via :func:`resolve_channel` (by name when a
+    string is supplied, by id when an int is supplied) and then calls
+    the Zulip ``DELETE /streams/{stream_id}`` endpoint to deactivate
+    the stream. The operation is idempotent: if the resolved channel
+    is already archived, no DELETE call is issued and a success
+    ``MutationResult`` is returned anyway. This matches the FR-018
+    expectations for ``--include-archived``.
+
+    Returns the standard ``MutationResult`` payload:
+    ``{"status": "success", "channel_id": <int>, "channel_name": <str>,
+    "operation": "archive"}``.
+    """
+    if isinstance(channel, bool) or channel is None:
+        raise ZulipValidationError("archive_channel requires a channel name or id")
+    if isinstance(channel, int):
+        if channel <= 0:
+            raise ZulipValidationError(f"archive_channel requires a positive channel id (got {channel})")
+        target = resolve_channel(client, channel_id=channel, include_archived=include_archived)
+    elif isinstance(channel, str):
+        channel_name = channel.strip()
+        if not channel_name:
+            raise ZulipValidationError("archive_channel requires a non-empty channel name")
+        target = resolve_channel(client, name=channel_name, include_archived=include_archived)
+    else:  # pragma: no cover - defensive
+        raise ZulipValidationError(f"Unsupported channel target type: {type(channel).__name__}")
+
+    stream_id = target.get("stream_id")
+    name = target.get("name")
+    if not isinstance(stream_id, int):
+        raise ZulipAPIError(f"Resolved channel missing numeric stream_id: {target!r}")
+    if not isinstance(name, str) or not name:
+        raise ZulipAPIError(f"Resolved channel missing string name: {target!r}")
+
+    if target.get("is_archived"):
+        # Already-archived no-op: return success without calling DELETE.
+        log.debug("Channel %r (id=%s) already archived; skipping DELETE", name, stream_id)
+        return {
+            "status": "success",
+            "channel_id": stream_id,
+            "channel_name": name,
+            "operation": "archive",
+        }
+
+    try:
+        response = client.call_endpoint(
+            url=f"streams/{stream_id}",
+            method="DELETE",
+        )
+    except Exception as exc:  # pragma: no cover - network errors
+        raise ZulipAPIError(f"Failed to archive channel {name!r}: {exc}") from exc
+
+    if not isinstance(response, dict):
+        raise ZulipAPIError(f"Malformed archive response for {name!r}: {response!r}")
+    result_field = response.get("result")
+    if result_field != "success":
+        # The Zulip server reports an already-deactivated stream via
+        # ``code == "STREAM_DEACTIVATED"``. Treat only that documented
+        # code as idempotent success; any other non-success response is a
+        # genuine API error.
+        code = str(response.get("code", ""))
+        msg = str(response.get("msg", ""))
+        if code == "STREAM_DEACTIVATED":
+            log.debug(
+                "Server reports channel %r already deactivated; treating as success",
+                name,
+            )
+        else:
+            detail = msg or repr(response)
+            raise ZulipAPIError(f"Failed to archive channel {name!r}: {detail}")
+
+    return {
+        "status": "success",
+        "channel_id": stream_id,
+        "channel_name": name,
+        "operation": "archive",
     }

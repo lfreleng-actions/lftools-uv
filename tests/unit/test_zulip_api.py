@@ -36,6 +36,7 @@ from lftools_uv.api.endpoints.zulip import (
     ZulipLockoutError,
     ZulipNotFoundError,
     ZulipValidationError,
+    archive_channel,
     check_feature_level,
     get_client,
     get_server_feature_level,
@@ -379,11 +380,11 @@ def test_get_client_rejects_incomplete_credentials(monkeypatch: pytest.MonkeyPat
         _ = get_client(config=config)
 
 
-def test_get_client_requires_zulip_before_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Missing optional dependency is reported before credential issues."""
+def test_get_client_validates_credentials_before_zulip_import(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Incomplete credentials are reported before optional imports."""
     monkeypatch.setattr("lftools_uv.api.endpoints.zulip._zulip_module", None)
     config = ZulipConfig(email="bot@example.com", source="lftools.ini[zulip]")
-    with pytest.raises(ZulipConfigError, match="not installed"):
+    with pytest.raises(ZulipConfigError, match="missing api_key, site"):
         _ = get_client(config=config)
 
 
@@ -2521,3 +2522,187 @@ def test_update_channel_web_public_requires_spectator_access() -> None:
     with pytest.raises(ZulipValidationError) as exc_info:
         _ = update_channel(client, name="general", channel_type="web-public")
     assert "spectator" in str(exc_info.value).lower()
+
+
+# T053 — archive_channel (US9)
+# ---------------------------------------------------------------------------
+
+
+def _archive_client(
+    active: list[dict[str, Any]],
+    archived: list[dict[str, Any]],
+    *,
+    delete_response: dict[str, Any] | None = None,
+    delete_error: Exception | None = None,
+) -> Any:
+    """Return a client whose stream listings and DELETE responses are mocked.
+
+    GET /streams returns ``active`` or ``archived`` per the
+    ``include_archived`` request flag. DELETE /streams/{id} returns the
+    configured ``delete_response`` (or raises ``delete_error``).
+    """
+    client = mock.MagicMock()
+    delete_calls: list[dict[str, Any]] = []
+    client.delete_calls = delete_calls
+
+    def side_effect(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
+        if method == "GET" and url == "streams":
+            if request and request.get("include_archived"):
+                return {"result": "success", "streams": archived}
+            return {"result": "success", "streams": active}
+        if method == "DELETE" and url.startswith("streams/"):
+            delete_calls.append({"url": url, "method": method, "request": request})
+            if delete_error is not None:
+                raise delete_error
+            return delete_response or {"result": "success"}
+        raise AssertionError(f"unexpected call: {method} {url}")
+
+    client.call_endpoint.side_effect = side_effect
+    return client
+
+
+def test_archive_channel_success() -> None:
+    """Archiving an active channel calls DELETE and returns success."""
+    active = [{"stream_id": 1, "name": "old-project", "is_archived": False}]
+    client = _archive_client(active, active)
+    result = archive_channel(client, "old-project")
+    assert result["status"] == "success"
+    assert result["channel_id"] == 1
+    assert result["channel_name"] == "old-project"
+    assert result["operation"] == "archive"
+    assert client.delete_calls == [{"url": "streams/1", "method": "DELETE", "request": None}]
+
+
+def test_archive_channel_by_id() -> None:
+    """Archiving by channel_id resolves and deletes the right stream."""
+    active = [{"stream_id": 7, "name": "deprecated", "is_archived": False}]
+    client = _archive_client(active, active)
+    result = archive_channel(client, 7)
+    assert result["channel_id"] == 7
+    assert result["channel_name"] == "deprecated"
+    assert client.delete_calls[0]["url"] == "streams/7"
+
+
+def test_archive_channel_already_archived_is_noop() -> None:
+    """An already-archived channel returns success without calling DELETE."""
+    active: list[dict[str, Any]] = []
+    archived = [{"stream_id": 99, "name": "gone", "is_archived": True}]
+    client = _archive_client(active, archived)
+    result = archive_channel(client, "gone", include_archived=True)
+    assert result["status"] == "success"
+    assert result["channel_id"] == 99
+    assert result["channel_name"] == "gone"
+    assert result["operation"] == "archive"
+    assert client.delete_calls == []
+
+
+def test_archive_channel_not_found_propagates() -> None:
+    """A missing channel raises ZulipNotFoundError."""
+    client = _archive_client([], [])
+    with pytest.raises(ZulipNotFoundError):
+        _ = archive_channel(client, "ghost")
+
+
+def test_archive_channel_requires_name_or_id() -> None:
+    """``target`` must be a non-empty (after stripping) string or an int."""
+    client = _archive_client([], [])
+    with pytest.raises(ZulipValidationError):
+        _ = archive_channel(client, "")
+    with pytest.raises(ZulipValidationError):
+        _ = archive_channel(client, "   ")
+
+
+def test_archive_channel_rejects_non_positive_id() -> None:
+    """Channel ids must be positive integers."""
+    from lftools_uv.api.endpoints.zulip import archive_channel
+
+    client = _archive_client([], [])
+    with pytest.raises(ZulipValidationError, match="positive channel id"):
+        _ = archive_channel(client, 0)
+    with pytest.raises(ZulipValidationError, match="positive channel id"):
+        _ = archive_channel(client, -3)
+
+
+def test_archive_channel_rejects_missing_resolved_name() -> None:
+    """Resolved channel payloads must include a non-empty string name."""
+    active = [{"stream_id": 8, "name": None, "is_archived": False}]
+    client = _archive_client(active, active)
+    with pytest.raises(ZulipAPIError, match="string name"):
+        _ = archive_channel(client, 8)
+
+
+def test_archive_channel_already_deactivated_server_response() -> None:
+    """A STREAM_DEACTIVATED server response is treated as idempotent success."""
+    from lftools_uv.api.endpoints.zulip import archive_channel
+
+    active = [{"stream_id": 5, "name": "stale", "is_archived": False}]
+    client = _archive_client(
+        active,
+        active,
+        delete_response={
+            "result": "error",
+            "code": "STREAM_DEACTIVATED",
+            "msg": "Channel is deactivated.",
+        },
+    )
+    result = archive_channel(client, "stale")
+    assert result["status"] == "success"
+    assert result["channel_id"] == 5
+
+
+def test_archive_channel_unexpected_error_response() -> None:
+    """A non-success response that is not STREAM_DEACTIVATED raises ZulipAPIError."""
+    from lftools_uv.api.endpoints.zulip import ZulipAPIError, archive_channel
+
+    active = [{"stream_id": 6, "name": "boom", "is_archived": False}]
+    client = _archive_client(
+        active,
+        active,
+        delete_response={
+            "result": "error",
+            "code": "BAD_REQUEST",
+            "msg": "Insufficient permission.",
+        },
+    )
+    with pytest.raises(ZulipAPIError, match="Insufficient permission"):
+        _ = archive_channel(client, "boom")
+
+
+def test_archive_channel_deactivated_msg_without_code_raises() -> None:
+    """Only STREAM_DEACTIVATED is treated as idempotent success."""
+    from lftools_uv.api.endpoints.zulip import ZulipAPIError, archive_channel
+
+    active = [{"stream_id": 6, "name": "boom", "is_archived": False}]
+    client = _archive_client(
+        active,
+        active,
+        delete_response={
+            "result": "error",
+            "code": "BAD_REQUEST",
+            "msg": "Cannot complete deactivated channel request.",
+        },
+    )
+    with pytest.raises(ZulipAPIError, match="deactivated channel request"):
+        _ = archive_channel(client, "boom")
+
+
+def test_archive_channel_malformed_non_dict_response() -> None:
+    """A non-dict DELETE response is treated as a hard API error."""
+    from lftools_uv.api.endpoints.zulip import ZulipAPIError, archive_channel
+
+    active = [{"stream_id": 7, "name": "weird", "is_archived": False}]
+    client = _archive_client(active, active, delete_response=None)
+    # The helper substitutes ``{"result": "success"}`` when delete_response
+    # is None, so use a sentinel instead by overriding the side effect.
+    bogus_calls: list[Any] = []
+
+    def side_effect(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
+        if method == "GET":
+            return {"result": "success", "streams": active}
+        bogus_calls.append((url, method))
+        return ["not", "a", "dict"]
+
+    client.call_endpoint.side_effect = side_effect
+    with pytest.raises(ZulipAPIError, match="Malformed archive response"):
+        _ = archive_channel(client, "weird")
+    assert bogus_calls == [("streams/7", "DELETE")]

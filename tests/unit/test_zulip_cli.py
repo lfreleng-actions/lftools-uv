@@ -18,7 +18,7 @@ alongside the user-story slices that introduce them.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 from unittest import mock
 
 import pytest
@@ -2250,3 +2250,123 @@ def test_channel_update_include_archived_flag(monkeypatch: pytest.MonkeyPatch) -
     )
     assert result.exit_code == 0, result.output
     assert fake.call_args.kwargs["include_archived"] is True
+
+
+# T052 — channel archive (US9)
+# ---------------------------------------------------------------------------
+
+
+def _invoke_archive(args: list[str], *, archive_side_effect: object | None = None) -> Any:
+    """Invoke ``zulip channel archive`` with a patched API layer."""
+    from lftools_uv.typer_apps import zulip as zulip_mod
+
+    runner = CliRunner()
+    fake_client = mock.MagicMock()
+    with (
+        mock.patch.object(zulip_mod, "get_client", return_value=fake_client),
+        mock.patch.object(zulip_mod, "zulip_available", return_value=True),
+    ):
+        if archive_side_effect is None:
+            archive = mock.MagicMock(
+                return_value={
+                    "status": "success",
+                    "channel_id": 42,
+                    "channel_name": "old-project",
+                    "operation": "archive",
+                }
+            )
+        elif isinstance(archive_side_effect, Exception):
+            archive = mock.MagicMock(side_effect=archive_side_effect)
+        else:
+            archive = mock.MagicMock(return_value=archive_side_effect)
+        with mock.patch.object(zulip_mod, "archive_channel", archive):
+            result = runner.invoke(zulip_mod.zulip_app, args)
+    result_with_mock = cast(Any, result)
+    result_with_mock.archive_mock = archive
+    return result_with_mock
+
+
+def test_channel_archive_requires_yes() -> None:
+    """Without ``--yes`` the CLI must refuse to archive."""
+    result = _invoke_archive(["channel", "archive", "old-project"])
+    assert result.exit_code != 0
+    assert "--yes" in (result.stderr or result.output)
+    assert result.archive_mock.call_count == 0
+
+
+def test_channel_archive_success_with_yes() -> None:
+    """``--yes`` performs the archive and prints a human confirmation."""
+    result = _invoke_archive(["channel", "archive", "old-project", "--yes"])
+    assert result.exit_code == 0, result.output
+    assert "old-project" in result.output
+    assert result.archive_mock.call_count == 1
+
+
+def test_channel_archive_json_output() -> None:
+    """``--json`` emits a MutationResult JSON payload."""
+    result = _invoke_archive(["--json", "channel", "archive", "old-project", "--yes"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload == {
+        "status": "success",
+        "channel_id": 42,
+        "channel_name": "old-project",
+        "operation": "archive",
+    }
+
+
+def test_channel_archive_already_archived_noop_with_include_archived() -> None:
+    """``--include-archived`` lets the CLI report already-archived as success."""
+    payload = {
+        "status": "success",
+        "channel_id": 99,
+        "channel_name": "gone",
+        "operation": "archive",
+    }
+    result = _invoke_archive(
+        ["--json", "channel", "archive", "gone", "--yes", "--include-archived"],
+        archive_side_effect=payload,
+    )
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == payload
+    # Ensure --include-archived is forwarded to the API layer.
+    archive_mock = result.archive_mock
+    _, kwargs = archive_mock.call_args
+    assert kwargs.get("include_archived") is True
+
+
+def test_channel_archive_channel_not_found() -> None:
+    """A missing channel produces a non-zero exit and the API error message."""
+    result = _invoke_archive(
+        ["channel", "archive", "ghost", "--yes"],
+        archive_side_effect=ZulipNotFoundError("Channel 'ghost' not found"),
+    )
+    assert result.exit_code != 0
+    assert "not found" in (result.stderr or result.output)
+
+
+def test_channel_archive_requires_target() -> None:
+    """Exactly one of ``[channel]`` or ``--channel-id`` is required."""
+    result_none = _invoke_archive(["channel", "archive", "--yes"])
+    assert result_none.exit_code != 0
+    result_both = _invoke_archive(["channel", "archive", "old-project", "--channel-id", "1", "--yes"])
+    assert result_both.exit_code != 0
+
+
+def test_channel_archive_by_channel_id() -> None:
+    """``--channel-id`` resolves the channel via its numeric ID."""
+    result = _invoke_archive(["--json", "channel", "archive", "--channel-id", "42", "--yes"])
+    assert result.exit_code == 0, result.output
+    archive_mock = result.archive_mock
+    args, kwargs = archive_mock.call_args
+    # archive_channel(client, target, include_archived=...) — target is
+    # positional arg index 1 (or supplied as the ``channel`` kwarg).
+    assert (len(args) >= 2 and args[1] == 42) or kwargs.get("channel") == 42
+
+
+def test_channel_archive_invalid_channel_id() -> None:
+    """Invalid ``--channel-id`` values use the contract error path."""
+    result = _invoke_archive(["channel", "archive", "--channel-id", "abc", "--yes"])
+    assert result.exit_code == 1
+    assert "--channel-id must be a numeric channel ID" in (result.stderr or result.output)
+    assert result.archive_mock.call_count == 0

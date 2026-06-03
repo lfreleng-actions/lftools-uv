@@ -240,13 +240,13 @@ SPDX-FileCopyrightText: 2026 The Linux Foundation
 
 ### Tests for User Story 9
 
-- [ ] T052 [P] [US9] Write CLI tests for `channel archive` in tests/unit/test_zulip_cli.py — test successful archive with --yes, rejection without --yes, already-archived no-op with --include-archived, channel not found, --json output
-- [ ] T053 [P] [US9] Write API tests for `archive_channel()` in tests/unit/test_zulip_api.py — mock Zulip archive endpoint, test success, already-archived
+- [x] T052 [P] [US9] Write CLI tests for `channel archive` in tests/unit/test_zulip_cli.py — test successful archive with --yes, rejection without --yes, already-archived no-op with --include-archived, channel not found, --json output
+- [x] T053 [P] [US9] Write API tests for `archive_channel()` in tests/unit/test_zulip_api.py — mock Zulip archive endpoint, test success, already-archived
 
 ### Implementation for User Story 9
 
-- [ ] T054 [US9] Implement `archive_channel(client, channel, include_archived=False)` in lftools_uv/api/endpoints/zulip.py — resolve channel target, call Zulip archive (deactivate) endpoint, handle already-archived as success, return MutationResult
-- [ ] T055 [US9] Implement `channel archive` CLI command in lftools_uv/typer_apps/zulip.py — add `archive` command with positional `[channel]`, `--channel-id`, `--yes` (required), `--include-archived`, `--json` flags, reject without --yes
+- [x] T054 [US9] Implement `archive_channel(client, channel, include_archived=False)` in lftools_uv/api/endpoints/zulip.py — resolve channel target, call Zulip archive (deactivate) endpoint, handle already-archived as success, return MutationResult
+- [x] T055 [US9] Implement `channel archive` CLI command in lftools_uv/typer_apps/zulip.py — add `archive` command with positional `[channel]`, `--channel-id`, `--yes` (required), `--include-archived`, `--json` flags, reject without --yes
 
 **Checkpoint**: User Story 9 is fully functional — `lftools-uv zulip channel archive` works independently
 
