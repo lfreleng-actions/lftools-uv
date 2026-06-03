@@ -39,12 +39,11 @@ author = 'Linux Foundation Release Engineering'
 # in the build environment, and the build environment to have access to
 # git tags so hatch-vcs can derive the version at install time.
 try:
-    from importlib.metadata import PackageNotFoundError
-    from importlib.metadata import version as _pkg_version
+    import importlib.metadata as importlib_metadata
 
     try:
-        version = _pkg_version("lftools-uv")
-    except PackageNotFoundError:
+        version = importlib_metadata.version("lftools-uv")
+    except importlib_metadata.PackageNotFoundError:
         version = "0.0.0"
 except Exception:
     version = "0.0.0"

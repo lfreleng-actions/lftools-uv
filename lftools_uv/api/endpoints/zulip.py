@@ -265,9 +265,9 @@ def get_client(zuliprc: Path | None = None, *, config: ZulipConfig | None = None
     """
     if zuliprc is not None and config is not None:
         raise ZulipValidationError("Pass either 'zuliprc' or 'config', not both")
+    zulip_module = _require_zulip()
     resolved = config or resolve_config(zuliprc)
     if resolved.config_path is not None:
-        zulip_module = _require_zulip()
         return zulip_module.Client(config_file=str(resolved.config_path))
     # No zuliprc file — all three credential fields must be populated.
     missing: list[str] = []
@@ -279,7 +279,6 @@ def get_client(zuliprc: Path | None = None, *, config: ZulipConfig | None = None
         missing.append("site")
     if missing:
         raise ZulipConfigError(f"Incomplete Zulip credentials from {resolved.source}: missing {', '.join(missing)}")
-    zulip_module = _require_zulip()
     return zulip_module.Client(
         email=resolved.email,
         api_key=resolved.api_key,
@@ -1513,4 +1512,332 @@ def unsubscribe_users(
         "operation": "unsubscribe",
         "results": results,
         "errors": errors,
+    }
+
+
+# Channel update (US8 — FR-004)
+# ---------------------------------------------------------------------------
+
+
+#: Allowed values for the ``--type`` flag on ``channel update``.
+ChannelType = Literal["public", "private", "web-public"]
+
+#: Allowed values for the ``--topic-policy`` flag.
+TopicPolicy = Literal["allow", "deny", "follow-default"]
+
+
+def _subscriber_count(
+    client: Any,
+    stream_id: int,
+    *,
+    channel: dict[str, Any] | None = None,
+) -> int:
+    """Return the number of subscribers to ``stream_id``.
+
+    Fast path: when the already-resolved ``channel`` dict carries a
+    ``subscriber_count`` integer (exposed by recent Zulip servers), use
+    it directly to avoid an extra round-trip.
+
+    Slow path: fall back to ``GET /api/v1/streams/{stream_id}/members``
+    and count the returned ``subscribers`` list. This is materially
+    more expensive on large channels because it fetches the full
+    subscriber-ID list just to answer a yes/no question.
+
+    Used by :func:`update_channel` to decide whether the lockout-
+    prevention rule applies when converting a channel to private
+    (FR-004 / spec scenario 13/14).
+    """
+    if channel is not None:
+        hint = channel.get("subscriber_count")
+        if isinstance(hint, int) and hint >= 0:
+            return hint
+    try:
+        response = client.call_endpoint(
+            url=f"streams/{stream_id}/members",
+            method="GET",
+        )
+    except Exception as exc:  # pragma: no cover - network errors
+        raise ZulipAPIError(f"Failed to query channel members: {exc}") from exc
+    if not isinstance(response, dict) or response.get("result") != "success":
+        raise ZulipAPIError(f"Unexpected members response: {response!r}")
+    subscribers = response.get("subscribers", [])
+    if not isinstance(subscribers, list):
+        raise ZulipAPIError(f"Malformed members payload: {response!r}")
+    return len(subscribers)
+
+
+def update_channel(
+    client: Any,
+    *,
+    name: str | None = None,
+    channel_id: int | None = None,
+    new_name: str | None = None,
+    description: str | None = None,
+    channel_type: ChannelType | None = None,
+    topic_policy: TopicPolicy | None = None,
+    subscribe_user_specs: Iterable[str] | None = None,
+    user_id_mode: IdMode | None = None,
+    allow_group: str | None = None,
+    can_remove_subscribers_group: str | None = None,
+    include_archived: bool = False,
+) -> dict[str, Any]:
+    """Update channel settings via ``PATCH /api/v1/streams/{stream_id}``.
+
+    Implements FR-004 (channel update) end-to-end:
+
+    * Validates that at least one setting flag is supplied (rename,
+      description, type, topic-policy, allow-group, or
+      can-remove-subscribers-group).
+    * Applies the FR-019 feature-level checks for web-public,
+      topic-policy, can-access-group (``--allow-group``) and
+      can-remove-subscribers-group.
+    * Enforces lockout prevention when converting to ``private``: if
+      the channel currently has 0 subscribers, the caller must supply
+      either ``subscribe_user_specs`` (a non-empty list) or a non-Nobody
+      ``allow_group`` value. ``Nobody`` does NOT satisfy this rule.
+      When ``subscribe_user_specs`` is supplied, the users are
+      resolved AND actually subscribed via
+      ``POST /api/v1/users/me/subscriptions`` before the PATCH so that
+      access is genuinely retained (the API call would otherwise lock
+      the channel out, despite passing client-side validation).
+    * Resolves group specs and wraps them using the group-setting-update
+      ``{"new": value}`` envelope required by the Zulip PATCH endpoints.
+      Note that this wrapping differs from the POST endpoints
+      (``streams`` create), which take the raw value.
+    * Returns the standard ``MutationResult`` dict
+      (``status``/``channel_id``/``channel_name``/``operation``).
+    """
+    # ------------------------------------------------------------------
+    # Argument validation
+    # ------------------------------------------------------------------
+    subscribe_list: list[str] = list(subscribe_user_specs or [])
+    settings_specified = any(
+        v is not None
+        for v in (
+            new_name,
+            description,
+            channel_type,
+            topic_policy,
+            allow_group,
+            can_remove_subscribers_group,
+        )
+    ) or bool(subscribe_list)
+    if not settings_specified:
+        raise ZulipValidationError(
+            "channel update requires at least one setting to change "
+            "(--name, --description, --type, --topic-policy, --allow-group, "
+            "--subscribe, or --can-remove-subscribers-group)"
+        )
+
+    valid_channel_types = {"public", "private", "web-public"}
+    if channel_type is not None and channel_type not in valid_channel_types:
+        raise ZulipValidationError(
+            f"Invalid channel_type {channel_type!r}; expected one of {', '.join(sorted(valid_channel_types))}"
+        )
+    valid_topic_policies = {"allow", "deny", "follow-default"}
+    if topic_policy is not None and topic_policy not in valid_topic_policies:
+        raise ZulipValidationError(
+            f"Invalid topic_policy {topic_policy!r}; expected one of {', '.join(sorted(valid_topic_policies))}"
+        )
+
+    # ------------------------------------------------------------------
+    # Feature-level gating (FR-019)
+    # ------------------------------------------------------------------
+    if channel_type == "web-public":
+        # Fetch server settings ONCE and reuse for both the feature-
+        # level check (by priming the cached level) and the spectator-
+        # access validation (spec scenario 8). Avoids two HTTP calls
+        # when the cache is cold.
+        try:
+            settings_response = client.get_server_settings()
+        except Exception as exc:  # pragma: no cover - network errors
+            raise ZulipAPIError(f"Failed to query server settings: {exc}") from exc
+        if not isinstance(settings_response, dict) or settings_response.get("result") != "success":
+            raise ZulipAPIError(f"Unexpected server-settings response: {settings_response!r}")
+        # Prime the feature-level cache so the following check_feature_level
+        # call does not issue a second HTTP request.
+        level_value = settings_response.get("zulip_feature_level")
+        if isinstance(level_value, int):
+            try:
+                client._lftools_feature_level = level_value
+            except AttributeError:  # pragma: no cover - defensive
+                pass
+        check_feature_level(client, FEATURE_LEVELS["web-public"], feature_name="web-public")
+        # ``realm_enable_spectator_access`` is present on recent Zulip
+        # servers; defensively allow the transition when the field is
+        # absent (older servers leave enforcement to the API itself).
+        spectator = settings_response.get("realm_enable_spectator_access")
+        if spectator is False:
+            # Use ZulipValidationError (not ZulipFeatureLevelError) so
+            # the user sees the actual cause — feature-level error
+            # messages are formatted as version mismatches and would
+            # be misleading when the realm has explicitly disabled
+            # spectator access.
+            raise ZulipValidationError(
+                "Cannot convert channel to web-public: spectator access "
+                "is disabled on this Zulip realm (realm_enable_spectator_access=false). "
+                "Enable spectator access in the realm settings first."
+            )
+    if topic_policy is not None:
+        check_feature_level(client, FEATURE_LEVELS["topic-policy"], feature_name="topic-policy")
+    if allow_group is not None:
+        check_feature_level(client, FEATURE_LEVELS["can-access-group"], feature_name="can-access-group")
+    if can_remove_subscribers_group is not None:
+        check_feature_level(
+            client,
+            FEATURE_LEVELS["can-remove-subscribers-group"],
+            feature_name="can-remove-subscribers-group",
+        )
+
+    # ------------------------------------------------------------------
+    # Resolve target channel
+    # ------------------------------------------------------------------
+    channel = resolve_channel(
+        client,
+        name=name,
+        channel_id=channel_id,
+        include_archived=include_archived,
+    )
+    stream_id_raw = channel.get("stream_id")
+    if not isinstance(stream_id_raw, int):
+        raise ZulipAPIError(f"Resolved channel missing stream_id: {channel!r}")
+    stream_id = stream_id_raw
+    name_raw = channel.get("name")
+    if not isinstance(name_raw, str):
+        raise ZulipAPIError(f"Resolved channel missing name: {channel!r}")
+    resolved_name = name_raw
+
+    # ------------------------------------------------------------------
+    # Resolve --allow-group (with lockout-aware allow_nobody)
+    # ------------------------------------------------------------------
+    # ``allow_group`` is always resolved with allow_nobody=True; the
+    # lockout-prevention block below decides whether a Nobody-only
+    # value is acceptable in the current context. (Per spec, Nobody is
+    # only forbidden when converting to private with 0 existing
+    # subscribers and no --subscribe targets; on a channel that
+    # already has subscribers, Nobody is allowed and simply disables
+    # future joins.)
+    allow_group_value: GroupSettingValue | None = None
+    allow_group_resolved: list[dict[str, Any]] | None = None
+    if allow_group is not None:
+        allow_group_resolved, allow_group_value = resolve_groups(
+            client,
+            allow_group,
+            allow_nobody=True,
+        )
+
+    can_remove_value: GroupSettingValue | None = None
+    if can_remove_subscribers_group is not None:
+        _, can_remove_value = resolve_groups(client, can_remove_subscribers_group)
+
+    # ------------------------------------------------------------------
+    # Lockout prevention on type→private (spec scenarios 13/14, FR-004)
+    # ------------------------------------------------------------------
+    is_type_to_private = channel_type == "private" and not bool(channel.get("invite_only"))
+    if is_type_to_private:
+        has_subs_to_add = bool(subscribe_list)
+        # An allow-group satisfies lockout prevention only if it
+        # resolves to something other than just the Nobody system role
+        # (which would disable the permission entirely).
+        allow_group_is_only_nobody = (
+            allow_group_resolved is not None
+            and len(allow_group_resolved) == 1
+            and allow_group_resolved[0].get("name") == "role:nobody"
+        )
+        allow_group_satisfies = allow_group_value is not None and not allow_group_is_only_nobody
+
+        if not has_subs_to_add and not allow_group_satisfies:
+            # Inspect current subscriber count; if zero, refuse.
+            current = _subscriber_count(client, stream_id, channel=channel)
+            if current == 0:
+                raise ZulipLockoutError(
+                    "Converting channel to private with no existing subscribers "
+                    "would lock everyone out. Specify --subscribe users or a "
+                    "non-Nobody --allow-group to retain access."
+                )
+
+    # ------------------------------------------------------------------
+    # Resolve --subscribe identifiers. When supplied we actually
+    # subscribe the users BEFORE issuing the PATCH so that
+    # type-to-private conversions truly retain access — relying on the
+    # lockout-prevention bypass without actually subscribing would
+    # still lock the channel out.
+    # ------------------------------------------------------------------
+    if subscribe_list and channel_type != "private":
+        raise ZulipValidationError("--subscribe is only valid when using --type private")
+    if subscribe_list and user_id_mode is None:
+        raise ZulipValidationError("--subscribe requires one of --by-email/--by-id/--by-name")
+    if subscribe_list:
+        assert user_id_mode is not None  # for type narrowing (validated above)
+        resolved_users = resolve_users(client, subscribe_list, mode=user_id_mode)
+        principals: list[Any] = []
+        for user in resolved_users:
+            user_id_value = user.get("user_id")
+            if isinstance(user_id_value, int):
+                principals.append(user_id_value)
+                continue
+            email = user.get("delivery_email") or user.get("email")
+            if isinstance(email, str) and email:
+                principals.append(email)
+                continue
+            raise ZulipAPIError(f"Resolved user missing usable principal: {user!r}")
+        try:
+            sub_response = client.call_endpoint(
+                url="users/me/subscriptions",
+                method="POST",
+                request={
+                    "subscriptions": json.dumps([{"name": resolved_name}]),
+                    "principals": json.dumps(principals),
+                },
+            )
+        except Exception as exc:  # pragma: no cover - network errors
+            raise ZulipAPIError(f"Failed to subscribe users during update: {exc}") from exc
+        if not isinstance(sub_response, dict) or sub_response.get("result") != "success":
+            msg = ""
+            if isinstance(sub_response, dict):
+                msg = str(sub_response.get("msg") or sub_response)
+            raise ZulipAPIError(f"Subscribe-during-update failed: {msg or sub_response!r}")
+
+    # ------------------------------------------------------------------
+    # Build PATCH request
+    # ------------------------------------------------------------------
+    request: dict[str, Any] = {}
+    if new_name is not None:
+        request["new_name"] = new_name
+    if description is not None:
+        request["description"] = description
+    if channel_type is not None:
+        request["is_private"] = channel_type == "private"
+        request["is_web_public"] = channel_type == "web-public"
+    if topic_policy is not None:
+        request["topics_policy"] = TOPIC_POLICY_MAP[topic_policy]
+    if allow_group_value is not None:
+        request["can_access_group"] = {"new": allow_group_value}
+    if can_remove_value is not None:
+        request["can_remove_subscribers_group"] = {"new": can_remove_value}
+
+    # ------------------------------------------------------------------
+    # PATCH /api/v1/streams/{stream_id}
+    # ------------------------------------------------------------------
+    try:
+        response = client.call_endpoint(
+            url=f"streams/{stream_id}",
+            method="PATCH",
+            request=request,
+        )
+    except Exception as exc:  # pragma: no cover - network errors
+        raise ZulipAPIError(f"Failed to update channel: {exc}") from exc
+    if not isinstance(response, dict) or response.get("result") != "success":
+        msg = ""
+        if isinstance(response, dict):
+            msg = str(response.get("msg") or response)
+        raise ZulipAPIError(f"Update failed: {msg or response!r}")
+
+    # Reflect rename in the returned channel_name.
+    effective_name = new_name if new_name is not None else resolved_name
+    return {
+        "status": "success",
+        "channel_id": stream_id,
+        "channel_name": effective_name,
+        "operation": "update",
     }

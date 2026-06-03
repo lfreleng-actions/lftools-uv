@@ -220,13 +220,13 @@ SPDX-FileCopyrightText: 2026 The Linux Foundation
 
 ### Tests for User Story 8
 
-- [ ] T048 [P] [US8] Write CLI tests for `channel update` in tests/unit/test_zulip_cli.py — test name update, description update, type change (all transitions), topic-policy set/clear, --allow-group with type change to private, lockout prevention, no-op success, --json output, feature-level errors, --can-remove-subscribers-group, at-least-one-setting validation
-- [ ] T049 [P] [US8] Write API tests for `update_channel()` in tests/unit/test_zulip_api.py — mock Zulip PATCH endpoint, test all parameter combinations, group-setting-update wrapper format `{"new": value}`, lockout validation for type-to-private, feature-level checks
+- [X] T048 [P] [US8] Write CLI tests for `channel update` in tests/unit/test_zulip_cli.py — test name update, description update, type change (all transitions), topic-policy set/clear, --allow-group with type change to private, lockout prevention, no-op rejection, --json output, feature-level errors, --can-remove-subscribers-group, at-least-one-setting validation
+- [X] T049 [P] [US8] Write API tests for `update_channel()` in tests/unit/test_zulip_api.py — mock Zulip PATCH endpoint, test all parameter combinations, group-setting-update wrapper format `{"new": value}`, lockout validation for type-to-private, feature-level checks
 
 ### Implementation for User Story 8
 
-- [ ] T050 [US8] Implement `update_channel()` in lftools_uv/api/endpoints/zulip.py — validate at least one setting change, check feature levels (topic-policy, web-public, group-access, can-remove-subscribers-group), validate lockout prevention on type-to-private (check subscriber count, require --subscribe or --allow-group), resolve groups with `{"new": value}` wrapper format for PATCH, call PATCH `/streams/{stream_id}`, return MutationResult
-- [ ] T051 [US8] Implement `channel update` CLI command in lftools_uv/typer_apps/zulip.py — add `update` command with positional `[channel]`, `--channel-id`, `--name`, `--description`, `--type`, `--topic-policy`, `--subscribe` (multi), `--by-email`/`--by-id`/`--by-name`, `--allow-group`, `--can-remove-subscribers-group`, `--include-archived`, `--json` flags
+- [X] T050 [US8] Implement `update_channel()` in lftools_uv/api/endpoints/zulip.py — validate at least one setting change, check feature levels (topic-policy, web-public, group-access, can-remove-subscribers-group), validate lockout prevention on type-to-private (check subscriber count, require --subscribe or --allow-group), resolve groups with `{"new": value}` wrapper format for PATCH, call PATCH `/streams/{stream_id}`, return MutationResult
+- [X] T051 [US8] Implement `channel update` CLI command in lftools_uv/typer_apps/zulip.py — add `update` command with positional `[channel]`, `--channel-id`, `--name`, `--description`, `--type`, `--topic-policy`, `--subscribe` (multi), `--by-email`/`--by-id`/`--by-name`, `--allow-group`, `--can-remove-subscribers-group`, `--include-archived`, `--json` flags
 
 **Checkpoint**: User Story 8 is fully functional — `lftools-uv zulip channel update` works independently
 
