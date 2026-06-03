@@ -291,9 +291,9 @@ def _resolve_channel_target(channel: str | None, channel_id: str | None) -> None
     """Validate that exactly one of ``channel``/``channel_id`` is supplied.
 
     Mirrors the mutual-exclusivity rule documented in
-    ``contracts/cli-commands.md`` for every channel-scoped subcommand.
-    Raises ``typer.Exit`` (after emitting the canonical error) when the
-    rule is violated.
+    ``contracts/cli-commands.md`` for ``channel subscribers``. Raises
+    ``typer.Exit`` (after emitting the canonical error) when the rule is
+    violated.
     """
     if (channel is None) == (channel_id is None):
         emit_error("Exactly one of [channel] (positional) or --channel-id must be supplied.")
