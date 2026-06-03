@@ -276,10 +276,10 @@ SPDX-FileCopyrightText: 2026 The Linux Foundation
 
 **Goal**: Provide `lftools-uv zulip channel topic-policy` convenience command for viewing/setting topic policy
 
-- [ ] T060 [P] Write CLI tests for `channel topic-policy` in tests/unit/test_zulip_cli.py — test read mode (no --policy), write mode (--policy allow/deny/follow-default), invalid policy value rejection, feature-level error, --json output for both modes
-- [ ] T061 [P] Write API tests for `get_topic_policy()` and `set_topic_policy()` in tests/unit/test_zulip_api.py — mock Zulip stream info endpoint for read, PATCH for write
-- [ ] T062 Implement `get_topic_policy(client, channel)` and `set_topic_policy(client, channel, policy)` in lftools_uv/api/endpoints/zulip.py — check feature level, read or update topic policy field, return result
-- [ ] T063 Implement `channel topic-policy` CLI command in lftools_uv/typer_apps/zulip.py — add `topic-policy` command with positional `[channel]`, `--channel-id`, `--policy` (optional), `--include-archived`, `--json` flags, display current policy in read mode, update in write mode
+- [x] T060 [P] Write CLI tests for `channel topic-policy` in tests/unit/test_zulip_cli.py — test read mode (no --policy), write mode (--policy allow/deny/follow-default), invalid policy value rejection, feature-level error, --json output for both modes
+- [x] T061 [P] Write API tests for `get_topic_policy()` and `set_topic_policy()` in tests/unit/test_zulip_api.py — mock Zulip stream info endpoint for read, PATCH for write
+- [x] T062 Implement `get_topic_policy(client, channel)` and `set_topic_policy(client, channel, policy)` in lftools_uv/api/endpoints/zulip.py — check feature level, read or update topic policy field, return result
+- [x] T063 Implement `channel topic-policy` CLI command in lftools_uv/typer_apps/zulip.py — add `topic-policy` command with positional `[channel]`, `--channel-id`, `--policy` (optional), `--include-archived`, `--json` flags, display current policy in read mode, update in write mode
 
 ---
 
