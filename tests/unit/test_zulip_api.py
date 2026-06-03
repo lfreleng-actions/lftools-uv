@@ -2337,6 +2337,20 @@ def test_update_channel_type_to_private_with_subscribe_satisfies_lockout() -> No
     assert 100 in _json.loads(sub_request["principals"])
 
 
+def test_update_channel_subscribe_requires_usable_principal() -> None:
+    """Resolved subscribe users must have an ID or email principal."""
+    members = [{"full_name": "Ghost", "is_active": True}]
+    client = _update_client(subscribers=[], members=members)
+    with pytest.raises(ZulipAPIError, match="usable principal"):
+        _ = update_channel(
+            client,
+            name="general",
+            channel_type="private",
+            subscribe_user_specs=["Ghost"],
+            user_id_mode="name",
+        )
+
+
 def test_update_channel_rejects_subscribe_without_private_type() -> None:
     """``subscribe_user_specs`` is only valid for type→private updates."""
     client = _update_client()
@@ -2440,11 +2454,11 @@ def test_update_channel_topic_policy_feature_level() -> None:
 
 
 def test_update_channel_topic_policy_passthrough() -> None:
-    """``topic_policy`` value is forwarded to the PATCH payload."""
+    """``topic_policy`` value maps to the Zulip PATCH payload."""
     client = _update_client()
     _ = update_channel(client, name="general", topic_policy="deny")
     payload = client.last_patch["request"]
-    assert payload["topic_policy"] == "deny"
+    assert payload["topics_policy"] == 2
 
 
 def test_update_channel_multiple_settings() -> None:

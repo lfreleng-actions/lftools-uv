@@ -1775,10 +1775,12 @@ def update_channel(
             user_id_value = user.get("user_id")
             if isinstance(user_id_value, int):
                 principals.append(user_id_value)
-            else:
-                email = user.get("delivery_email") or user.get("email")
-                if isinstance(email, str):
-                    principals.append(email)
+                continue
+            email = user.get("delivery_email") or user.get("email")
+            if isinstance(email, str) and email:
+                principals.append(email)
+                continue
+            raise ZulipAPIError(f"Resolved user missing usable principal: {user!r}")
         try:
             sub_response = client.call_endpoint(
                 url="users/me/subscriptions",
@@ -1808,7 +1810,7 @@ def update_channel(
         request["is_private"] = channel_type == "private"
         request["is_web_public"] = channel_type == "web-public"
     if topic_policy is not None:
-        request["topic_policy"] = topic_policy
+        request["topics_policy"] = TOPIC_POLICY_MAP[topic_policy]
     if allow_group_value is not None:
         request["can_access_group"] = {"new": allow_group_value}
     if can_remove_value is not None:
