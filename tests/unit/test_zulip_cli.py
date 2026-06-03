@@ -18,7 +18,7 @@ alongside the user-story slices that introduce them.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 from unittest import mock
 
 import pytest
@@ -2281,8 +2281,9 @@ def _invoke_archive(args: list[str], *, archive_side_effect: object | None = Non
             archive = mock.MagicMock(return_value=archive_side_effect)
         with mock.patch.object(zulip_mod, "archive_channel", archive):
             result = runner.invoke(zulip_mod.zulip_app, args)
-    result.archive_mock = archive
-    return result
+    result_with_mock = cast(Any, result)
+    result_with_mock.archive_mock = archive
+    return result_with_mock
 
 
 def test_channel_archive_requires_yes() -> None:

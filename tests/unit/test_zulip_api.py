@@ -380,11 +380,11 @@ def test_get_client_rejects_incomplete_credentials(monkeypatch: pytest.MonkeyPat
         _ = get_client(config=config)
 
 
-def test_get_client_requires_zulip_before_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Missing optional dependency is reported before credential issues."""
+def test_get_client_validates_credentials_before_zulip_import(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Incomplete credentials are reported before optional imports."""
     monkeypatch.setattr("lftools_uv.api.endpoints.zulip._zulip_module", None)
     config = ZulipConfig(email="bot@example.com", source="lftools.ini[zulip]")
-    with pytest.raises(ZulipConfigError, match="not installed"):
+    with pytest.raises(ZulipConfigError, match="missing api_key, site"):
         _ = get_client(config=config)
 
 
