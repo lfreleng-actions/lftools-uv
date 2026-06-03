@@ -2548,3 +2548,151 @@ def test_channel_unarchive_requires_some_target(
     result = runner.invoke(zulip_app, ["channel", "unarchive", "--yes"])
     assert result.exit_code == 1
     unarchive_mock.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# T060 — ``channel topic-policy`` CLI (FR-021)
+# ---------------------------------------------------------------------------
+
+
+def _patch_topic_policy(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    get_return: dict[str, Any] | None = None,
+    set_return: dict[str, Any] | None = None,
+    get_exc: BaseException | None = None,
+    set_exc: BaseException | None = None,
+) -> tuple[mock.MagicMock, mock.MagicMock]:
+    """Patch topic-policy API helpers for CLI tests."""
+    client = mock.MagicMock()
+    monkeypatch.setattr(zulip_mod, "get_client", lambda **_kw: client)
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
+
+    get_mock = mock.MagicMock()
+    set_mock = mock.MagicMock()
+    if get_exc is not None:
+        get_mock.side_effect = get_exc
+    else:
+        get_mock.return_value = get_return or {
+            "channel_id": 42,
+            "channel_name": "general",
+            "topic_policy": "allow",
+        }
+    if set_exc is not None:
+        set_mock.side_effect = set_exc
+    else:
+        set_mock.return_value = set_return or {
+            "status": "success",
+            "channel_id": 42,
+            "channel_name": "general",
+            "operation": "topic-policy",
+            "topic_policy": "deny",
+        }
+    monkeypatch.setattr(zulip_mod, "get_topic_policy", get_mock, raising=False)
+    monkeypatch.setattr(zulip_mod, "set_topic_policy", set_mock, raising=False)
+    return get_mock, set_mock
+
+
+def test_channel_topic_policy_read_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without ``--policy`` the command displays the current policy."""
+    get_mock, set_mock = _patch_topic_policy(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "topic-policy", "general"])
+    assert result.exit_code == 0, result.stdout
+    assert "allow" in result.stdout
+    get_mock.assert_called_once()
+    _, args, kwargs = get_mock.mock_calls[0]
+    assert args[1] == "general"
+    assert kwargs["include_archived"] is False
+    set_mock.assert_not_called()
+
+
+@pytest.mark.parametrize("policy", ["allow", "deny", "follow-default"])
+def test_channel_topic_policy_write_mode(
+    monkeypatch: pytest.MonkeyPatch,
+    policy: str,
+) -> None:
+    """With ``--policy`` the command updates and displays the policy."""
+    _, set_mock = _patch_topic_policy(
+        monkeypatch,
+        set_return={
+            "status": "success",
+            "channel_id": 42,
+            "channel_name": "general",
+            "operation": "topic-policy",
+            "topic_policy": policy,
+        },
+    )
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "topic-policy", "general", "--policy", policy])
+    assert result.exit_code == 0, result.stdout
+    assert policy in result.stdout
+    set_mock.assert_called_once()
+    _, args, kwargs = set_mock.mock_calls[0]
+    assert args[1] == "general"
+    assert args[2] == policy
+    assert kwargs["include_archived"] is False
+
+
+def test_channel_topic_policy_invalid_policy_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Invalid policy values are rejected before contacting the API."""
+    get_mock, set_mock = _patch_topic_policy(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "topic-policy", "general", "--policy", "maybe"])
+    assert result.exit_code == 1
+    combined = result.stdout + result.stderr
+    assert "allow" in combined
+    assert "deny" in combined
+    assert "follow-default" in combined
+    get_mock.assert_not_called()
+    set_mock.assert_not_called()
+
+
+def test_channel_topic_policy_feature_level_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Feature-level guard errors are surfaced as CLI failures."""
+    _patch_topic_policy(
+        monkeypatch,
+        get_exc=ZulipFeatureLevelError(required=334, actual=333, feature_name="topic-policy"),
+    )
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "topic-policy", "general"])
+    assert result.exit_code == 1
+    combined = result.stdout + result.stderr
+    assert "feature level 334" in combined
+    assert "server has 333" in combined
+
+
+def test_channel_topic_policy_read_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Read mode supports machine-readable JSON output."""
+    _patch_topic_policy(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["--json", "channel", "topic-policy", "general"])
+    assert result.exit_code == 0, result.stdout
+    assert json.loads(result.stdout) == {
+        "channel_id": 42,
+        "channel_name": "general",
+        "topic_policy": "allow",
+    }
+
+
+def test_channel_topic_policy_write_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Write mode supports machine-readable JSON output."""
+    _patch_topic_policy(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        ["channel", "topic-policy", "--channel-id", "42", "--policy", "deny", "--json"],
+    )
+    assert result.exit_code == 0, result.stdout
+    payload = json.loads(result.stdout)
+    assert payload == {
+        "status": "success",
+        "channel_id": 42,
+        "channel_name": "general",
+        "operation": "topic-policy",
+        "topic_policy": "deny",
+    }

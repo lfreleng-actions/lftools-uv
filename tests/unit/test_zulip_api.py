@@ -20,7 +20,7 @@ Covers the foundational tasks T016–T019:
 from __future__ import annotations
 
 import json as _json
-from typing import Any
+from typing import Any, cast
 from unittest import mock
 
 import pytest
@@ -40,12 +40,14 @@ from lftools_uv.api.endpoints.zulip import (
     check_feature_level,
     get_client,
     get_server_feature_level,
+    get_topic_policy,
     list_channels,
     list_groups,
     list_users,
     resolve_channel,
     resolve_groups,
     resolve_users,
+    set_topic_policy,
     subscribe_users,
     unarchive_channel,
     unsubscribe_users,
@@ -2858,3 +2860,108 @@ def test_unarchive_channel_server_error_propagates() -> None:
     )
     with pytest.raises(ZulipAPIError, match="boom"):
         _ = unarchive_channel(client, channel="broken", include_archived=True)
+
+
+# ---------------------------------------------------------------------------
+# T061 — topic-policy API helpers (FR-021)
+# ---------------------------------------------------------------------------
+
+
+def _topic_policy_client(
+    *,
+    feature_level: int = 334,
+    stream_info_policy: int | str | None = 1,
+    patch_response: dict[str, Any] | None = None,
+) -> mock.MagicMock:
+    """Return a mock client for topic-policy read/write helpers."""
+    client = mock.MagicMock()
+    client.get_server_settings.return_value = {
+        "result": "success",
+        "zulip_feature_level": feature_level,
+    }
+
+    def side_effect(*, url: str, method: str, request: dict[str, Any] | None = None) -> dict[str, Any]:
+        if url == "streams" and method == "GET":
+            return {
+                "result": "success",
+                "streams": [
+                    {
+                        "stream_id": 42,
+                        "name": "general",
+                        "description": "General discussion",
+                        "is_archived": False,
+                    }
+                ],
+            }
+        if url == "streams/42" and method == "GET":
+            return {
+                "result": "success",
+                "stream": {"stream_id": 42, "name": "general", "topics_policy": stream_info_policy},
+            }
+        if url == "streams/42" and method == "PATCH":
+            assert request == {"topics_policy": 2}
+            return patch_response or {"result": "success"}
+        raise AssertionError(f"unexpected endpoint: {method} {url} {request}")
+
+    client.call_endpoint.side_effect = side_effect
+    return client
+
+
+def test_get_topic_policy_reads_stream_info_endpoint() -> None:
+    """Read mode resolves the channel and reads the stream-info policy field."""
+    client = _topic_policy_client(stream_info_policy=1)
+    result = get_topic_policy(client, "general")
+    assert result == {
+        "channel_id": 42,
+        "channel_name": "general",
+        "topic_policy": "allow",
+    }
+    client.call_endpoint.assert_any_call(url="streams/42", method="GET")
+
+
+def test_get_topic_policy_accepts_string_policy_field() -> None:
+    """Servers/tests may expose the normalized string policy field."""
+    client = _topic_policy_client(stream_info_policy="follow-default")
+    result = get_topic_policy(client, "general")
+    assert result["topic_policy"] == "follow-default"
+
+
+def test_set_topic_policy_patches_stream() -> None:
+    """Write mode maps policy strings to Zulip's integer PATCH payload."""
+    client = _topic_policy_client()
+    result = set_topic_policy(client, "general", "deny")
+    assert result == {
+        "status": "success",
+        "channel_id": 42,
+        "channel_name": "general",
+        "operation": "topic-policy",
+        "topic_policy": "deny",
+    }
+    client.call_endpoint.assert_any_call(
+        url="streams/42",
+        method="PATCH",
+        request={"topics_policy": 2},
+    )
+
+
+def test_set_topic_policy_rejects_invalid_policy() -> None:
+    """Only allow/deny/follow-default are accepted."""
+    client = _topic_policy_client()
+    with pytest.raises(ZulipValidationError, match="allow"):
+        set_topic_policy(client, "general", cast(Any, "maybe"))
+
+
+def test_get_topic_policy_checks_feature_level_first() -> None:
+    """Read mode fails before endpoint calls when the server is too old."""
+    client = _topic_policy_client(feature_level=333)
+    with pytest.raises(ZulipFeatureLevelError):
+        get_topic_policy(client, "general")
+    client.call_endpoint.assert_not_called()
+
+
+def test_set_topic_policy_checks_feature_level_first() -> None:
+    """Write mode fails before endpoint calls when the server is too old."""
+    client = _topic_policy_client(feature_level=333)
+    with pytest.raises(ZulipFeatureLevelError):
+        set_topic_policy(client, "general", "deny")
+    client.call_endpoint.assert_not_called()

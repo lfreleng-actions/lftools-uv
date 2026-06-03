@@ -40,11 +40,13 @@ from lftools_uv.api.endpoints.zulip import (
     ZulipError,
     archive_channel,
     get_client,
+    get_topic_policy,
     list_channels,
     list_groups,
     list_subscribers,
     list_users,
     resolve_channel,
+    set_topic_policy,
     subscribe_users,
     unarchive_channel,
     update_channel,
@@ -1266,6 +1268,92 @@ def channel_update(  # noqa: PLR0913 - CLI parity with contract
         emit_json(result)
     else:
         typer.echo(f"Updated channel '{result['channel_name']}' (id={result['channel_id']})")
+
+
+# ---------------------------------------------------------------------------
+# Topic policy convenience command (FR-021)
+# ---------------------------------------------------------------------------
+
+
+@channel_app.command("topic-policy")
+def channel_topic_policy(
+    ctx: typer.Context,
+    channel: str | None = typer.Argument(
+        None,
+        help="Channel name (optional if --channel-id is given).",
+    ),
+    channel_id: str | None = typer.Option(
+        None,
+        "--channel-id",
+        help="Target channel by numeric ID.",
+    ),
+    policy: str | None = typer.Option(
+        None,
+        "--policy",
+        help="Topic policy: allow, deny, or follow-default.",
+    ),
+    include_archived: bool = typer.Option(
+        False,
+        "--include-archived",
+        help="Include archived channels when resolving the target.",
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit machine-readable JSON instead of text.",
+        hidden=True,
+    ),
+) -> None:
+    """View or set a channel's topic editing policy."""
+    _validate_single_channel_target(channel, channel_id)
+
+    parsed_channel_id: int | None = None
+    if channel_id is not None:
+        try:
+            parsed_channel_id = int(channel_id)
+        except ValueError:
+            emit_error("--channel-id must be a numeric channel ID.")
+            raise typer.Exit(code=1) from None
+
+    valid_policies = {"allow", "deny", "follow-default"}
+    if policy is not None and policy not in valid_policies:
+        emit_error(f"Invalid --policy {policy!r}; expected one of {', '.join(sorted(valid_policies))}")
+        raise typer.Exit(code=1)
+
+    options = {**(ctx.obj or {})}
+    if json_output:
+        options["json_output"] = True
+
+    target: str | int
+    if parsed_channel_id is not None:
+        target = parsed_channel_id
+    else:
+        assert channel is not None
+        target = channel
+
+    try:
+        client = get_client(zuliprc=options.get("zuliprc"))
+        if policy is None:
+            result = get_topic_policy(client, target, include_archived=include_archived)
+        else:
+            result = set_topic_policy(
+                client,
+                target,
+                cast(TopicPolicy, policy),
+                include_archived=include_archived,
+            )
+    except ZulipError as exc:
+        raise handle_zulip_error(exc) from exc
+
+    if options.get("json_output"):
+        emit_json(result)
+    elif policy is None:
+        typer.echo(result["topic_policy"])
+    else:
+        typer.echo(
+            f"Updated topic policy for '{result['channel_name']}' "
+            f"(id={result['channel_id']}) to {result['topic_policy']}"
+        )
 
 
 @channel_app.command("archive")
