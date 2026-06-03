@@ -2811,6 +2811,14 @@ def test_unarchive_channel_by_id() -> None:
     assert result["status"] == "success"
 
 
+def test_unarchive_channel_rejects_missing_resolved_name() -> None:
+    """A resolved stream without a string name is treated as malformed."""
+    archived = [{"stream_id": 8, "name": None, "is_archived": True}]
+    client = _unarchive_client(active=[], archived=archived)
+    with pytest.raises(ZulipAPIError, match="missing string name"):
+        _ = unarchive_channel(client, channel_id=8, include_archived=True)
+
+
 def test_unarchive_channel_not_found_suggests_include_archived() -> None:
     """When a channel exists archived but ``include_archived`` is False,
     the helper bubbles up the FR-018 not-found error suggesting the flag."""

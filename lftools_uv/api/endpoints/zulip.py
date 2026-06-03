@@ -1995,7 +1995,9 @@ def unarchive_channel(
     stream_id = stream.get("stream_id")
     if not isinstance(stream_id, int):
         raise ZulipAPIError(f"Resolved channel missing numeric stream_id: {stream!r}")
-    stream_name = str(stream.get("name", ""))
+    stream_name = stream.get("name")
+    if not isinstance(stream_name, str) or not stream_name:
+        raise ZulipAPIError(f"Resolved channel missing string name: {stream!r}")
 
     # Idempotent no-op: already-active channels skip the PATCH entirely so
     # retries after a partial failure are safe.

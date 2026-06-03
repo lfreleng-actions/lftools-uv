@@ -2515,6 +2515,16 @@ def test_channel_unarchive_by_channel_id(monkeypatch: pytest.MonkeyPatch) -> Non
     assert kwargs.get("channel_id") == 99
 
 
+def test_channel_unarchive_invalid_channel_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Invalid ``--channel-id`` values use the contract error path."""
+    unarchive_mock = _stub_unarchive(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "unarchive", "--channel-id", "abc", "--yes"])
+    assert result.exit_code == 1
+    assert "--channel-id must be a numeric channel ID" in (result.stderr or result.output)
+    unarchive_mock.assert_not_called()
+
+
 def test_channel_unarchive_rejects_both_targets(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

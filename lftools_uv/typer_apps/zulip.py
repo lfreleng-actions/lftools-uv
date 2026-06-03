@@ -1344,7 +1344,7 @@ def channel_unarchive(
         help="Channel name (case-insensitive). Mutually exclusive with --channel-id.",
         show_default=False,
     ),
-    channel_id: int | None = typer.Option(
+    channel_id: str | None = typer.Option(
         None,
         "--channel-id",
         help="Target channel by numeric id. Mutually exclusive with the positional name.",
@@ -1380,13 +1380,21 @@ def channel_unarchive(
         emit_error("Refusing to unarchive without explicit confirmation. Re-run with --yes to proceed.")
         raise typer.Exit(code=1)
 
+    parsed_channel_id: int | None = None
+    if channel_id is not None:
+        try:
+            parsed_channel_id = int(channel_id)
+        except ValueError:
+            emit_error("--channel-id must be a numeric channel ID.")
+            raise typer.Exit(code=1) from None
+
     options = ctx.obj or {}
     try:
         client = get_client(zuliprc=options.get("zuliprc"))
         payload = unarchive_channel(
             client,
             channel=channel,
-            channel_id=channel_id,
+            channel_id=parsed_channel_id,
             include_archived=include_archived,
         )
     except ZulipError as exc:
