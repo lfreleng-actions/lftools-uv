@@ -47,8 +47,8 @@ from lftools_uv.api.endpoints.zulip import (
     resolve_groups,
     resolve_users,
     subscribe_users,
-    unsubscribe_users,
     unarchive_channel,
+    unsubscribe_users,
     update_channel,
 )
 
@@ -2707,6 +2707,7 @@ def test_archive_channel_malformed_non_dict_response() -> None:
     with pytest.raises(ZulipAPIError, match="Malformed archive response"):
         _ = archive_channel(client, "weird")
     assert bogus_calls == [("streams/7", "DELETE")]
+
 
 # ---------------------------------------------------------------------------
 # T057 — Unarchive (reactivate) channel

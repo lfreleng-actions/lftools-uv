@@ -46,8 +46,8 @@ from lftools_uv.api.endpoints.zulip import (
     list_users,
     resolve_channel,
     subscribe_users,
-    update_channel,
     unarchive_channel,
+    update_channel,
     zulip_available,
 )
 

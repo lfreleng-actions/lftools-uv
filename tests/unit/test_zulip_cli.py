@@ -2371,6 +2371,7 @@ def test_channel_archive_invalid_channel_id() -> None:
     assert "--channel-id must be a numeric channel ID" in (result.stderr or result.output)
     assert result.archive_mock.call_count == 0
 
+
 # ---------------------------------------------------------------------------
 # T056 — `channel unarchive` CLI command
 # ---------------------------------------------------------------------------
