@@ -1275,7 +1275,7 @@ def channel_archive(
         metavar="CHANNEL",
         help="Channel name (mutually exclusive with --channel-id).",
     ),
-    channel_id: int | None = typer.Option(
+    channel_id: str | None = typer.Option(
         None,
         "--channel-id",
         help="Target the channel by numeric stream ID.",
@@ -1321,7 +1321,11 @@ def channel_archive(
     target: str | int
     if has_id:
         assert channel_id is not None  # narrow for the type checker
-        target = channel_id
+        try:
+            target = int(channel_id)
+        except ValueError:
+            emit_error("--channel-id must be a numeric channel ID.")
+            raise typer.Exit(code=1) from None
     else:
         assert channel_name is not None  # narrow for the type checker
         target = channel_name

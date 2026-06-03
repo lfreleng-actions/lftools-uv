@@ -1883,9 +1883,11 @@ def archive_channel(
         raise ZulipValidationError(f"Unsupported channel target type: {type(channel).__name__}")
 
     stream_id = target.get("stream_id")
-    name = str(target.get("name", ""))
+    name = target.get("name")
     if not isinstance(stream_id, int):
         raise ZulipAPIError(f"Resolved channel missing numeric stream_id: {target!r}")
+    if not isinstance(name, str) or not name:
+        raise ZulipAPIError(f"Resolved channel missing string name: {target!r}")
 
     if target.get("is_archived"):
         # Already-archived no-op: return success without calling DELETE.

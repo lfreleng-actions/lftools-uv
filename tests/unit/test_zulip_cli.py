@@ -2362,3 +2362,11 @@ def test_channel_archive_by_channel_id() -> None:
     # archive_channel(client, target, include_archived=...) — target is
     # positional arg index 1 (or supplied as the ``channel`` kwarg).
     assert (len(args) >= 2 and args[1] == 42) or kwargs.get("channel") == 42
+
+
+def test_channel_archive_invalid_channel_id() -> None:
+    """Invalid ``--channel-id`` values use the contract error path."""
+    result = _invoke_archive(["channel", "archive", "--channel-id", "abc", "--yes"])
+    assert result.exit_code == 1
+    assert "--channel-id must be a numeric channel ID" in (result.stderr or result.output)
+    assert result.archive_mock.call_count == 0

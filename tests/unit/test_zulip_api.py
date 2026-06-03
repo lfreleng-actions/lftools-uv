@@ -2623,6 +2623,14 @@ def test_archive_channel_rejects_non_positive_id() -> None:
         _ = archive_channel(client, -3)
 
 
+def test_archive_channel_rejects_missing_resolved_name() -> None:
+    """Resolved channel payloads must include a non-empty string name."""
+    active = [{"stream_id": 8, "name": None, "is_archived": False}]
+    client = _archive_client(active, active)
+    with pytest.raises(ZulipAPIError, match="string name"):
+        _ = archive_channel(client, 8)
+
+
 def test_archive_channel_already_deactivated_server_response() -> None:
     """A STREAM_DEACTIVATED server response is treated as idempotent success."""
     from lftools_uv.api.endpoints.zulip import archive_channel
