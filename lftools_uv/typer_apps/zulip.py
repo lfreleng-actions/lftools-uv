@@ -317,6 +317,12 @@ def channel_subscribers(
         "--include-archived",
         help="Search archived channels in addition to active ones.",
     ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit machine-readable JSON instead of a table.",
+        hidden=True,
+    ),
 ) -> None:
     """List subscribers of a channel.
 
@@ -327,7 +333,9 @@ def channel_subscribers(
     ``contracts/cli-commands.md``.
     """
     _resolve_channel_target(channel, channel_id)
-    options = ctx.obj or {}
+    options = {**(ctx.obj or {})}
+    if json_output:
+        options["json_output"] = True
     try:
         client = get_client(zuliprc=options.get("zuliprc"))
         subscribers = list_subscribers(

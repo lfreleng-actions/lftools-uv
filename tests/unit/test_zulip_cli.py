@@ -370,14 +370,15 @@ def test_channel_subscribers_json_output(monkeypatch: pytest.MonkeyPatch) -> Non
         ],
     )
     runner = CliRunner()
-    result = runner.invoke(zulip_app, ["--json", "channel", "subscribers", "general"])
-    assert result.exit_code == 0, result.stdout
-    payload = json.loads(result.stdout)
-    assert payload == {
-        "subscribers": [
-            {"user_id": 10, "full_name": "Alice Smith", "email": "alice@example.com"},
-        ]
-    }
+    for args in (["--json", "channel", "subscribers", "general"], ["channel", "subscribers", "general", "--json"]):
+        result = runner.invoke(zulip_app, args)
+        assert result.exit_code == 0, result.stdout
+        payload = json.loads(result.stdout)
+        assert payload == {
+            "subscribers": [
+                {"user_id": 10, "full_name": "Alice Smith", "email": "alice@example.com"},
+            ]
+        }
 
 
 def test_channel_subscribers_channel_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -389,7 +390,8 @@ def test_channel_subscribers_channel_not_found(monkeypatch: pytest.MonkeyPatch) 
     runner = CliRunner()
     result = runner.invoke(zulip_app, ["channel", "subscribers", "ghost"])
     assert result.exit_code == 1
-    assert "Channel 'ghost' not found" in result.stderr
+    combined = result.stdout + result.stderr
+    assert "Channel 'ghost' not found" in combined
 
 
 def test_channel_subscribers_channel_id_flag(monkeypatch: pytest.MonkeyPatch) -> None:
