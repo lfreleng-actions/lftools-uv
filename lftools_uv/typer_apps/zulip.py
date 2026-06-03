@@ -38,8 +38,8 @@ from lftools_uv.api.endpoints.zulip import (
     ZulipError,
     get_client,
     list_channels,
-    list_subscribers,
     list_groups,
+    list_subscribers,
     list_users,
     resolve_channel,
     subscribe_users,
@@ -345,6 +345,7 @@ def channel_subscribers(
 
     rows = [(sub.get("full_name") or "", sub.get("email") or "", sub.get("user_id")) for sub in subscribers]
     emit_table(rows, headers=("Full Name", "Email", "User ID"))
+
 
 # ---------------------------------------------------------------------------
 # US4 — channel create (T035)
