@@ -1367,14 +1367,7 @@ def channel_unarchive(
     the name/ID resolves; without it the CLI emits a helpful FR-018
     message pointing at the flag.
     """
-    # CLI-side validation of mutual exclusivity for cleaner errors than
-    # letting the API layer raise ZulipValidationError.
-    if channel is None and channel_id is None:
-        emit_error("Specify a channel name (positional) or --channel-id to identify the target.")
-        raise typer.Exit(code=1)
-    if channel is not None and channel_id is not None:
-        emit_error("Specify either a channel name (positional) or --channel-id, not both.")
-        raise typer.Exit(code=1)
+    _validate_single_channel_target(channel, channel_id)
 
     if not yes:
         emit_error("Refusing to unarchive without explicit confirmation. Re-run with --yes to proceed.")

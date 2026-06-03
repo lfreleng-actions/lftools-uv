@@ -1978,6 +1978,13 @@ def unarchive_channel(
     """
     if (channel is None) == (channel_id is None):
         raise ZulipValidationError("unarchive_channel requires exactly one of 'channel' or 'channel_id'")
+    if channel_id is not None:
+        if isinstance(channel_id, bool) or channel_id <= 0:
+            raise ZulipValidationError(f"unarchive_channel requires a positive channel id (got {channel_id})")
+    elif channel is not None:
+        channel = channel.strip()
+        if not channel:
+            raise ZulipValidationError("unarchive_channel requires a non-empty channel name")
 
     check_feature_level(
         client,

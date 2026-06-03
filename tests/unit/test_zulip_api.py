@@ -2837,6 +2837,17 @@ def test_unarchive_channel_requires_one_target() -> None:
         _ = unarchive_channel(client, channel="x", channel_id=1)
 
 
+def test_unarchive_channel_rejects_invalid_targets() -> None:
+    """Empty names and non-positive ids fail validation clearly."""
+    client = _unarchive_client()
+    with pytest.raises(ZulipValidationError, match="non-empty channel name"):
+        _ = unarchive_channel(client, channel="   ")
+    with pytest.raises(ZulipValidationError, match="positive channel id"):
+        _ = unarchive_channel(client, channel_id=0)
+    with pytest.raises(ZulipValidationError, match="positive channel id"):
+        _ = unarchive_channel(client, channel_id=-3)
+
+
 def test_unarchive_channel_server_error_propagates() -> None:
     """A non-success reactivate response raises :class:`ZulipAPIError`."""
     archived = [{"stream_id": 7, "name": "broken", "is_archived": True}]
