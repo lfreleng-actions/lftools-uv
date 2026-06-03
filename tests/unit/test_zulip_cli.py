@@ -28,10 +28,10 @@ import lftools_uv.typer_apps.zulip as zulip_mod
 from lftools_uv.api.endpoints.zulip import (
     ZulipAmbiguityError,
     ZulipConfigError,
-    ZulipValidationError,
-    ZulipLockoutError,
     ZulipFeatureLevelError,
+    ZulipLockoutError,
     ZulipNotFoundError,
+    ZulipValidationError,
 )
 from lftools_uv.typer_apps.zulip import (
     MISSING_EXTRA_MESSAGE,
@@ -1939,7 +1939,6 @@ def _patch_update(monkeypatch: pytest.MonkeyPatch, **side_effect: Any) -> mock.M
     monkeypatch.setattr(zulip_mod, "get_client", lambda *a, **kw: mock.MagicMock())
     monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
     return fake
-
 
 
 def test_channel_update_name(monkeypatch: pytest.MonkeyPatch) -> None:
