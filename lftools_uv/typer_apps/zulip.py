@@ -1099,7 +1099,7 @@ def channel_unsubscribe(
 
 def _validate_single_channel_target(
     channel: str | None,
-    channel_id: int | None,
+    channel_id: str | None,
 ) -> None:
     """Enforce FR-018: exactly one of [channel] or --channel-id."""
     if channel is None and channel_id is None:
@@ -1117,7 +1117,7 @@ def channel_update(  # noqa: PLR0913 - CLI parity with contract
         None,
         help="Channel name (optional if --channel-id is given).",
     ),
-    channel_id: int | None = typer.Option(
+    channel_id: str | None = typer.Option(
         None,
         "--channel-id",
         help="Target channel by numeric ID.",
@@ -1177,6 +1177,14 @@ def channel_update(  # noqa: PLR0913 - CLI parity with contract
     contacting the server so that obvious errors are reported quickly.
     """
     _validate_single_channel_target(channel, channel_id)
+
+    parsed_channel_id: int | None = None
+    if channel_id is not None:
+        try:
+            parsed_channel_id = int(channel_id)
+        except ValueError:
+            emit_error("--channel-id must be a numeric channel ID.")
+            raise typer.Exit(code=1) from None
 
     # Local at-least-one-setting check so the user-facing error is
     # presented before any network calls are made; the API layer also
@@ -1238,7 +1246,7 @@ def channel_update(  # noqa: PLR0913 - CLI parity with contract
         result = update_channel(
             client,
             name=channel,
-            channel_id=channel_id,
+            channel_id=parsed_channel_id,
             new_name=new_name,
             description=description,
             channel_type=cast(ChannelType | None, channel_type),

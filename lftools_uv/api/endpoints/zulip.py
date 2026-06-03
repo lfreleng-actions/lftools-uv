@@ -1702,7 +1702,10 @@ def update_channel(
     if not isinstance(stream_id_raw, int):
         raise ZulipAPIError(f"Resolved channel missing stream_id: {channel!r}")
     stream_id = stream_id_raw
-    resolved_name = str(channel.get("name", ""))
+    name_raw = channel.get("name")
+    if not isinstance(name_raw, str):
+        raise ZulipAPIError(f"Resolved channel missing name: {channel!r}")
+    resolved_name = name_raw
 
     # ------------------------------------------------------------------
     # Resolve --allow-group (with lockout-aware allow_nobody)
@@ -1781,8 +1784,8 @@ def update_channel(
                 url="users/me/subscriptions",
                 method="POST",
                 request={
-                    "subscriptions": [{"name": resolved_name}],
-                    "principals": principals,
+                    "subscriptions": json.dumps([{"name": resolved_name}]),
+                    "principals": json.dumps(principals),
                 },
             )
         except Exception as exc:  # pragma: no cover - network errors

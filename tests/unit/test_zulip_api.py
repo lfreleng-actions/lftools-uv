@@ -2260,6 +2260,14 @@ def test_update_channel_description_only() -> None:
     assert payload == {"description": "new desc"}
 
 
+def test_update_channel_rejects_missing_channel_name() -> None:
+    """Resolved channels must include a string name for subscription calls."""
+    streams = [{"stream_id": 1, "description": "g", "invite_only": False}]
+    client = _update_client(streams=streams)
+    with pytest.raises(ZulipAPIError, match="missing name"):
+        _ = update_channel(client, channel_id=1, description="new desc")
+
+
 def test_update_channel_type_to_public() -> None:
     """Type→public sends ``is_private=False`` and ``is_web_public=False``."""
     client = _update_client()
@@ -2325,8 +2333,8 @@ def test_update_channel_type_to_private_with_subscribe_satisfies_lockout() -> No
     # that the new subscriber retains access to the now-private channel.
     assert client.subscribe_calls, "expected POST /users/me/subscriptions"
     sub_request = client.subscribe_calls[0]
-    assert sub_request["subscriptions"] == [{"name": "general"}]
-    assert 100 in sub_request["principals"]
+    assert _json.loads(sub_request["subscriptions"]) == [{"name": "general"}]
+    assert 100 in _json.loads(sub_request["principals"])
 
 
 def test_update_channel_rejects_subscribe_without_private_type() -> None:

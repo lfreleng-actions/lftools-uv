@@ -2208,6 +2208,31 @@ def test_channel_update_requires_exactly_one_target(monkeypatch: pytest.MonkeyPa
     assert result.exit_code != 0
 
 
+def test_channel_update_invalid_channel_id_exits_1(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Invalid ``--channel-id`` values follow the exit-1 contract."""
+    _patch_update(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        ["channel", "update", "--channel-id", "abc", "--description", "x"],
+    )
+    assert result.exit_code == 1
+    combined = result.output + (result.stderr or "")
+    assert "--channel-id must be a numeric channel ID" in combined
+
+
+def test_channel_update_channel_id_parses_int(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--channel-id`` is parsed manually and forwarded as an int."""
+    fake = _patch_update(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        ["channel", "update", "--channel-id", "42", "--description", "x"],
+    )
+    assert result.exit_code == 0, result.output
+    assert fake.call_args.kwargs["channel_id"] == 42
+
+
 def test_channel_update_include_archived_flag(monkeypatch: pytest.MonkeyPatch) -> None:
     """``--include-archived`` forwards to the API layer."""
     fake = _patch_update(monkeypatch)
