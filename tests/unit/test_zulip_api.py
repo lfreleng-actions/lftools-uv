@@ -599,6 +599,26 @@ def test_list_subscribers_by_channel_id() -> None:
     assert [s["user_id"] for s in subs] == [10]
 
 
+def test_list_subscribers_normalizes_member_fields() -> None:
+    """Existing member metadata is normalized to strings."""
+    from lftools_uv.api.endpoints.zulip import list_subscribers
+
+    client = _subscribers_client(
+        streams_active=SUBS_STREAMS,
+        streams_archived=SUBS_STREAMS_ARCHIVED,
+        subscribers_by_stream={1: [10, 20]},
+        members=[
+            {"user_id": 10, "full_name": 123, "email": 456, "delivery_email": None},
+            {"user_id": 20, "full_name": None, "email": None, "delivery_email": None},
+        ],
+    )
+    subs = list_subscribers(client, channel_id=1)
+    assert subs == [
+        {"user_id": 10, "full_name": "123", "email": "456"},
+        {"user_id": 20, "full_name": "", "email": ""},
+    ]
+
+
 def test_list_subscribers_channel_not_found() -> None:
     """A missing channel surfaces :class:`ZulipNotFoundError`."""
     from lftools_uv.api.endpoints.zulip import list_subscribers

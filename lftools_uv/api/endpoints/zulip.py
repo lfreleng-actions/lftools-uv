@@ -803,12 +803,13 @@ def list_subscribers(
         if member_record is None:
             enriched.append({"user_id": uid, "full_name": None, "email": None})
             continue
+        full_name = member_record.get("full_name")
         email = member_record.get("delivery_email") or member_record.get("email")
         enriched.append(
             {
                 "user_id": uid,
-                "full_name": member_record.get("full_name"),
-                "email": email,
+                "full_name": "" if full_name is None else str(full_name),
+                "email": "" if email is None else str(email),
             }
         )
     return enriched
