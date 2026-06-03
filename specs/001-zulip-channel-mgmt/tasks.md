@@ -260,13 +260,13 @@ SPDX-FileCopyrightText: 2026 The Linux Foundation
 
 ### Tests for User Story 10
 
-- [ ] T056 [P] [US10] Write CLI tests for `channel unarchive` in tests/unit/test_zulip_cli.py — test successful unarchive with --include-archived --yes, rejection without --yes, not-found suggestion to use --include-archived, already-active no-op, feature-level error, --json output
-- [ ] T057 [P] [US10] Write API tests for `unarchive_channel()` in tests/unit/test_zulip_api.py — mock Zulip reactivate endpoint, test success, already-active no-op, feature-level check
+- [x] T056 [P] [US10] Write CLI tests for `channel unarchive` in tests/unit/test_zulip_cli.py — test successful unarchive with --include-archived --yes, rejection without --yes, not-found suggestion to use --include-archived, already-active no-op, feature-level error, --json output
+- [x] T057 [P] [US10] Write API tests for `unarchive_channel()` in tests/unit/test_zulip_api.py — mock Zulip reactivate endpoint, test success, already-active no-op, feature-level check
 
 ### Implementation for User Story 10
 
-- [ ] T058 [US10] Implement `unarchive_channel(client, channel, include_archived=False)` in lftools_uv/api/endpoints/zulip.py — check feature level for unarchive capability, resolve channel target (with include-archived awareness), call Zulip reactivate endpoint, handle already-active as success, return MutationResult
-- [ ] T059 [US10] Implement `channel unarchive` CLI command in lftools_uv/typer_apps/zulip.py — add `unarchive` command with positional `[channel]`, `--channel-id`, `--yes` (required), `--include-archived`, `--json` flags, reject without --yes
+- [x] T058 [US10] Implement `unarchive_channel(client, channel=None, *, channel_id=None, include_archived=False)` in lftools_uv/api/endpoints/zulip.py — check feature level for unarchive capability, resolve channel target by name or id (with include-archived awareness), call Zulip reactivate endpoint, handle already-active as success, return MutationResult
+- [x] T059 [US10] Implement `channel unarchive` CLI command in lftools_uv/typer_apps/zulip.py — add `unarchive` command with positional `[channel]`, `--channel-id`, `--yes` (required), `--include-archived`, `--json` flags, reject without --yes
 
 **Checkpoint**: User Story 10 is fully functional — `lftools-uv zulip channel unarchive` works independently
 

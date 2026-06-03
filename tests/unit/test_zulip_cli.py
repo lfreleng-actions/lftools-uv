@@ -2370,3 +2370,181 @@ def test_channel_archive_invalid_channel_id() -> None:
     assert result.exit_code == 1
     assert "--channel-id must be a numeric channel ID" in (result.stderr or result.output)
     assert result.archive_mock.call_count == 0
+
+
+# ---------------------------------------------------------------------------
+# T056 — `channel unarchive` CLI command
+# ---------------------------------------------------------------------------
+
+
+def _stub_unarchive(monkeypatch: pytest.MonkeyPatch, **overrides: Any) -> mock.MagicMock:
+    """Patch the API surface used by the ``channel unarchive`` CLI.
+
+    Returns the ``unarchive_channel`` mock so individual tests can inspect
+    invocation args. ``get_client`` is stubbed to a sentinel so the CLI
+    never touches a real Zulip server.
+    """
+    import lftools_uv.typer_apps.zulip as zulip_cli
+
+    monkeypatch.setattr(zulip_cli, "zulip_available", lambda: True)
+    client_sentinel = mock.MagicMock(name="ZulipClient")
+    monkeypatch.setattr(zulip_cli, "get_client", lambda *a, **kw: client_sentinel)
+
+    default = {
+        "status": "success",
+        "channel_id": 99,
+        "channel_name": "restored-project",
+        "operation": "unarchive",
+    }
+    default.update(overrides.get("result", {}))
+    unarchive_mock = mock.MagicMock(return_value=default)
+    if "side_effect" in overrides:
+        unarchive_mock.side_effect = overrides["side_effect"]
+    monkeypatch.setattr(zulip_cli, "unarchive_channel", unarchive_mock)
+    return unarchive_mock
+
+
+def test_channel_unarchive_success_with_yes_and_include_archived(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`channel unarchive --yes --include-archived NAME` succeeds."""
+    unarchive_mock = _stub_unarchive(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        ["channel", "unarchive", "restored-project", "--yes", "--include-archived"],
+    )
+    assert result.exit_code == 0, result.stdout
+    unarchive_mock.assert_called_once()
+    kwargs = unarchive_mock.call_args.kwargs
+    assert kwargs.get("channel") == "restored-project"
+    assert kwargs.get("include_archived") is True
+
+
+def test_channel_unarchive_requires_yes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without ``--yes`` the command refuses and the API is not invoked."""
+    unarchive_mock = _stub_unarchive(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        ["channel", "unarchive", "restored-project", "--include-archived"],
+    )
+    assert result.exit_code == 1
+    assert "--yes" in (result.stdout + (result.stderr or ""))
+    unarchive_mock.assert_not_called()
+
+
+def test_channel_unarchive_not_found_suggests_include_archived(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A not-found error from the API surfaces the helpful CLI message."""
+    from lftools_uv.api.endpoints.zulip import ZulipNotFoundError
+
+    _stub_unarchive(
+        monkeypatch,
+        side_effect=ZulipNotFoundError(
+            "Channel 'restored-project' is archived. Use --include-archived to operate on archived channels."
+        ),
+    )
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "unarchive", "restored-project", "--yes"])
+    assert result.exit_code == 1
+    combined = result.stdout + (result.stderr or "")
+    assert "--include-archived" in combined
+
+
+def test_channel_unarchive_already_active_no_op(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Idempotent success path exits 0 and prints success."""
+    _stub_unarchive(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "unarchive", "general", "--yes"])
+    assert result.exit_code == 0
+
+
+def test_channel_unarchive_feature_level_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Feature-level error surfaces the FR-019 canonical message."""
+    from lftools_uv.api.endpoints.zulip import ZulipFeatureLevelError
+
+    _stub_unarchive(
+        monkeypatch,
+        side_effect=ZulipFeatureLevelError(required=59, actual=10, feature_name="unarchive"),
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        ["channel", "unarchive", "old", "--yes", "--include-archived"],
+    )
+    assert result.exit_code == 1
+    combined = result.stdout + (result.stderr or "")
+    assert "feature level 59" in combined
+    assert "server has 10" in combined
+
+
+def test_channel_unarchive_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`--json` emits the canonical MutationResult shape on stdout."""
+    _stub_unarchive(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        ["--json", "channel", "unarchive", "restored-project", "--yes", "--include-archived"],
+    )
+    assert result.exit_code == 0, result.stdout
+    payload = json.loads(result.stdout)
+    assert payload == {
+        "status": "success",
+        "channel_id": 99,
+        "channel_name": "restored-project",
+        "operation": "unarchive",
+    }
+
+
+def test_channel_unarchive_by_channel_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`--channel-id` is accepted as an alternative to positional name."""
+    unarchive_mock = _stub_unarchive(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        ["channel", "unarchive", "--channel-id", "99", "--yes", "--include-archived"],
+    )
+    assert result.exit_code == 0, result.stdout
+    kwargs = unarchive_mock.call_args.kwargs
+    assert kwargs.get("channel_id") == 99
+
+
+def test_channel_unarchive_invalid_channel_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Invalid ``--channel-id`` values use the contract error path."""
+    unarchive_mock = _stub_unarchive(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "unarchive", "--channel-id", "abc", "--yes"])
+    assert result.exit_code == 1
+    assert "--channel-id must be a numeric channel ID" in (result.stderr or result.output)
+    unarchive_mock.assert_not_called()
+
+
+def test_channel_unarchive_rejects_both_targets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Supplying both positional name and ``--channel-id`` is rejected."""
+    unarchive_mock = _stub_unarchive(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        ["channel", "unarchive", "restored-project", "--channel-id", "99", "--yes"],
+    )
+    assert result.exit_code == 1
+    unarchive_mock.assert_not_called()
+
+
+def test_channel_unarchive_requires_some_target(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Neither positional name nor ``--channel-id`` → CLI error."""
+    unarchive_mock = _stub_unarchive(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "unarchive", "--yes"])
+    assert result.exit_code == 1
+    unarchive_mock.assert_not_called()
