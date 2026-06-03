@@ -427,6 +427,7 @@ def test_channel_subscribers_requires_exactly_one_target(
     both_result = runner.invoke(zulip_app, ["channel", "subscribers", "general", "--channel-id", "1"])
     assert both_result.exit_code == 1
 
+
 # ---------------------------------------------------------------------------
 # T024 — ``user list`` CLI
 # ---------------------------------------------------------------------------

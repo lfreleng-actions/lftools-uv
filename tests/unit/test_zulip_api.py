@@ -728,6 +728,7 @@ def test_list_subscribers_rejects_non_integer_id() -> None:
     with pytest.raises(ZulipAPIError, match="Malformed subscriber id"):
         _ = list_subscribers(client, name="general")
 
+
 # ---------------------------------------------------------------------------
 # T025 — list_users API
 # ---------------------------------------------------------------------------
