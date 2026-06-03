@@ -200,13 +200,13 @@ SPDX-FileCopyrightText: 2026 The Linux Foundation
 
 ### Tests for User Story 7
 
-- [ ] T044 [P] [US7] Write CLI tests for `channel subscribers` in tests/unit/test_zulip_cli.py — test table output, --json output, channel not found error, --channel-id usage, --include-archived
-- [ ] T045 [P] [US7] Write API tests for `list_subscribers()` in tests/unit/test_zulip_api.py — mock Zulip subscribers endpoint, test response parsing
+- [x] T044 [P] [US7] Write CLI tests for `channel subscribers` in tests/unit/test_zulip_cli.py — test table output, --json output, channel not found error, --channel-id usage, --include-archived
+- [x] T045 [P] [US7] Write API tests for `list_subscribers()` in tests/unit/test_zulip_api.py — mock Zulip subscribers endpoint, test response parsing
 
 ### Implementation for User Story 7
 
-- [ ] T046 [US7] Implement `list_subscribers(client, channel, include_archived=False)` in lftools_uv/api/endpoints/zulip.py — resolve channel target, call Zulip subscribers API, cross-reference with users API to get full_name and email for each subscriber ID, return list of subscriber dicts
-- [ ] T047 [US7] Implement `channel subscribers` CLI command in lftools_uv/typer_apps/zulip.py — add `subscribers` command with positional `[channel]`, `--channel-id`, `--include-archived`, `--json` flags, format table output
+- [x] T046 [US7] Implement `list_subscribers(client, *, name=None, channel_id=None, include_archived=False)` in lftools_uv/api/endpoints/zulip.py — resolve channel target (exactly one of `name`/`channel_id`), call Zulip subscribers API, cross-reference with users API to get full_name and email for each subscriber ID, return list of subscriber dicts
+- [x] T047 [US7] Implement `channel subscribers` CLI command in lftools_uv/typer_apps/zulip.py — add `subscribers` command with positional `[channel]`, `--channel-id`, `--include-archived`, `--json` flags, format table output
 
 **Checkpoint**: User Story 7 is fully functional — `lftools-uv zulip channel subscribers` works independently
 

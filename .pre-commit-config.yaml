@@ -5,6 +5,7 @@
 ci:
   # pre-commit.ci sandbox lacks uv/project venv; skip system-local hooks
   skip: [pytest, gha-workflow-linter, basedpyright]
+  autofix_prs: false
   autofix_commit_msg: |
     Chore: pre-commit autofixes
 

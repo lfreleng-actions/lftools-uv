@@ -39,6 +39,7 @@ from lftools_uv.api.endpoints.zulip import (
     get_client,
     list_channels,
     list_groups,
+    list_subscribers,
     list_users,
     resolve_channel,
     subscribe_users,
@@ -284,6 +285,83 @@ def channel_list(
             row.append("archived" if c.get("is_archived") else "active")
         rows.append(row)
     emit_table(rows, headers)
+
+
+def _resolve_channel_target(channel: str | None, channel_id: str | None) -> None:
+    """Validate that exactly one of ``channel``/``channel_id`` is supplied.
+
+    Mirrors the mutual-exclusivity rule documented in
+    ``contracts/cli-commands.md`` for ``channel subscribers``. Raises
+    ``typer.Exit`` (after emitting the canonical error) when the rule is
+    violated.
+    """
+    if (channel is None) == (channel_id is None):
+        emit_error("Exactly one of [channel] (positional) or --channel-id must be supplied.")
+        raise typer.Exit(code=1)
+
+
+@channel_app.command("subscribers")
+def channel_subscribers(
+    ctx: typer.Context,
+    channel: str | None = typer.Argument(
+        None,
+        help="Channel name (case-insensitive). Mutually exclusive with --channel-id.",
+    ),
+    channel_id: str | None = typer.Option(
+        None,
+        "--channel-id",
+        help="Target channel by numeric ID instead of name.",
+    ),
+    include_archived: bool = typer.Option(
+        False,
+        "--include-archived",
+        help="Search archived channels in addition to active ones.",
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit machine-readable JSON instead of a table.",
+        hidden=True,
+    ),
+) -> None:
+    """List subscribers of a channel.
+
+    Targets the channel by case-insensitive name (positional) or
+    numeric ID (``--channel-id``); the two are mutually exclusive. The
+    output is a table of Full Name, Email, and User ID, or — with
+    ``--json`` — a payload of the form ``{"subscribers": [...]}`` per
+    ``contracts/cli-commands.md``.
+    """
+    _resolve_channel_target(channel, channel_id)
+    options = {**(ctx.obj or {})}
+    if json_output:
+        options["json_output"] = True
+
+    parsed_channel_id: int | None = None
+    if channel_id is not None:
+        try:
+            parsed_channel_id = int(channel_id)
+        except ValueError:
+            emit_error("--channel-id must be a numeric channel ID.")
+            raise typer.Exit(code=1) from None
+
+    try:
+        client = get_client(zuliprc=options.get("zuliprc"))
+        subscribers = list_subscribers(
+            client,
+            name=channel,
+            channel_id=parsed_channel_id,
+            include_archived=include_archived,
+        )
+    except ZulipError as exc:
+        raise handle_zulip_error(exc) from exc
+
+    if options.get("json_output"):
+        emit_json({"subscribers": subscribers})
+        return
+
+    rows = [(sub.get("full_name") or "", sub.get("email") or "", sub.get("user_id")) for sub in subscribers]
+    emit_table(rows, headers=("Full Name", "Email", "User ID"))
 
 
 # ---------------------------------------------------------------------------
