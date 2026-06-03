@@ -287,7 +287,7 @@ def channel_list(
     emit_table(rows, headers)
 
 
-def _resolve_channel_target(channel: str | None, channel_id: int | None) -> None:
+def _resolve_channel_target(channel: str | None, channel_id: str | None) -> None:
     """Validate that exactly one of ``channel``/``channel_id`` is supplied.
 
     Mirrors the mutual-exclusivity rule documented in
@@ -307,7 +307,7 @@ def channel_subscribers(
         None,
         help="Channel name (case-insensitive). Mutually exclusive with --channel-id.",
     ),
-    channel_id: int | None = typer.Option(
+    channel_id: str | None = typer.Option(
         None,
         "--channel-id",
         help="Target channel by numeric ID instead of name.",
@@ -336,12 +336,21 @@ def channel_subscribers(
     options = {**(ctx.obj or {})}
     if json_output:
         options["json_output"] = True
+
+    parsed_channel_id: int | None = None
+    if channel_id is not None:
+        try:
+            parsed_channel_id = int(channel_id)
+        except ValueError:
+            emit_error("--channel-id must be a numeric channel ID.")
+            raise typer.Exit(code=1) from None
+
     try:
         client = get_client(zuliprc=options.get("zuliprc"))
         subscribers = list_subscribers(
             client,
             name=channel,
-            channel_id=channel_id,
+            channel_id=parsed_channel_id,
             include_archived=include_archived,
         )
     except ZulipError as exc:

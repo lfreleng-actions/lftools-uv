@@ -418,6 +418,18 @@ def test_channel_subscribers_include_archived(monkeypatch: pytest.MonkeyPatch) -
     assert kwargs.get("include_archived") is True
 
 
+def test_channel_subscribers_invalid_channel_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-numeric ``--channel-id`` values follow the exit-1 contract."""
+    _patch_subscribers(monkeypatch, return_value=[])
+    runner = CliRunner()
+    result = runner.invoke(zulip_app, ["channel", "subscribers", "--channel-id", "not-a-number"])
+    assert result.exit_code == 1
+    combined = result.stdout + result.stderr
+    assert "--channel-id must be a numeric channel ID" in combined
+
+
 def test_channel_subscribers_requires_exactly_one_target(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
