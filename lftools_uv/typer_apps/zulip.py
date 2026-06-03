@@ -33,6 +33,7 @@ import typer
 from tabulate import tabulate
 
 from lftools_uv.api.endpoints.zulip import (
+    IdMode,
     ZulipAmbiguityError,
     ZulipError,
     get_client,
@@ -221,7 +222,15 @@ def zulip_callback(
 # ---------------------------------------------------------------------------
 # US1 — channel list (T023)
 # ---------------------------------------------------------------------------
-
+#
+# NOTE: The ``channel`` sub-app is shared across the channel-scoped
+# user-story slices: US1 (channel list), US4 (channel create), US5
+# (channel subscribe), US6 (channel unsubscribe), and the remaining
+# US7-US10 channel commands. The first PR to land that touches a
+# channel command also lands this sub-app instantiation. If two PRs
+# instantiate the sub-app independently, the trivial merge conflict
+# on the ``channel_app = typer.Typer(...)`` line should be resolved
+# by keeping a single instance.
 
 channel_app = typer.Typer(
     name="channel",
@@ -809,4 +818,194 @@ def channel_subscribe(
             emit_error(f"{len(result['errors'])} user(s) could not be subscribed to '{result.get('channel_name')}'.")
 
     if result.get("status") != "success":
+        raise typer.Exit(code=1)
+
+
+# `zulip channel unsubscribe` (US6 / T043)
+# ---------------------------------------------------------------------------
+
+
+@channel_app.command("unsubscribe")
+def channel_unsubscribe(
+    ctx: typer.Context,
+    targets: list[str] | None = typer.Argument(
+        None,
+        metavar="[CHANNEL] USER [USER...]",
+        help=(
+            "When --channel-id is absent, the first value is the channel "
+            "name and the rest are users. When --channel-id is supplied, "
+            "all values are users."
+        ),
+    ),
+    channel_id: str | None = typer.Option(
+        None,
+        "--channel-id",
+        metavar="INT",
+        help="Target the channel by numeric ID instead of name.",
+    ),
+    by_email: bool = typer.Option(False, "--by-email", help="Identify users by email address."),
+    by_id: bool = typer.Option(False, "--by-id", help="Identify users by numeric user ID."),
+    by_name: bool = typer.Option(False, "--by-name", help="Identify users by full name."),
+    include_archived: bool = typer.Option(
+        False,
+        "--include-archived",
+        help="Search archived channels when resolving the channel target.",
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit machine-readable JSON instead of a table.",
+        hidden=True,
+    ),
+) -> None:
+    """Unsubscribe one or more users from a channel."""
+    # Import the endpoint module as a namespace so tests can monkeypatch
+    # its helpers while keeping ``get_client`` patched on this module.
+    from lftools_uv.api.endpoints import zulip as zulip_api
+
+    options = {**(ctx.obj or {})}
+    if json_output:
+        options["json_output"] = True
+
+    def fail_validation(message: str, *, channel_name: str = "") -> None:
+        if options.get("json_output"):
+            emit_json(
+                bulk_mutation_result(
+                    operation="unsubscribe",
+                    channel_id=None,
+                    channel_name=channel_name,
+                    results=[],
+                    errors=[{"user": None, "error": message}],
+                )
+            )
+        else:
+            emit_error(message)
+        raise typer.Exit(code=1)
+
+    target_values = list(targets or [])
+    parsed_channel_id: int | None = None
+    if channel_id is not None:
+        try:
+            parsed_channel_id = int(channel_id)
+        except ValueError:
+            fail_validation("--channel-id must be a numeric channel ID.")
+
+    # Split positional targets into channel + users.
+    if parsed_channel_id is not None:
+        channel_name: str | None = None
+        users = target_values
+    else:
+        if len(target_values) < 2:
+            channel_for_error = target_values[0] if target_values else ""
+            fail_validation(
+                "Provide a channel name (or --channel-id) and at least one user",
+                channel_name=channel_for_error,
+            )
+        channel_name, *users = target_values
+
+    # Validate id-mode mutex: exactly one of --by-email/--by-id/--by-name.
+    mode_flags = [
+        ("email", by_email),
+        ("id", by_id),
+        ("name", by_name),
+    ]
+    chosen = [name for name, flag in mode_flags if flag]
+    if len(chosen) != 1:
+        fail_validation(
+            "Exactly one of --by-email/--by-id/--by-name is required",
+            channel_name=channel_name or "",
+        )
+    id_mode = cast(IdMode, chosen[0])
+
+    if not users:
+        fail_validation("At least one user identifier is required", channel_name=channel_name or "")
+
+    try:
+        client = get_client(zuliprc=options.get("zuliprc"))
+    except ZulipError as exc:
+        # Configuration/connect failure happens before channel
+        # resolution can even be attempted, so the error payload
+        # cannot carry a resolved channel_id.
+        if options.get("json_output"):
+            error_payload = bulk_mutation_result(
+                operation="unsubscribe",
+                channel_id=None,
+                channel_name=channel_name or "",
+                results=[],
+                errors=[{"user": None, "error": str(exc)}],
+            )
+            emit_json(error_payload)
+            raise typer.Exit(code=1) from exc
+        raise handle_zulip_error(exc) from exc
+
+    # Pre-resolve the channel so that any failure inside
+    # ``unsubscribe_users`` (e.g. the DELETE call returning an error
+    # response) can still report the resolved channel_id/channel_name
+    # in the --json error payload. The contract documents
+    # ``channel_id: null`` only for the case where the channel itself
+    # could not be resolved.
+    resolved_channel_id: int | None = parsed_channel_id
+    resolved_channel_name: str = channel_name or ""
+    try:
+        target = zulip_api.resolve_channel(
+            client,
+            name=channel_name,
+            channel_id=parsed_channel_id,
+            include_archived=include_archived,
+        )
+    except ZulipError as exc:
+        if options.get("json_output"):
+            error_payload = bulk_mutation_result(
+                operation="unsubscribe",
+                channel_id=None,
+                channel_name=channel_name or "",
+                results=[],
+                errors=[{"user": None, "error": str(exc)}],
+            )
+            emit_json(error_payload)
+            raise typer.Exit(code=1) from exc
+        raise handle_zulip_error(exc) from exc
+
+    raw_id = target.get("stream_id")
+    if isinstance(raw_id, int):
+        resolved_channel_id = raw_id
+    resolved_channel_name = str(target.get("name", "")) or resolved_channel_name
+
+    try:
+        payload = zulip_api.unsubscribe_users(
+            client,
+            users,
+            id_mode=id_mode,
+            include_archived=include_archived,
+            resolved_channel=target,
+        )
+    except ZulipError as exc:
+        if options.get("json_output"):
+            # FR-008: mutation commands emit the canonical JSON schema
+            # even on error. The channel was successfully resolved
+            # above, so we report the resolved channel_id/name here
+            # (the failure is downstream — e.g. the DELETE call itself
+            # returned an error).
+            error_payload = bulk_mutation_result(
+                operation="unsubscribe",
+                channel_id=resolved_channel_id,
+                channel_name=resolved_channel_name,
+                results=[],
+                errors=[{"user": None, "error": str(exc)}],
+            )
+            emit_json(error_payload)
+            raise typer.Exit(code=1) from exc
+        raise handle_zulip_error(exc) from exc
+
+    if options.get("json_output"):
+        emit_json(payload)
+    else:
+        rows = [(item["user"], item["status"]) for item in payload["results"]]
+        rows.extend((item["user"], f"error: {item['error']}") for item in payload["errors"])
+        emit_table(rows, headers=["User", "Status"])
+
+    # Per the CLI contract, exit non-zero on ANY error condition. A
+    # ``partial`` status means some operations failed, so it must also
+    # produce a non-zero exit code alongside ``error``.
+    if payload["status"] in ("error", "partial"):
         raise typer.Exit(code=1)

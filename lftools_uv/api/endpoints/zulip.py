@@ -36,6 +36,7 @@ See ``specs/001-zulip-channel-mgmt/`` for the full feature design.
 from __future__ import annotations
 
 import configparser
+import json
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -454,6 +455,58 @@ def _fetch_users(client: Any) -> list[dict[str, Any]]:
     return members
 
 
+def _resolve_single_user(
+    ident: str,
+    members: list[dict[str, Any]],
+    *,
+    mode: IdMode,
+) -> dict[str, Any]:
+    """Resolve a single user identifier against a pre-fetched member list.
+
+    Factored out of :func:`resolve_users` so that callers needing
+    per-identifier error handling (e.g. bulk mutations that report
+    partial failures) can drive the loop themselves and capture
+    failures one-by-one instead of aborting on the first bad entry.
+
+    Raises :class:`ZulipValidationError` for malformed input,
+    :class:`ZulipNotFoundError` when the identifier matches nothing,
+    and :class:`ZulipAmbiguityError` when a lookup matches more than one
+    user. Ambiguity is normally expected only for full-name lookups, but
+    malformed member payloads can also duplicate email or ID matches.
+    """
+    ident = ident.strip()
+    if not ident:
+        raise ZulipValidationError("User identifier must not be empty")
+    if mode == "email":
+        matches = [u for u in members if u.get("delivery_email") == ident or u.get("email") == ident]
+    elif mode == "id":
+        try:
+            wanted = int(ident)
+        except ValueError as exc:
+            raise ZulipValidationError(f"--by-id requires a numeric identifier, got {ident!r}") from exc
+        matches = [u for u in members if u.get("user_id") == wanted]
+    elif mode == "name":
+        matches = [u for u in members if u.get("full_name") == ident]
+    else:  # pragma: no cover - guarded by Literal
+        raise ZulipValidationError(f"Unknown user id mode: {mode!r}")
+
+    if not matches:
+        raise ZulipNotFoundError(f"No user found matching {ident!r} (--by-{mode})")
+    if len(matches) > 1:
+        raise ZulipAmbiguityError(
+            f"User name {ident!r} matched {len(matches)} users; use --by-email or --by-id to disambiguate",
+            matches=[
+                {
+                    "user_id": m.get("user_id"),
+                    "full_name": m.get("full_name"),
+                    "email": m.get("delivery_email") or m.get("email"),
+                }
+                for m in matches
+            ],
+        )
+    return matches[0]
+
+
 def resolve_users(
     client: Any,
     identifiers: Iterable[str],
@@ -469,40 +522,7 @@ def resolve_users(
     are unique by construction.
     """
     members = _fetch_users(client)
-    resolved: list[dict[str, Any]] = []
-    for raw in identifiers:
-        ident = raw.strip()
-        if not ident:
-            raise ZulipValidationError("User identifier must not be empty")
-        if mode == "email":
-            matches = [u for u in members if u.get("delivery_email") == ident or u.get("email") == ident]
-        elif mode == "id":
-            try:
-                wanted = int(ident)
-            except ValueError as exc:
-                raise ZulipValidationError(f"--by-id requires a numeric identifier, got {ident!r}") from exc
-            matches = [u for u in members if u.get("user_id") == wanted]
-        elif mode == "name":
-            matches = [u for u in members if u.get("full_name") == ident]
-        else:  # pragma: no cover - guarded by Literal
-            raise ZulipValidationError(f"Unknown user id mode: {mode!r}")
-
-        if not matches:
-            raise ZulipNotFoundError(f"No user found matching {ident!r} (--by-{mode})")
-        if len(matches) > 1:
-            raise ZulipAmbiguityError(
-                f"User name {ident!r} matched {len(matches)} users; use --by-email or --by-id to disambiguate",
-                matches=[
-                    {
-                        "user_id": m.get("user_id"),
-                        "full_name": m.get("full_name"),
-                        "email": m.get("delivery_email") or m.get("email"),
-                    }
-                    for m in matches
-                ],
-            )
-        resolved.append(matches[0])
-    return resolved
+    return [_resolve_single_user(ident, members, mode=mode) for ident in identifiers]
 
 
 # ---------------------------------------------------------------------------
@@ -1226,6 +1246,181 @@ def subscribe_users(
         "channel_id": channel_id,
         "channel_name": channel_name,
         "operation": "subscribe",
+        "results": results,
+        "errors": errors,
+    }
+
+
+# Subscription mutations (US6 — unsubscribe)
+# ---------------------------------------------------------------------------
+
+
+def unsubscribe_users(
+    client: Any,
+    users: Iterable[str],
+    *,
+    channel: str | None = None,
+    channel_id: int | None = None,
+    id_mode: IdMode,
+    include_archived: bool = False,
+    resolved_channel: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Unsubscribe one or more users from a channel.
+
+    Resolves the channel target (by name or numeric id) and the user
+    identifiers (per ``id_mode``), then calls the Zulip
+    ``DELETE /users/me/subscriptions`` endpoint. The return value is a
+    bulk :class:`MutationResult`-shaped dict:
+
+    .. code-block:: python
+
+       {
+           "status": "success" | "partial" | "error",
+           "channel_id": int,
+           "channel_name": str,
+           "operation": "unsubscribe",
+           "results": [
+               {"user": "<identifier>", "status": "unsubscribed"},
+               {"user": "<identifier>", "status": "not_subscribed"},
+           ],
+           "errors": [],
+       }
+
+    The Zulip server returns ``removed`` for users who were unsubscribed
+    and ``not_removed`` for users who were not subscribed in the first
+    place — the latter is reported as a ``not_subscribed`` no-op,
+    consistent with the CLI contract "exit 0 = all succeeded (including
+    no-ops)".
+
+    Pass ``resolved_channel`` (a stream dict as returned by
+    :func:`resolve_channel`) to skip the internal channel resolution
+    step. This lets callers that have already resolved the channel
+    (for example the CLI, which needs the resolved id available for
+    the ``--json`` error payload before invoking this function) avoid
+    a redundant ``GET /streams`` round-trip. When ``resolved_channel``
+    is supplied, ``channel`` and ``channel_id`` are ignored.
+    """
+    if resolved_channel is None:
+        if (channel is None) == (channel_id is None):
+            raise ZulipValidationError("unsubscribe_users requires exactly one of 'channel' or 'channel_id'")
+    user_list = list(users)
+    if not user_list:
+        raise ZulipValidationError("unsubscribe_users requires at least one user")
+    if len(user_list) > MAX_SUBSCRIBE_USERS:
+        raise ZulipValidationError(
+            f"unsubscribe_users accepts at most {MAX_SUBSCRIBE_USERS} users per invocation (got {len(user_list)})"
+        )
+
+    if resolved_channel is not None:
+        target = resolved_channel
+    else:
+        target = resolve_channel(
+            client,
+            name=channel,
+            channel_id=channel_id,
+            include_archived=include_archived,
+        )
+    resolved_target_id = target.get("stream_id")
+    resolved_target_name = target.get("name")
+    if not isinstance(resolved_target_id, int) or not isinstance(resolved_target_name, str):
+        raise ZulipAPIError(f"Malformed stream object: {target!r}")
+
+    # Resolve identifiers one-by-one so a single bad entry does not
+    # abort the whole bulk operation. Per-user resolution failures are
+    # captured into ``errors`` while successfully-resolved users still
+    # get sent to the Zulip API. This matches the bulk-operation
+    # behavior described in the data-model spec (status: partial).
+    members = _fetch_users(client)
+    results: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+    principals: list[Any] = []
+    resolved_pairs: list[tuple[str, Any]] = []  # (original, principal)
+
+    for original in user_list:
+        try:
+            user = _resolve_single_user(original, members, mode=id_mode)
+        except ZulipAmbiguityError as exc:
+            match_parts = [f"{m.get('full_name')} <{m.get('email')}> (id: {m.get('user_id')})" for m in exc.matches]
+            detail = f"{exc}; matches: {', '.join(match_parts)}"
+            errors.append({"user": original, "error": detail, "matches": exc.matches})
+            continue
+        except (ZulipNotFoundError, ZulipValidationError) as exc:
+            errors.append({"user": original, "error": str(exc)})
+            continue
+        if id_mode == "id":
+            principal: Any = int(user["user_id"])
+        else:
+            # For both name- and email-mode lookups we send delivery_email
+            # (falling back to ``email``) as principals so that the server
+            # can match against the channel's subscriber list. Zulip
+            # principals accept emails or user IDs interchangeably.
+            principal = user.get("delivery_email") or user.get("email")
+            if not isinstance(principal, str) or not principal:
+                errors.append({"user": original, "error": f"Resolved user missing email: {user!r}"})
+                continue
+        principals.append(principal)
+        resolved_pairs.append((original, principal))
+
+    if not principals:
+        # Every identifier failed to resolve — skip the API call entirely
+        # and return an all-errors payload so the caller can surface the
+        # per-user failures without a spurious server round-trip.
+        return {
+            "status": "error",
+            "channel_id": resolved_target_id,
+            "channel_name": resolved_target_name,
+            "operation": "unsubscribe",
+            "results": results,
+            "errors": errors,
+        }
+
+    # The DELETE response reports removed/not_removed by stream, not by
+    # principal, so request one principal at a time to preserve per-user
+    # results and partial-failure reporting.
+    for original, principal in resolved_pairs:
+        try:
+            response = client.call_endpoint(
+                url="users/me/subscriptions",
+                method="DELETE",
+                request={
+                    "subscriptions": json.dumps([resolved_target_name]),
+                    "principals": json.dumps([principal]),
+                },
+            )
+        except Exception as exc:  # pragma: no cover - network errors
+            raise ZulipAPIError(f"Failed to unsubscribe users: {exc}") from exc
+
+        if not isinstance(response, dict) or response.get("result") != "success":
+            msg = (response or {}).get("msg") if isinstance(response, dict) else None
+            raise ZulipAPIError(f"Unexpected unsubscribe response: {msg or response!r}")
+
+        removed_set = {str(item) for item in response.get("removed", []) or []}
+        not_removed_set = {str(item) for item in response.get("not_removed", []) or []}
+
+        if resolved_target_name in removed_set:
+            results.append({"user": original, "status": "unsubscribed"})
+        elif resolved_target_name in not_removed_set:
+            results.append({"user": original, "status": "not_subscribed"})
+        else:
+            errors.append(
+                {
+                    "user": original,
+                    "error": "Server did not report an outcome for this user",
+                }
+            )
+
+    if errors and not results:
+        status = "error"
+    elif errors:
+        status = "partial"
+    else:
+        status = "success"
+
+    return {
+        "status": status,
+        "channel_id": resolved_target_id,
+        "channel_name": resolved_target_name,
+        "operation": "unsubscribe",
         "results": results,
         "errors": errors,
     }

@@ -19,6 +19,7 @@ Covers the foundational tasks T016–T019:
 
 from __future__ import annotations
 
+import json as _json
 from typing import Any
 from unittest import mock
 
@@ -45,6 +46,7 @@ from lftools_uv.api.endpoints.zulip import (
     resolve_groups,
     resolve_users,
     subscribe_users,
+    unsubscribe_users,
 )
 
 # ---------------------------------------------------------------------------
@@ -1551,4 +1553,379 @@ def test_subscribe_users_rejects_malformed_unauthorized_field() -> None:
             ["bob@example.com"],
             id_mode="email",
             _resolved_stream={"stream_id": 42, "name": "general"},
+        )
+
+
+# T041 — Unsubscribe users (US6)
+# ---------------------------------------------------------------------------
+
+
+def _unsubscribe_client(
+    streams: list[dict[str, Any]],
+    members: list[dict[str, Any]],
+    *,
+    removed: list[Any] | None = None,
+    not_removed: list[Any] | None = None,
+    result: str = "success",
+    msg: str = "",
+) -> Any:
+    """Build a mock client supporting streams + members + unsubscribe.
+
+    The first ``streams`` call returns the active streams. The
+    ``DELETE users/me/subscriptions`` call returns the configured
+    ``removed`` / ``not_removed`` payload.
+    """
+    client = mock.MagicMock()
+
+    def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
+        if url == "streams" and method == "GET":
+            return {"result": "success", "streams": streams}
+        if url == "users/me/subscriptions" and method == "DELETE":
+            request = request or {}
+            subscriptions = _json.loads(request.get("subscriptions", "[]"))
+            principals = _json.loads(request.get("principals", "[]"))
+            subscription = (subscriptions or [""])[0]
+            principal = (principals or [None])[0]
+            removed_streams = [subscription] if principal in (removed or []) else []
+            not_removed_streams = [subscription] if principal in (not_removed or []) else []
+            return {
+                "result": result,
+                "msg": msg,
+                "removed": removed_streams,
+                "not_removed": not_removed_streams,
+            }
+        raise AssertionError(f"Unexpected endpoint call: {method} {url}")
+
+    client.call_endpoint.side_effect = call_endpoint
+    client.get_members.return_value = {"result": "success", "members": members}
+    return client
+
+
+def test_unsubscribe_users_single_success() -> None:
+    """A single user successfully unsubscribed returns success bulk result."""
+    client = _unsubscribe_client(
+        ACTIVE_STREAMS,
+        MEMBERS,
+        removed=["bob@example.com"],
+        not_removed=[],
+    )
+    payload = unsubscribe_users(
+        client,
+        channel="general",
+        users=["bob@example.com"],
+        id_mode="email",
+    )
+    assert payload["status"] == "success"
+    assert payload["operation"] == "unsubscribe"
+    assert payload["channel_id"] == 1
+    assert payload["channel_name"] == "general"
+    assert payload["results"] == [{"user": "bob@example.com", "status": "unsubscribed"}]
+    assert payload["errors"] == []
+
+
+def test_unsubscribe_users_bulk_success() -> None:
+    """Bulk unsubscribe returns one result entry per requested user."""
+    client = _unsubscribe_client(
+        ACTIVE_STREAMS,
+        MEMBERS,
+        removed=["alice@example.com", "bob@example.com"],
+        not_removed=[],
+    )
+    payload = unsubscribe_users(
+        client,
+        channel="general",
+        users=["alice@example.com", "bob@example.com"],
+        id_mode="email",
+    )
+    assert payload["status"] == "success"
+    assert {r["user"] for r in payload["results"]} == {
+        "alice@example.com",
+        "bob@example.com",
+    }
+    assert all(r["status"] == "unsubscribed" for r in payload["results"])
+
+
+def test_unsubscribe_users_not_subscribed_noop() -> None:
+    """Users not subscribed appear as ``not_subscribed`` no-ops, still success."""
+    client = _unsubscribe_client(
+        ACTIVE_STREAMS,
+        MEMBERS,
+        removed=[],
+        not_removed=["bob@example.com"],
+    )
+    payload = unsubscribe_users(
+        client,
+        channel="general",
+        users=["bob@example.com"],
+        id_mode="email",
+    )
+    assert payload["status"] == "success"
+    assert payload["results"] == [{"user": "bob@example.com", "status": "not_subscribed"}]
+    assert payload["errors"] == []
+
+
+def test_unsubscribe_users_mixed_removed_and_not_removed_is_success() -> None:
+    """A mix of removed + not_removed (no errors) is overall success."""
+    client = _unsubscribe_client(
+        ACTIVE_STREAMS,
+        MEMBERS,
+        removed=["alice@example.com"],
+        not_removed=["bob@example.com"],
+    )
+    payload = unsubscribe_users(
+        client,
+        channel="general",
+        users=["alice@example.com", "bob@example.com"],
+        id_mode="email",
+    )
+    # Both finished cleanly with no errors -> overall success.
+    assert payload["status"] == "success"
+    statuses = {r["user"]: r["status"] for r in payload["results"]}
+    assert statuses == {
+        "alice@example.com": "unsubscribed",
+        "bob@example.com": "not_subscribed",
+    }
+    assert payload["errors"] == []
+
+
+def test_unsubscribe_users_partial() -> None:
+    """A mix of resolvable users + an unknown identifier yields partial.
+
+    The unknown identifier is captured into ``errors`` instead of
+    aborting the whole call, while the resolvable user is still sent
+    to the server. Overall status is ``partial`` because we have both
+    a successful result and an error.
+    """
+    client = _unsubscribe_client(
+        ACTIVE_STREAMS,
+        MEMBERS,
+        removed=["bob@example.com"],
+        not_removed=[],
+    )
+    payload = unsubscribe_users(
+        client,
+        channel="general",
+        users=["bob@example.com", "ghost@example.com"],
+        id_mode="email",
+    )
+    assert payload["status"] == "partial"
+    assert payload["results"] == [
+        {"user": "bob@example.com", "status": "unsubscribed"},
+    ]
+    assert len(payload["errors"]) == 1
+    err = payload["errors"][0]
+    assert err["user"] == "ghost@example.com"
+    assert "ghost@example.com" in err["error"]
+
+    # The server-side DELETE call must only include the principal for
+    # the successfully-resolved user.
+    delete_calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
+    assert delete_calls, "expected an unsubscribe DELETE call"
+    assert _json.loads(delete_calls[0].kwargs["request"]["principals"]) == ["bob@example.com"]
+
+
+def test_unsubscribe_users_all_unknown_is_error() -> None:
+    """When every identifier fails to resolve, status is ``error`` and the
+    DELETE endpoint is never called.
+    """
+    client = _unsubscribe_client(
+        ACTIVE_STREAMS,
+        MEMBERS,
+        removed=[],
+        not_removed=[],
+    )
+    payload = unsubscribe_users(
+        client,
+        channel="general",
+        users=["ghost@example.com", "phantom@example.com"],
+        id_mode="email",
+    )
+    assert payload["status"] == "error"
+    assert payload["results"] == []
+    assert {e["user"] for e in payload["errors"]} == {
+        "ghost@example.com",
+        "phantom@example.com",
+    }
+    # No DELETE call should have been issued because no user resolved.
+    delete_calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
+    assert not delete_calls, "DELETE should not be called when no user resolved"
+
+
+def test_unsubscribe_users_name_ambiguity_lists_matches() -> None:
+    """Ambiguous --by-name errors include user IDs and emails."""
+    client = _unsubscribe_client(ACTIVE_STREAMS, MEMBERS, removed=[], not_removed=[])
+    payload = unsubscribe_users(
+        client,
+        channel="general",
+        users=["Alice Smith"],
+        id_mode="name",
+    )
+    assert payload["status"] == "error"
+    error = payload["errors"][0]
+    assert error["matches"] == [
+        {"user_id": 100, "full_name": "Alice Smith", "email": "alice@example.com"},
+        {"user_id": 101, "full_name": "Alice Smith", "email": "alice2@example.com"},
+    ]
+    assert "alice@example.com" in error["error"]
+    assert "id: 100" in error["error"]
+
+
+def test_unsubscribe_users_rejects_resolved_user_without_email() -> None:
+    """Name/email modes require a usable email principal per resolved user."""
+    members = [{"user_id": 300, "full_name": "No Email", "is_bot": False, "is_active": True}]
+    client = _unsubscribe_client(ACTIVE_STREAMS, members, removed=[], not_removed=[])
+    payload = unsubscribe_users(
+        client,
+        channel="general",
+        users=["No Email"],
+        id_mode="name",
+    )
+    assert payload["status"] == "error"
+    assert payload["results"] == []
+    assert "missing email" in payload["errors"][0]["error"]
+    delete_calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
+    assert not delete_calls
+
+
+def test_unsubscribe_users_by_id_passes_principals_as_ints() -> None:
+    """When id_mode='id', principals sent to Zulip are integer user ids."""
+    client = _unsubscribe_client(
+        ACTIVE_STREAMS,
+        MEMBERS,
+        removed=[200],
+        not_removed=[],
+    )
+    payload = unsubscribe_users(
+        client,
+        channel="general",
+        users=["200"],
+        id_mode="id",
+    )
+    assert payload["status"] == "success"
+    # Inspect the DELETE call arguments.
+    calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
+    assert calls, "expected an unsubscribe DELETE call"
+    request = calls[0].kwargs["request"]
+    assert _json.loads(request["subscriptions"]) == ["general"]
+    assert _json.loads(request["principals"]) == [200]
+
+
+def test_unsubscribe_users_by_channel_id() -> None:
+    """``channel_id`` may target the channel instead of by name."""
+    client = _unsubscribe_client(
+        ACTIVE_STREAMS,
+        MEMBERS,
+        removed=["bob@example.com"],
+        not_removed=[],
+    )
+    payload = unsubscribe_users(
+        client,
+        channel_id=2,
+        users=["bob@example.com"],
+        id_mode="email",
+    )
+    assert payload["channel_id"] == 2
+    assert payload["channel_name"] == "Engineering"
+    assert payload["status"] == "success"
+
+
+def test_unsubscribe_users_requires_one_channel_target() -> None:
+    """Exactly one of ``channel`` or ``channel_id`` must be supplied."""
+    client = _unsubscribe_client(ACTIVE_STREAMS, MEMBERS)
+    with pytest.raises(ZulipValidationError):
+        _ = unsubscribe_users(client, users=["x"], id_mode="email")
+    with pytest.raises(ZulipValidationError):
+        _ = unsubscribe_users(
+            client,
+            channel="general",
+            channel_id=1,
+            users=["x"],
+            id_mode="email",
+        )
+
+
+def test_unsubscribe_users_requires_at_least_one_user() -> None:
+    """An empty user list is a programmer error."""
+    client = _unsubscribe_client(ACTIVE_STREAMS, MEMBERS)
+    with pytest.raises(ZulipValidationError):
+        _ = unsubscribe_users(client, channel="general", users=[], id_mode="email")
+
+
+def test_unsubscribe_users_rejects_more_than_fifty_users() -> None:
+    """Bulk unsubscribe enforces the shared 50-user invocation limit."""
+    client = _unsubscribe_client(ACTIVE_STREAMS, MEMBERS)
+    with pytest.raises(ZulipValidationError, match="at most 50 users"):
+        _ = unsubscribe_users(
+            client,
+            channel="general",
+            users=[f"user{i}@example.com" for i in range(51)],
+            id_mode="email",
+        )
+
+
+def test_unsubscribe_users_api_error_raises() -> None:
+    """A non-success Zulip response surfaces as :class:`ZulipAPIError`."""
+    client = _unsubscribe_client(
+        ACTIVE_STREAMS,
+        MEMBERS,
+        removed=[],
+        not_removed=[],
+        result="error",
+        msg="Boom",
+    )
+    with pytest.raises(ZulipAPIError, match="Boom"):
+        _ = unsubscribe_users(
+            client,
+            channel="general",
+            users=["bob@example.com"],
+            id_mode="email",
+        )
+
+
+def test_unsubscribe_users_resolved_channel_skips_resolution() -> None:
+    """A caller-supplied ``resolved_channel`` skips ``GET /streams``.
+
+    Pinning this behavior prevents the CLI from incurring two streams
+    round-trips per ``zulip channel unsubscribe`` invocation: the CLI
+    pre-resolves the channel to capture the resolved id/name for its
+    ``--json`` error payload contract and then forwards the result
+    here.
+    """
+    client = mock.MagicMock()
+
+    def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
+        if url == "streams":
+            raise AssertionError("unsubscribe_users must not call GET /streams when resolved_channel is supplied")
+        if url == "users/me/subscriptions" and method == "DELETE":
+            return {
+                "result": "success",
+                "msg": "",
+                "removed": ["general"],
+                "not_removed": [],
+            }
+        raise AssertionError(f"Unexpected endpoint call: {method} {url}")
+
+    client.call_endpoint.side_effect = call_endpoint
+    client.get_members.return_value = {"result": "success", "members": MEMBERS}
+
+    payload = unsubscribe_users(
+        client,
+        ["bob@example.com"],
+        id_mode="email",
+        resolved_channel={"stream_id": 1, "name": "general"},
+    )
+    assert payload["status"] == "success"
+    assert payload["channel_id"] == 1
+    assert payload["channel_name"] == "general"
+
+
+def test_unsubscribe_users_rejects_malformed_resolved_channel() -> None:
+    """A caller-supplied channel must include numeric id and string name."""
+    client = mock.MagicMock()
+    with pytest.raises(ZulipAPIError, match="Malformed stream object"):
+        _ = unsubscribe_users(
+            client,
+            ["bob@example.com"],
+            id_mode="email",
+            resolved_channel={"stream_id": "bad", "name": "general"},
         )

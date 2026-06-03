@@ -1368,3 +1368,415 @@ def test_channel_subscribe_table_headers_title_cased() -> None:
     assert result.exit_code == 0
     assert "User" in result.stdout
     assert "Status" in result.stdout
+
+
+# T040 — channel unsubscribe CLI (US6)
+# ---------------------------------------------------------------------------
+
+
+_STREAMS = [
+    {"stream_id": 1, "name": "general", "description": "g", "is_archived": False},
+    {"stream_id": 2, "name": "Engineering", "description": "e", "is_archived": False},
+]
+_MEMBERS = [
+    {
+        "user_id": 100,
+        "full_name": "Alice Smith",
+        "email": "alice@example.com",
+        "delivery_email": "alice@example.com",
+        "is_bot": False,
+        "is_active": True,
+    },
+    {
+        "user_id": 101,
+        "full_name": "Alice Smith",
+        "email": "alice2@example.com",
+        "delivery_email": "alice2@example.com",
+        "is_bot": False,
+        "is_active": True,
+    },
+    {
+        "user_id": 200,
+        "full_name": "Bob Jones",
+        "email": "bob@example.com",
+        "delivery_email": "bob@example.com",
+        "is_bot": False,
+        "is_active": True,
+    },
+]
+
+
+def _build_client(*, removed: list[Any], not_removed: list[Any]) -> Any:
+    client = mock.MagicMock()
+
+    def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
+        if url == "streams" and method == "GET":
+            return {"result": "success", "streams": _STREAMS}
+        if url == "users/me/subscriptions" and method == "DELETE":
+            request = request or {}
+            subscriptions = json.loads(request.get("subscriptions", "[]"))
+            principals = json.loads(request.get("principals", "[]"))
+            subscription = (subscriptions or [""])[0]
+            principal = (principals or [None])[0]
+            return {
+                "result": "success",
+                "msg": "",
+                "removed": [subscription] if principal in removed else [],
+                "not_removed": [subscription] if principal in not_removed else [],
+            }
+        raise AssertionError(f"Unexpected endpoint: {method} {url}")
+
+    client.call_endpoint.side_effect = call_endpoint
+    client.get_members.return_value = {"result": "success", "members": _MEMBERS}
+    return client
+
+
+def _invoke_unsubscribe(monkeypatch: pytest.MonkeyPatch, client: Any, args: list[str]) -> Any:
+    """Patch ``get_client`` then invoke ``zulip channel unsubscribe``."""
+    import lftools_uv.typer_apps.zulip as zulip_mod
+
+    monkeypatch.setattr(zulip_mod, "get_client", lambda *a, **kw: client)
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
+    runner = CliRunner()
+    return runner.invoke(zulip_app, ["channel", "unsubscribe", *args])
+
+
+def test_channel_unsubscribe_single_user(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Single user unsubscribe exits 0 and reports success to stdout."""
+    client = _build_client(removed=["bob@example.com"], not_removed=[])
+    result = _invoke_unsubscribe(
+        monkeypatch,
+        client,
+        ["general", "bob@example.com", "--by-email"],
+    )
+    assert result.exit_code == 0, result.stdout + (result.stderr or "")
+    assert "bob@example.com" in result.stdout
+
+
+def test_channel_unsubscribe_bulk(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bulk unsubscribe accepts multiple positional USER values."""
+    client = _build_client(
+        removed=["alice@example.com", "bob@example.com"],
+        not_removed=[],
+    )
+    result = _invoke_unsubscribe(
+        monkeypatch,
+        client,
+        ["general", "alice@example.com", "bob@example.com", "--by-email"],
+    )
+    assert result.exit_code == 0, result.stdout + (result.stderr or "")
+    assert "alice@example.com" in result.stdout
+    assert "bob@example.com" in result.stdout
+
+
+def test_channel_unsubscribe_table_headers_title_cased(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Non-JSON unsubscribe output matches subscribe table headers."""
+    client = _build_client(removed=["bob@example.com"], not_removed=[])
+    result = _invoke_unsubscribe(
+        monkeypatch,
+        client,
+        ["general", "bob@example.com", "--by-email"],
+    )
+    assert result.exit_code == 0, result.stdout + (result.stderr or "")
+    assert "User" in result.stdout
+    assert "Status" in result.stdout
+
+
+def test_channel_unsubscribe_by_name_ambiguity(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An ambiguous --by-name lookup exits 1 with a clear error."""
+    client = _build_client(removed=[], not_removed=[])
+    result = _invoke_unsubscribe(
+        monkeypatch,
+        client,
+        ["general", "Alice Smith", "--by-name"],
+    )
+    assert result.exit_code == 1
+    # Ambiguity is now captured as a per-user error in the bulk result
+    # (so partial bulk operations still complete for the resolvable
+    # users). The single-user case yields status=error, exit 1, and
+    # the error appears in the rendered table on stdout.
+    combined = (result.stdout or "") + (result.stderr or "")
+    assert "matched" in combined.lower() or "ambig" in combined.lower()
+
+
+def test_channel_unsubscribe_not_subscribed_noop(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unsubscribing a user who isn't subscribed is a no-op success."""
+    client = _build_client(removed=[], not_removed=["bob@example.com"])
+    result = _invoke_unsubscribe(
+        monkeypatch,
+        client,
+        ["general", "bob@example.com", "--by-email"],
+    )
+    assert result.exit_code == 0, result.stdout + (result.stderr or "")
+    assert "not_subscribed" in result.stdout or "not subscribed" in result.stdout.lower()
+
+
+def test_channel_unsubscribe_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    """--json emits the canonical bulk MutationResult schema on stdout."""
+    client = _build_client(removed=["bob@example.com"], not_removed=[])
+    runner = CliRunner()
+    monkeypatch.setattr(zulip_mod, "get_client", lambda *a, **kw: client)
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
+    result = runner.invoke(
+        zulip_app,
+        ["--json", "channel", "unsubscribe", "general", "bob@example.com", "--by-email"],
+    )
+    assert result.exit_code == 0, result.stdout + (result.stderr or "")
+    payload = json.loads(result.stdout)
+    assert payload["operation"] == "unsubscribe"
+    assert payload["channel_name"] == "general"
+    assert payload["channel_id"] == 1
+    assert payload["status"] == "success"
+    assert payload["results"] == [{"user": "bob@example.com", "status": "unsubscribed"}]
+    assert payload["errors"] == []
+
+
+def test_channel_unsubscribe_by_channel_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """--channel-id targets the channel without a positional channel name."""
+    client = _build_client(removed=["bob@example.com"], not_removed=[])
+    runner = CliRunner()
+    monkeypatch.setattr(zulip_mod, "get_client", lambda *a, **kw: client)
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
+    result = runner.invoke(
+        zulip_app,
+        ["--json", "channel", "unsubscribe", "--channel-id", "2", "bob@example.com", "--by-email"],
+    )
+    assert result.exit_code == 0, result.stdout + (result.stderr or "")
+    payload = json.loads(result.stdout)
+    assert payload["channel_id"] == 2
+    assert payload["channel_name"] == "Engineering"
+
+
+def test_channel_unsubscribe_invalid_channel_id_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Invalid --channel-id exits 1 and preserves the JSON error schema."""
+    client = _build_client(removed=[], not_removed=[])
+    result = _invoke_unsubscribe(
+        monkeypatch,
+        client,
+        ["--channel-id", "not-an-int", "bob@example.com", "--by-email", "--json"],
+    )
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["channel_id"] is None
+    assert "numeric channel ID" in payload["errors"][0]["error"]
+    assert result.stderr == ""
+
+
+def test_channel_unsubscribe_requires_id_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exactly one of --by-email/--by-id/--by-name is required."""
+    client = _build_client(removed=[], not_removed=[])
+    result = _invoke_unsubscribe(
+        monkeypatch,
+        client,
+        ["general", "bob@example.com"],
+    )
+    assert result.exit_code == 1
+    assert "by-email" in (result.stderr or "") or "by-id" in (result.stderr or "")
+
+
+def test_channel_unsubscribe_requires_id_mode_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ID-mode validation honors the --json error contract."""
+    client = _build_client(removed=[], not_removed=[])
+    result = _invoke_unsubscribe(
+        monkeypatch,
+        client,
+        ["general", "bob@example.com", "--json"],
+    )
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["channel_name"] == "general"
+    assert "by-email" in payload["errors"][0]["error"]
+    assert result.stderr == ""
+
+
+def test_channel_unsubscribe_rejects_no_channel_target(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Missing both channel name and --channel-id is a CLI error."""
+    client = _build_client(removed=[], not_removed=[])
+    result = _invoke_unsubscribe(monkeypatch, client, ["--by-email"])
+    assert result.exit_code != 0
+
+
+def test_channel_unsubscribe_rejects_missing_user_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Missing user validation honors the --json error contract."""
+    client = _build_client(removed=[], not_removed=[])
+    result = _invoke_unsubscribe(monkeypatch, client, ["general", "--by-email", "--json"])
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["channel_name"] == "general"
+    assert "at least one user" in payload["errors"][0]["error"]
+    assert result.stderr == ""
+
+
+def test_channel_unsubscribe_rejects_no_user_with_channel_id_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The zero-target --channel-id case also returns JSON."""
+    client = _build_client(removed=[], not_removed=[])
+    result = _invoke_unsubscribe(monkeypatch, client, ["--channel-id", "42", "--by-email", "--json"])
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["channel_id"] is None
+    assert "At least one user" in payload["errors"][0]["error"]
+    assert result.stderr == ""
+
+
+def test_channel_unsubscribe_partial_exits_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A ``partial`` outcome (some users in neither list) exits non-zero."""
+    # ``not_removed`` empty + ``removed`` missing alice -> alice reports
+    # as an error (server didn't acknowledge), producing partial status.
+    client = _build_client(removed=["bob@example.com"], not_removed=[])
+    result = _invoke_unsubscribe(
+        monkeypatch,
+        client,
+        [
+            "general",
+            "alice@example.com",
+            "bob@example.com",
+            "--by-email",
+            "--json",
+        ],
+    )
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "partial"
+    assert result.exit_code == 1
+
+
+def test_channel_unsubscribe_json_error_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When user resolution fails under --json, emit bulk error JSON."""
+    # Empty members list -> per-user resolution returns an error result.
+    client = mock.MagicMock()
+
+    def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
+        if url == "streams" and method == "GET":
+            return {"result": "success", "streams": _STREAMS}
+        raise AssertionError(f"Unexpected endpoint: {method} {url}")
+
+    client.call_endpoint.side_effect = call_endpoint
+    client.get_members.return_value = {"result": "success", "members": []}
+
+    result = _invoke_unsubscribe(
+        monkeypatch,
+        client,
+        ["general", "ghost@example.com", "--by-email", "--json"],
+    )
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["operation"] == "unsubscribe"
+    assert payload["channel_name"] == "general"
+    assert payload["errors"] and "ghost@example.com" in payload["errors"][0]["error"]
+
+
+def test_channel_unsubscribe_json_error_after_channel_resolved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A raised ZulipError after channel resolution still emits JSON
+    with the resolved channel_id and channel_name.
+
+    Exercises the ``except ZulipError`` branch of the CLI's mutation
+    call: the Zulip DELETE endpoint returns a non-success response,
+    which surfaces as ZulipAPIError. The contract requires the JSON
+    payload to report the resolved channel info (because the channel
+    *was* resolved) — ``channel_id: null`` is reserved for the case
+    where the channel itself could not be resolved.
+    """
+    client = mock.MagicMock()
+
+    def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
+        if url == "streams" and method == "GET":
+            return {"result": "success", "streams": _STREAMS}
+        if url == "users/me/subscriptions" and method == "DELETE":
+            # The Zulip server rejected the call; this surfaces as
+            # ZulipAPIError from unsubscribe_users().
+            return {"result": "error", "msg": "Boom", "removed": [], "not_removed": []}
+        raise AssertionError(f"Unexpected endpoint: {method} {url}")
+
+    client.call_endpoint.side_effect = call_endpoint
+    client.get_members.return_value = {"result": "success", "members": _MEMBERS}
+
+    result = _invoke_unsubscribe(
+        monkeypatch,
+        client,
+        ["general", "bob@example.com", "--by-email", "--json"],
+    )
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["operation"] == "unsubscribe"
+    assert payload["channel_id"] == 1
+    assert payload["channel_name"] == "general"
+    assert payload["errors"] and "Boom" in payload["errors"][0]["error"]
+
+
+def test_channel_unsubscribe_json_error_client_init_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When ``get_client`` itself fails, the JSON payload reports
+    ``channel_id: null`` because the channel was never resolved.
+
+    Even if the operator supplied ``--channel-id N``, the value is
+    not echoed back: per the contract, ``channel_id`` carries the
+    *resolved* identifier, and a configuration/connect failure
+    happens before any resolution attempt.
+    """
+    import lftools_uv.typer_apps.zulip as zulip_mod
+    from lftools_uv.api.endpoints.zulip import ZulipError
+
+    def _boom(*_args: Any, **_kwargs: Any) -> Any:
+        raise ZulipError("config missing")
+
+    monkeypatch.setattr(zulip_mod, "get_client", _boom)
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        [
+            "--json",
+            "channel",
+            "unsubscribe",
+            "--channel-id",
+            "42",
+            "bob@example.com",
+            "--by-email",
+        ],
+    )
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["channel_id"] is None
+    assert payload["channel_name"] == ""
+    assert payload["errors"] and "config missing" in payload["errors"][0]["error"]
+
+
+def test_channel_unsubscribe_json_error_channel_unresolved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When channel resolution itself fails, the JSON payload reports
+    ``channel_id: null`` (the channel was never resolved).
+    """
+    client = mock.MagicMock()
+
+    def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
+        if url == "streams" and method == "GET":
+            # No streams at all -> resolve_channel raises ZulipNotFoundError.
+            return {"result": "success", "streams": []}
+        raise AssertionError(f"Unexpected endpoint: {method} {url}")
+
+    client.call_endpoint.side_effect = call_endpoint
+    client.get_members.return_value = {"result": "success", "members": _MEMBERS}
+
+    result = _invoke_unsubscribe(
+        monkeypatch,
+        client,
+        ["nosuch", "bob@example.com", "--by-email", "--json"],
+    )
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["channel_id"] is None
+    assert payload["channel_name"] == "nosuch"
