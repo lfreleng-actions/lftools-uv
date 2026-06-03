@@ -1299,13 +1299,8 @@ def channel_archive(
     channel surfaced via ``--include-archived`` is reported as success
     without a redundant API call.
     """
-    # Validate target selection (exactly one of channel/--channel-id).
+    _validate_single_channel_target(channel, channel_id)
     channel_name = channel.strip() if isinstance(channel, str) else None
-    has_name = bool(channel_name)
-    has_id = channel_id is not None
-    if has_name == has_id:
-        emit_error("Specify exactly one of [CHANNEL] or --channel-id.")
-        raise typer.Exit(code=1)
 
     # --yes is mandatory for this destructive operation.
     if not yes:
@@ -1319,8 +1314,7 @@ def channel_archive(
         raise handle_zulip_error(exc) from exc
 
     target: str | int
-    if has_id:
-        assert channel_id is not None  # narrow for the type checker
+    if channel_id is not None:
         try:
             target = int(channel_id)
         except ValueError:
