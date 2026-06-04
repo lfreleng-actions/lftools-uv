@@ -18,6 +18,7 @@ alongside the user-story slices that introduce them.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, cast
 from unittest import mock
 
@@ -195,8 +196,8 @@ def test_channel_list_table_output(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "Subscribers" in result.stdout
     assert "general" in result.stdout
     assert "secret" in result.stdout
-    assert "1  general" in result.stdout
-    assert "2  secret" in result.stdout
+    assert re.search(r"^\s*1\s+general\s+", result.stdout, re.MULTILINE)
+    assert re.search(r"^\s*2\s+secret\s+", result.stdout, re.MULTILINE)
     # Status column is hidden unless --include-archived
     assert "Status" not in result.stdout
 
