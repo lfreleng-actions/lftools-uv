@@ -20,7 +20,7 @@ Represents a Zulip channel (internally called a "stream" in the Zulip API).
 | `topic_policy` | `str \| None` | Policy: allow/deny/follow-default |
 | `is_archived` | `bool` | Channel is deactivated/archived |
 | `subscriber_count` | `int` | Number of current subscribers |
-| `can_access_group` | `GroupSettingValue \| None` | Access perm group |
+| `can_subscribe_group` | `GroupSettingValue \| None` | Subscribe perm |
 | `can_remove_subscribers_group` | `GroupSettingValue \| None` | Removal perm |
 
 **GroupSettingValue** (Zulip API "group-setting value"):
@@ -236,7 +236,7 @@ ZulipConfig 1──── Client Session
 
 - A Channel has zero or more Subscribers (ZulipUser instances)
 - A Channel may have zero or more allowed UserGroups (via `--allow-group` /
-  `can_access_group`) — enforced on private, accepted on public/web-public
+  `can_subscribe_group`) — enforced on private, accepted on public/web-public
 - A Channel may have a subscriber-removal permission group (via
   `--can-remove-subscribers-group` / `can_remove_subscribers_group`) —
   valid on ALL channel types

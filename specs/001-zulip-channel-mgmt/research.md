@@ -206,7 +206,7 @@ The `zulip.Client` makes standard HTTP requests that can be intercepted by the
 **Decision**: Use two distinct flags for group-based channel permissions:
 
 - `--allow-group` — defines who is allowed to join the channel. Maps to
-  Zulip API field `can_access_group`. Valid on ALL channel types (server
+  Zulip API field `can_subscribe_group`. Valid on ALL channel types (server
   enforces on private; accepts but does not enforce on public/web-public).
 - `--can-remove-subscribers-group` — defines who can remove subscribers.
   Maps to Zulip API field `can_remove_subscribers_group`. Valid on ALL
