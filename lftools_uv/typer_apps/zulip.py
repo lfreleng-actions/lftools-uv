@@ -263,7 +263,11 @@ def channel_list(
         hidden=True,
     ),
 ) -> None:
-    """List channels visible to the authenticated user (US1)."""
+    """List channels visible to the authenticated user (US1).
+
+    The Channel ID column is the value to pass to ``--channel-id`` on
+    other channel commands.
+    """
     options = {**(ctx.obj or {})}
     if json_output:
         options["json_output"] = True
