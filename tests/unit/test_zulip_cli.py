@@ -18,6 +18,7 @@ alongside the user-story slices that introduce them.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, cast
 from unittest import mock
 
@@ -188,12 +189,15 @@ def test_channel_list_table_output(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = CliRunner()
     result = runner.invoke(zulip_app, ["channel", "list"])
     assert result.exit_code == 0, result.stdout
+    assert "Channel ID" in result.stdout
     assert "Name" in result.stdout
     assert "Description" in result.stdout
     assert "Type" in result.stdout
     assert "Subscribers" in result.stdout
     assert "general" in result.stdout
     assert "secret" in result.stdout
+    assert re.search(r"^\s*1\s+general\s+", result.stdout, re.MULTILINE)
+    assert re.search(r"^\s*2\s+secret\s+", result.stdout, re.MULTILINE)
     # Status column is hidden unless --include-archived
     assert "Status" not in result.stdout
 
@@ -289,6 +293,7 @@ def test_channel_list_empty_table(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = CliRunner()
     result = runner.invoke(zulip_app, ["channel", "list"])
     assert result.exit_code == 0, result.stdout
+    assert "Channel ID" in result.stdout
     assert "Name" in result.stdout
     assert "general" not in result.stdout
 

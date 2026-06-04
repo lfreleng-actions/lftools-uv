@@ -263,7 +263,11 @@ def channel_list(
         hidden=True,
     ),
 ) -> None:
-    """List channels visible to the authenticated user (US1)."""
+    """List channels visible to the authenticated user (US1).
+
+    The Channel ID column is the value to pass to ``--channel-id`` on
+    other channel commands.
+    """
     options = {**(ctx.obj or {})}
     if json_output:
         options["json_output"] = True
@@ -277,12 +281,13 @@ def channel_list(
         emit_json({"channels": channels})
         return
 
-    headers = ["Name", "Description", "Type", "Subscribers"]
+    headers = ["Channel ID", "Name", "Description", "Type", "Subscribers"]
     if include_archived:
         headers.append("Status")
     rows: list[list[Any]] = []
     for c in channels:
         row: list[Any] = [
+            c.get("stream_id", ""),
             c.get("name", ""),
             c.get("description", ""),
             c.get("type", ""),
