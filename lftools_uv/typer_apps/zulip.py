@@ -443,12 +443,12 @@ def channel_create(
     allow_group: str | None = typer.Option(
         None,
         "--allow-group",
-        help="Comma-separated groups allowed to join the channel.",
+        help="Comma-separated groups allowed to join; use 'id:NUM' for ID lookup.",
     ),
     can_remove_subscribers_group: str | None = typer.Option(
         None,
         "--can-remove-subscribers-group",
-        help="Comma-separated groups that can remove subscribers.",
+        help="Comma-separated groups that can remove subscribers; use 'id:NUM' for ID lookup.",
     ),
     announce: bool = typer.Option(
         False,
