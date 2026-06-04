@@ -124,7 +124,7 @@ This translation is transparent to the user.
   error explaining the lockout risk.
 - `--allow-group` is valid on ALL channel types (unified semantics: "who
   can join"); server enforces on private, accepts-but-does-not-enforce on
-  public/web-public. Maps to Zulip API field `can_access_group`.
+  public/web-public. Maps to Zulip API field `can_subscribe_group`.
 - `--can-remove-subscribers-group` is valid on ALL channel types. Maps to
   Zulip API field `can_remove_subscribers_group`. Requires minimum
   feature level (threshold hardcoded during implementation, checked at
@@ -194,7 +194,7 @@ wraps automatically; user syntax is identical to `channel create`.
   requirement — it disables the permission entirely, leaving no path
   for anyone to join.
 - `--allow-group` is valid on ALL channel types (unified semantics).
-  Maps to Zulip API field `can_access_group`.
+  Maps to Zulip API field `can_subscribe_group`.
 - `--can-remove-subscribers-group` is valid on ALL channel types. Maps to
   Zulip API field `can_remove_subscribers_group`. Requires minimum
   feature level (threshold hardcoded during implementation, checked at

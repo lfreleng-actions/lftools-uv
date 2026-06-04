@@ -146,7 +146,7 @@ a single Zulip server."
   `--include-archived` was not specified, the CLI errors with a helpful
   suggestion to use `--include-archived`.
 - Q: What happens when `--allow-group` is used against a Zulip server
-  that doesn't support group-based access control? → A: Command returns
+  that doesn't support group-based self-subscribe permission? → A: Command returns
   a clear feature-level error following the FR-019 pattern.
 - Q: Does Zulip support more than two channel types? → A: Yes — Zulip
   supports three types: public (visible to organization members),
@@ -221,8 +221,9 @@ a single Zulip server."
 - Q: Should `--allow-group` be accepted during update-to-private type conversion?
   → A: Yes — when using `channel update` to convert a public or web-public
   channel to private, `--allow-group` MUST be accepted in the same command to
-  atomically set group-based access control during conversion. The Zulip API
-  supports setting `is_private=true` and `can_access_group` in a single PATCH
+  atomically set group-based self-subscribe permission during conversion. The
+  Zulip API supports setting `is_private=true` and `can_subscribe_group` in a
+  single PATCH
   request. The lockout prevention policy still applies — converting to private
   without existing subscribers requires `--subscribe` or `--allow-group`.
 - Q: Should `--allow-group` be restricted to private channels only? → A: No —
@@ -266,7 +267,7 @@ a single Zulip server."
   Note: `--group-name`/`--group-id` remain for `lftools-uv zulip group list`
   filtering only.
 - Q: What Zulip API field does `--allow-group` map to on public/web-public
-  channels? → A: Same field (`can_access_group`) on ALL channel types. The
+  channels? → A: Same field (`can_subscribe_group`) on ALL channel types. The
   CLI passes the setting through to the API regardless of channel type; it is
   the server's responsibility to enforce or not enforce based on channel type.
 - Q: Should `--can-remove-subscribers-group` require runtime feature-level
@@ -376,7 +377,7 @@ As a Zulip administrator, I want to list all user groups on the Zulip server —
 both custom user groups and built-in system role groups (Owners, Administrators,
 Moderators, Full Members, Members, Everyone, Nobody) — so that I can discover
 group identifiers (especially system role group names) to use when creating private
-channels with group-based access control.
+channels with group-based self-subscribe permission.
 
 **Why this priority**: Group discovery is a prerequisite for private channel
 creation when specifying allowed groups. System role groups are the primary
@@ -469,7 +470,7 @@ it appears in the channel list with the correct name, description, and type.
 8. **Given** a channel with the same name already exists, **When** I attempt to
    create a channel with that name, **Then** I see an error message indicating
    the name conflict and the command exits with a non-zero exit code.
-9. **Given** a Zulip server that does not support group-based access control,
+9. **Given** a Zulip server that does not support group-based self-subscribe permission,
    **When** I create a private channel with `--allow-group`, **Then** the
    command returns a clear error message indicating the required Zulip feature
    level and the server's current level, and exits with a non-zero exit code.
@@ -827,13 +828,13 @@ and verifying it reappears in the active channel list.
   does NOT enforce it (anyone can still join).
 - What happens when updating a channel type from public/web-public to private
   with `--allow-group`? The command MUST apply both the type conversion and
-  group-based access control atomically in a single Zulip API PATCH request
-  (setting `is_private=true` and `can_access_group` together).
+  group-based self-subscribe permission atomically in a single Zulip API PATCH request
+  (setting `is_private=true` and `can_subscribe_group` together).
 - What happens when a command uses a feature unsupported by the target Zulip
   server version? The system MUST detect the missing capability at runtime and
   return a clear error like "This operation requires Zulip feature level X
   (server has Y)" and exit with a non-zero code. This applies to `unarchive`,
-  `--allow-group` (group-based access control), `--can-remove-subscribers-group`,
+  `--allow-group` (group-based self-subscribe permission), `--can-remove-subscribers-group`,
   `--topic-policy`, and web-public channel type (requires spectator access).
 - What happens when a mutation is a no-op (e.g., archiving an already-archived
   channel, subscribing an already-subscribed user)? The command MUST succeed
@@ -906,7 +907,7 @@ and verifying it reappears in the active channel list.
   web-public channels, `--subscribe` is optional (anyone can join later) and
   `--allow-group` is accepted with the same semantics (defines who is allowed to
   join) but the server does NOT enforce the restriction on public/web-public
-  channels. The CLI maps `--allow-group` to the Zulip API `can_access_group`
+  channels. The CLI maps `--allow-group` to the Zulip API `can_subscribe_group`
   field on ALL channel types (pass-through; enforcement is the server's
   responsibility). Both custom user groups AND system role groups (Everyone,
   Members, Full Members, Moderators, Administrators, Owners, Nobody) are valid
@@ -933,7 +934,7 @@ and verifying it reappears in the active channel list.
   targeting different permissions. Each takes a direct comma-separated, quoted
   string value (e.g., `--allow-group 'foo, bar, id:123'`). Values are interpreted
   as group names by default; `id:NUM` forces ID lookup.
-  **API Translation (Group-Setting Values)**: The Zulip API `can_access_group`
+  **API Translation (Group-Setting Values)**: The Zulip API `can_subscribe_group`
   and `can_remove_subscribers_group` fields use a "group-setting value" format:
   - **Simple form**: A single integer user group ID (used when only one group is
     specified).
@@ -982,7 +983,7 @@ and verifying it reappears in the active channel list.
   API allows it), topic policy (`--topic-policy` with values `allow`,
   `deny`, or `follow-default`; also available as a standalone command per
   FR-021), `--allow-group` (who is allowed to join —
-  maps to Zulip API `can_access_group`), and `--can-remove-subscribers-group`
+  maps to Zulip API `can_subscribe_group`), and `--can-remove-subscribers-group`
   (who can remove subscribers — maps to Zulip API
   `can_remove_subscribers_group`). These are the only fields supported for v1;
   no other settings are in scope. When `--subscribe` is used in the update
@@ -997,8 +998,9 @@ and verifying it reappears in the active channel list.
   does NOT satisfy this requirement. At least one non-`Nobody` allowed group OR
   at least one `--subscribe` target is required.
   `--allow-group` MUST be accepted during type conversion to private in the same
-  command, enabling atomic setting of group-based access control via a single
-  Zulip API PATCH request (`is_private=true` + `can_access_group`). For updates
+  command, enabling atomic setting of group-based self-subscribe permission via
+  a single Zulip API PATCH request (`is_private=true` + `can_subscribe_group`).
+  For updates
   to public/web-public channels (or updates that do not change type),
   `--allow-group` is accepted with the same semantics (defines who is allowed to
   join) but the server does NOT enforce the restriction on non-private channels.
@@ -1138,7 +1140,7 @@ and verifying it reappears in the active channel list.
   channel), the flag is a no-op and the command proceeds normally (the unarchive
   command succeeds silently per its idempotency rule).
 - **FR-019**: Commands that rely on Zulip features not universally available
-  (e.g., unarchive, group-based access control, topic policy, web-public
+  (e.g., unarchive, group-based self-subscribe permission, topic policy, web-public
   channels, `can_remove_subscribers_group`) MUST detect server capabilities at
   runtime via the Zulip API feature level. If a required feature is unsupported,
   the command MUST return a clear error message in the format "This operation

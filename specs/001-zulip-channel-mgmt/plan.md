@@ -19,7 +19,7 @@ the official `zulip` Python client library with a separated API layer
 (`lftools_uv/typer_apps/zulip.py`), following existing project conventions.
 Runtime feature-level detection ensures graceful degradation on older Zulip
 servers. Group-based permissions use two distinct flags: `--allow-group`
-(who can join — maps to `can_access_group`) and
+(who can join — maps to `can_subscribe_group`) and
 `--can-remove-subscribers-group` (who can remove subscribers — maps to
 `can_remove_subscribers_group`), both accepting comma-separated inline
 group identification with `id:` prefix disambiguation.
