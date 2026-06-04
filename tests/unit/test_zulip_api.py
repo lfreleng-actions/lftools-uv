@@ -239,6 +239,23 @@ def test_resolve_groups_id_prefix() -> None:
     assert value == 11
 
 
+def test_resolve_groups_numeric_name_not_found_hints_id_prefix() -> None:
+    """Numeric bare tokens hint at ``id:NUM`` when no name matches."""
+    client = _groups_client(GROUPS)
+    with pytest.raises(ZulipNotFoundError) as exc:
+        _ = resolve_groups(client, "123")
+    assert "No user group named '123'" in str(exc.value)
+    assert "use 'id:123'" in str(exc.value)
+
+
+def test_resolve_groups_name_not_found_keeps_original_message() -> None:
+    """Non-numeric missing group names keep the original error format."""
+    client = _groups_client(GROUPS)
+    with pytest.raises(ZulipNotFoundError) as exc:
+        _ = resolve_groups(client, "missing")
+    assert str(exc.value) == "No user group named 'missing'"
+
+
 def test_resolve_groups_system_role_display_name() -> None:
     """System role display names map to their internal ``role:`` API name."""
     client = _groups_client(GROUPS)

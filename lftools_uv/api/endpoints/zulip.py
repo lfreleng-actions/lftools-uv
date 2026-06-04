@@ -608,6 +608,10 @@ def _resolve_single_group_token(token: str, groups: list[dict[str, Any]]) -> dic
         grp for grp in groups if str(grp.get("name", "")).casefold() == target and not grp.get("is_system_group", False)
     ]
     if not matches:
+        if token.isdigit():
+            raise ZulipNotFoundError(
+                f"No user group named {token!r}. If you meant a numeric group ID, use 'id:{token}'."
+            )
         raise ZulipNotFoundError(f"No user group named {token!r}")
     if len(matches) > 1:
         raise ZulipAmbiguityError(
