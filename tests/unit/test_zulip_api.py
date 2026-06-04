@@ -106,7 +106,7 @@ def test_feature_level_table_contains_expected_keys() -> None:
     """The hardcoded threshold table covers every feature the spec mentions."""
     for key in (
         "web-public",
-        "can-access-group",
+        "can-subscribe-group",
         "can-remove-subscribers-group",
         "topic-policy",
         "unarchive",
@@ -1270,11 +1270,11 @@ def test_create_channel_can_remove_subscribers_group_checks_feature_level() -> N
     assert exc.value.required == FEATURE_LEVELS["can-remove-subscribers-group"]
 
 
-def test_create_channel_can_access_group_checks_feature_level() -> None:
-    """can-access-group requires sufficient feature level."""
+def test_create_channel_can_subscribe_group_checks_feature_level() -> None:
+    """can-subscribe-group requires sufficient feature level."""
     from lftools_uv.api.endpoints.zulip import create_channel
 
-    # Feature level below threshold (197)
+    # Feature level below threshold (357)
     client = _create_channel_client(feature_level=100)
     with pytest.raises(ZulipFeatureLevelError) as exc:
         create_channel(
@@ -1282,7 +1282,7 @@ def test_create_channel_can_access_group_checks_feature_level() -> None:
             name="with-access-group",
             allow_group_value=10,
         )
-    assert exc.value.required == FEATURE_LEVELS["can-access-group"]
+    assert exc.value.required == FEATURE_LEVELS["can-subscribe-group"]
 
 
 def test_create_channel_invalid_topic_policy_rejected() -> None:
@@ -1342,7 +1342,7 @@ def test_create_channel_passes_group_setting_value_simple() -> None:
     )
     calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
     request = calls[0].kwargs.get("request", {})
-    assert request.get("can_access_group") == 42
+    assert request.get("can_subscribe_group") == 42
 
 
 def test_create_channel_passes_group_setting_value_complex() -> None:
@@ -1358,7 +1358,7 @@ def test_create_channel_passes_group_setting_value_complex() -> None:
     )
     calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
     request = calls[0].kwargs.get("request", {})
-    assert request.get("can_access_group") == complex_value
+    assert request.get("can_subscribe_group") == complex_value
 
 
 def test_create_channel_passes_can_remove_subscribers_group() -> None:
@@ -2379,7 +2379,7 @@ def test_update_channel_type_to_private_with_allow_group_satisfies_lockout() -> 
     payload = client.last_patch["request"]
     assert payload["is_private"] is True
     # group-setting-update wrapper for PATCH endpoints.
-    assert payload["can_access_group"] == {"new": 30}
+    assert payload["can_subscribe_group"] == {"new": 30}
 
 
 def test_update_channel_type_to_private_rejects_nobody_group() -> None:
@@ -2399,7 +2399,7 @@ def test_update_channel_type_to_private_allows_nobody_with_existing_subscribers(
 
     Per spec: lockout prevention only rejects converting an EMPTY
     channel to private without retainable access. An already-populated
-    channel may freely set ``can_access_group`` to Nobody — it simply
+    channel may freely set ``can_subscribe_group`` to Nobody — it simply
     disables future joins.
     """
     client = _update_client(subscribers=[100, 101])
@@ -2412,7 +2412,7 @@ def test_update_channel_type_to_private_allows_nobody_with_existing_subscribers(
     payload = client.last_patch["request"]
     assert payload["is_private"] is True
     # The Nobody system group resolves to id 21 in the test fixture.
-    assert payload["can_access_group"] == {"new": 21}
+    assert payload["can_subscribe_group"] == {"new": 21}
 
 
 def test_update_channel_allow_group_uses_new_wrapper_format() -> None:
@@ -2420,7 +2420,7 @@ def test_update_channel_allow_group_uses_new_wrapper_format() -> None:
     client = _update_client()
     _ = update_channel(client, name="general", allow_group="design")
     payload = client.last_patch["request"]
-    assert payload["can_access_group"] == {"new": 30}
+    assert payload["can_subscribe_group"] == {"new": 30}
 
 
 def test_update_channel_allow_group_multiple_uses_complex_form() -> None:
@@ -2428,7 +2428,7 @@ def test_update_channel_allow_group_multiple_uses_complex_form() -> None:
     client = _update_client()
     _ = update_channel(client, name="general", allow_group="design, id:10")
     payload = client.last_patch["request"]
-    assert payload["can_access_group"] == {"new": {"direct_members": [], "direct_subgroups": [30, 10]}}
+    assert payload["can_subscribe_group"] == {"new": {"direct_members": [], "direct_subgroups": [30, 10]}}
 
 
 def test_update_channel_can_remove_subscribers_group_wrapper() -> None:
@@ -2478,7 +2478,7 @@ def test_update_channel_multiple_settings() -> None:
     payload = client.last_patch["request"]
     assert payload["new_name"] == "renamed"
     assert payload["description"] == "d"
-    assert payload["can_access_group"] == {"new": 30}
+    assert payload["can_subscribe_group"] == {"new": 30}
 
 
 def test_update_channel_returns_channel_id_and_name() -> None:

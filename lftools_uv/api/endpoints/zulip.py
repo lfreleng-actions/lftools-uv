@@ -302,14 +302,14 @@ def get_client(zuliprc: Path | None = None, *, config: ZulipConfig | None = None
 #: * Feature level 1 — initial introduction of the
 #:   ``zulip_feature_level`` field; all servers we target report >= 1.
 #: * Feature level 12 — web-public streams and spectator access.
-#: * Feature level 197 — group-based access control via
-#:   ``can_access_group``.
+#: * Feature level 357 — group-based channel subscription via
+#:   ``can_subscribe_group``.
 #: * Feature level 161 — ``can_remove_subscribers_group`` permission.
 #: * Feature level 334 — ``topic_policy`` per-channel field.
 #: * Feature level 59 — stream reactivation via stream update API.
 FEATURE_LEVELS: dict[str, int] = {
     "web-public": 12,
-    "can-access-group": 197,
+    "can-subscribe-group": 357,
     "can-remove-subscribers-group": 161,
     "topic-policy": 334,
     "unarchive": 59,
@@ -1014,7 +1014,7 @@ def create_channel(
     subscribe_user_ids
         List of user IDs to subscribe on creation.
     allow_group_value
-        Resolved group-setting value for ``can_access_group`` field.
+        Resolved group-setting value for ``can_subscribe_group`` field.
         For private channels, callers should validate this is not the
         ``Nobody`` group before calling (to prevent lockout).
     can_remove_subscribers_group_value
@@ -1057,7 +1057,7 @@ def create_channel(
         check_feature_level(client, FEATURE_LEVELS["topic-policy"], "topic-policy")
 
     if allow_group_value is not None:
-        check_feature_level(client, FEATURE_LEVELS["can-access-group"], "group-based access control")
+        check_feature_level(client, FEATURE_LEVELS["can-subscribe-group"], "group-based channel subscription")
 
     if can_remove_subscribers_group_value is not None:
         check_feature_level(client, FEATURE_LEVELS["can-remove-subscribers-group"], "can-remove-subscribers-group")
@@ -1095,7 +1095,7 @@ def create_channel(
     # None = API default (no key)
 
     if allow_group_value is not None:
-        request["can_access_group"] = allow_group_value
+        request["can_subscribe_group"] = allow_group_value
 
     if can_remove_subscribers_group_value is not None:
         request["can_remove_subscribers_group"] = can_remove_subscribers_group_value
@@ -1591,7 +1591,7 @@ def update_channel(
       description, type, topic-policy, allow-group, or
       can-remove-subscribers-group).
     * Applies the FR-019 feature-level checks for web-public,
-      topic-policy, can-access-group (``--allow-group``) and
+      topic-policy, can-subscribe-group (``--allow-group``) and
       can-remove-subscribers-group.
     * Enforces lockout prevention when converting to ``private``: if
       the channel currently has 0 subscribers, the caller must supply
@@ -1683,7 +1683,7 @@ def update_channel(
     if topic_policy is not None:
         check_feature_level(client, FEATURE_LEVELS["topic-policy"], feature_name="topic-policy")
     if allow_group is not None:
-        check_feature_level(client, FEATURE_LEVELS["can-access-group"], feature_name="can-access-group")
+        check_feature_level(client, FEATURE_LEVELS["can-subscribe-group"], feature_name="can-subscribe-group")
     if can_remove_subscribers_group is not None:
         check_feature_level(
             client,
@@ -1814,7 +1814,7 @@ def update_channel(
     if topic_policy is not None:
         request["topics_policy"] = TOPIC_POLICY_MAP[topic_policy]
     if allow_group_value is not None:
-        request["can_access_group"] = {"new": allow_group_value}
+        request["can_subscribe_group"] = {"new": allow_group_value}
     if can_remove_value is not None:
         request["can_remove_subscribers_group"] = {"new": can_remove_value}
 
