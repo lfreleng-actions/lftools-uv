@@ -1043,7 +1043,8 @@ def create_channel(
         is either missing or only contains ``Nobody``.
     ZulipFeatureLevelError
         When the server lacks the required feature level for web-public,
-        topic-policy, or can-remove-subscribers-group features.
+        topic-policy, can-subscribe-group, or can-remove-subscribers-group
+        features.
     ZulipAPIError
         For transport or server errors.
     """
