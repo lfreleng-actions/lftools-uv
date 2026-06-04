@@ -367,7 +367,7 @@ jobs:
         if: >-
           !(matrix.requires_secrets
             && needs.check-actor.outputs.skip-credential-tests == 'true')
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b  # v8.1.0
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
@@ -734,7 +734,7 @@ jobs:
           grep '^[[]' "${INI_FILE}" || true
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b  # v8.1.0
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
