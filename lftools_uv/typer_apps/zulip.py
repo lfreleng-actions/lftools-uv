@@ -277,12 +277,13 @@ def channel_list(
         emit_json({"channels": channels})
         return
 
-    headers = ["Name", "Description", "Type", "Subscribers"]
+    headers = ["Channel ID", "Name", "Description", "Type", "Subscribers"]
     if include_archived:
         headers.append("Status")
     rows: list[list[Any]] = []
     for c in channels:
         row: list[Any] = [
+            c.get("stream_id", ""),
             c.get("name", ""),
             c.get("description", ""),
             c.get("type", ""),
