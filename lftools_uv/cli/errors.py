@@ -74,13 +74,17 @@ import logging
 import traceback
 from collections.abc import Callable, Iterable, Mapping, MutableMapping
 from functools import wraps
+from types import ModuleType
 from typing import TYPE_CHECKING, ParamSpec, TypeVar
 
 # Optional import guarded to avoid hard dependency on Click
+click: ModuleType | None
 try:
-    import click
+    import click as _click_module
 except Exception:  # pragma: no cover - defensive
     click = None
+else:
+    click = _click_module
 
 if TYPE_CHECKING:
     import click as _click_type

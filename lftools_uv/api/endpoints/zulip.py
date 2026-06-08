@@ -41,14 +41,18 @@ import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 from typing import TYPE_CHECKING, Any, Literal
 
 from lftools_uv import config as lf_config
 
+_zulip_module: ModuleType | None
 try:  # pragma: no cover - import guard exercised by integration tests
-    import zulip as _zulip_module
+    import zulip as _imported_zulip
 except ImportError:  # pragma: no cover - exercised when extra not installed
     _zulip_module = None
+else:
+    _zulip_module = _imported_zulip
 
 if TYPE_CHECKING:  # pragma: no cover
     import zulip as _zulip_module_type  # noqa: F401
@@ -307,12 +311,16 @@ def get_client(zuliprc: Path | None = None, *, config: ZulipConfig | None = None
 #: * Feature level 161 — ``can_remove_subscribers_group`` permission.
 #: * Feature level 334 — ``topic_policy`` per-channel field.
 #: * Feature level 59 — stream reactivation via stream update API.
+#: * Feature level 389 — channel folders.
+#: * Feature level 414 — channel folder ordering.
 FEATURE_LEVELS: dict[str, int] = {
     "web-public": 12,
     "can-subscribe-group": 357,
     "can-remove-subscribers-group": 161,
     "topic-policy": 334,
     "unarchive": 59,
+    "channel-folders": 389,
+    "channel-folders-order": 414,
 }
 
 
@@ -730,6 +738,291 @@ def list_channels(client: Any, *, include_archived: bool = False) -> list[dict[s
 
 
 # ---------------------------------------------------------------------------
+# Channel folders
+# ---------------------------------------------------------------------------
+
+
+def _normalize_channel_folder(raw: dict[str, Any]) -> dict[str, Any]:
+    """Project a raw Zulip channel-folder object to a stable shape.
+
+    Channel folders require Zulip feature level 389. The ``order`` field
+    was added at feature level 414, so missing values are represented as
+    ``None`` rather than treated as malformed.
+    """
+    folder_id = raw.get("id")
+    if not isinstance(folder_id, int) or isinstance(folder_id, bool):
+        raise ZulipAPIError(f"Channel folder missing numeric id: {raw!r}")
+    name = raw.get("name")
+    if not isinstance(name, str) or not name:
+        raise ZulipAPIError(f"Channel folder missing non-empty name: {raw!r}")
+    order_raw = raw.get("order")
+    if order_raw is None:
+        order: int | None = None
+    elif isinstance(order_raw, int) and not isinstance(order_raw, bool):
+        order = order_raw
+    else:
+        raise ZulipAPIError(f"Channel folder has malformed order: {raw!r}")
+    description = raw.get("description")
+    rendered = raw.get("rendered_description")
+    date_created = raw.get("date_created")
+    creator_id = raw.get("creator_id")
+    return {
+        "id": folder_id,
+        "name": name,
+        "order": order,
+        "description": "" if description is None else str(description),
+        "rendered_description": "" if rendered is None else str(rendered),
+        "is_archived": bool(raw.get("is_archived", False)),
+        "date_created": date_created if isinstance(date_created, int) and not isinstance(date_created, bool) else None,
+        "creator_id": creator_id if isinstance(creator_id, int) and not isinstance(creator_id, bool) else None,
+    }
+
+
+def _fetch_channel_folders(client: Any, *, include_archived: bool = False) -> list[dict[str, Any]]:
+    """Return raw channel folders from ``GET /api/v1/channel_folders``."""
+    request: dict[str, Any] = {}
+    if include_archived:
+        request["include_archived"] = True
+    try:
+        response = client.call_endpoint(
+            url="channel_folders",
+            method="GET",
+            request=request or None,
+        )
+    except Exception as exc:  # pragma: no cover - network errors
+        raise ZulipAPIError(f"Failed to list channel folders: {exc}") from exc
+    if not isinstance(response, dict) or response.get("result") != "success":
+        msg = response.get("msg") if isinstance(response, dict) else None
+        raise ZulipAPIError(f"Failed to list channel folders: {msg or response!r}")
+    folders = response.get("channel_folders", [])
+    if not isinstance(folders, list):
+        raise ZulipAPIError(f"Malformed channel_folders payload: {response!r}")
+    return folders
+
+
+def list_channel_folders(
+    client: Any,
+    *,
+    include_archived: bool = False,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    """List normalized channel folders, gated at feature level 389.
+
+    ``order`` is optional before feature level 414; omitted values are
+    returned as ``None`` in JSON and render as a blank table cell.
+    """
+    check_feature_level(client, FEATURE_LEVELS["channel-folders"], "channel-folders")
+    if limit is not None:
+        if isinstance(limit, bool) or limit < 0:
+            raise ZulipValidationError("--limit must be a non-negative integer")
+    raw_folders = _fetch_channel_folders(client, include_archived=include_archived)
+    folders = [_normalize_channel_folder(folder) for folder in raw_folders]
+    if not include_archived:
+        folders = [folder for folder in folders if not folder["is_archived"]]
+    if limit is not None:
+        folders = folders[:limit]
+    return folders
+
+
+def _get_channel_folder_limits(client: Any) -> dict[str, int]:
+    """Return cached `/register` channel-folder length limits when available."""
+    cached = getattr(client, "_lftools_channel_folder_limits", None)
+    if isinstance(cached, dict):
+        return {str(k): v for k, v in cached.items() if isinstance(v, int) and not isinstance(v, bool)}
+    limits: dict[str, int] = {}
+    try:
+        response = client.call_endpoint(url="register", method="GET")
+    except Exception:
+        response = None
+    if isinstance(response, dict) and response.get("result") == "success":
+        for key in ("max_channel_folder_name_length", "max_channel_folder_description_length"):
+            value = response.get(key)
+            if isinstance(value, int) and not isinstance(value, bool):
+                limits[key] = value
+    try:
+        client._lftools_channel_folder_limits = limits
+    except AttributeError:  # pragma: no cover - defensive
+        pass
+    return limits
+
+
+def _validate_channel_folder_values(
+    client: Any,
+    *,
+    name: str | None = None,
+    description: str | None = None,
+) -> None:
+    """Validate folder names/descriptions against known server limits."""
+    if name is not None and not name.strip():
+        raise ZulipValidationError("Folder name must not be empty")
+    limits = _get_channel_folder_limits(client)
+    name_limit = limits.get("max_channel_folder_name_length")
+    if name is not None and name_limit is not None and len(name) > name_limit:
+        raise ZulipValidationError(f"Folder name exceeds server limit of {name_limit} characters")
+    description_limit = limits.get("max_channel_folder_description_length")
+    if description is not None and description_limit is not None and len(description) > description_limit:
+        raise ZulipValidationError(f"Folder description exceeds server limit of {description_limit} characters")
+
+
+def _folder_mutation_result(
+    response: dict[str, Any],
+    *,
+    operation: str,
+    fallback_id: int | None,
+    fallback_name: str | None,
+) -> dict[str, Any]:
+    """Build the folder mutation result contract from a Zulip response."""
+    raw_id = response.get("channel_folder_id", response.get("folder_id", response.get("id", fallback_id)))
+    folder_id = raw_id if isinstance(raw_id, int) and not isinstance(raw_id, bool) else fallback_id
+    folder_name: str | None = fallback_name
+    raw_folder = response.get("channel_folder")
+    if isinstance(raw_folder, dict):
+        raw_name = raw_folder.get("name")
+        if isinstance(raw_name, str):
+            folder_name = raw_name
+        raw_folder_id = raw_folder.get("id")
+        if isinstance(raw_folder_id, int) and not isinstance(raw_folder_id, bool):
+            folder_id = raw_folder_id
+    raw_name = response.get("folder_name")
+    if isinstance(raw_name, str):
+        folder_name = raw_name
+    return {
+        "status": "success",
+        "folder_id": folder_id,
+        "folder_name": folder_name,
+        "operation": operation,
+    }
+
+
+def create_channel_folder(client: Any, name: str, description: str = "") -> dict[str, Any]:
+    """Create a channel folder via ``POST /channel_folders/create``.
+
+    Channel folders require Zulip feature level 389. The server enforces
+    admin-only permissions; this helper intentionally surfaces those
+    API errors without client-side role checks.
+    """
+    check_feature_level(client, FEATURE_LEVELS["channel-folders"], "channel-folders")
+    _validate_channel_folder_values(client, name=name, description=description)
+    request = {"name": name, "description": description}
+    try:
+        response = client.call_endpoint(
+            url="channel_folders/create",
+            method="POST",
+            request=request,
+        )
+    except Exception as exc:  # pragma: no cover - network errors
+        raise ZulipAPIError(f"Failed to create channel folder: {exc}") from exc
+    if not isinstance(response, dict) or response.get("result") != "success":
+        msg = response.get("msg") if isinstance(response, dict) else None
+        raise ZulipAPIError(f"Failed to create channel folder: {msg or response!r}")
+    return _folder_mutation_result(response, operation="create", fallback_id=None, fallback_name=name)
+
+
+def update_channel_folder(
+    client: Any,
+    folder_id: int,
+    *,
+    name: str | None = None,
+    description: str | None = None,
+    is_archived: bool | None = None,
+) -> dict[str, Any]:
+    """Update a channel folder via ``PATCH /channel_folders/{id}``.
+
+    The same endpoint implements rename, description updates, archive,
+    and unarchive. Zulip exposes no hard-delete endpoint for folders.
+    """
+    if isinstance(folder_id, bool) or folder_id <= 0:
+        raise ZulipValidationError(f"folder_id must be a positive integer (got {folder_id})")
+    if name is None and description is None and is_archived is None:
+        raise ZulipValidationError("folder update requires at least one of --name, --description, or archive state")
+    check_feature_level(client, FEATURE_LEVELS["channel-folders"], "channel-folders")
+    _validate_channel_folder_values(client, name=name, description=description)
+    request: dict[str, Any] = {}
+    if name is not None:
+        request["name"] = name
+    if description is not None:
+        request["description"] = description
+    if is_archived is not None:
+        request["is_archived"] = is_archived
+    try:
+        response = client.call_endpoint(
+            url=f"channel_folders/{folder_id}",
+            method="PATCH",
+            request=request,
+        )
+    except Exception as exc:  # pragma: no cover - network errors
+        raise ZulipAPIError(f"Failed to update channel folder {folder_id}: {exc}") from exc
+    if not isinstance(response, dict) or response.get("result") != "success":
+        msg = response.get("msg") if isinstance(response, dict) else None
+        raise ZulipAPIError(f"Failed to update channel folder {folder_id}: {msg or response!r}")
+    operation = "update"
+    if is_archived is True and name is None and description is None:
+        operation = "archive"
+    elif is_archived is False and name is None and description is None:
+        operation = "unarchive"
+    return _folder_mutation_result(response, operation=operation, fallback_id=folder_id, fallback_name=name)
+
+
+def archive_channel_folder(client: Any, folder_id: int) -> dict[str, Any]:
+    """Archive a channel folder; there is no hard-delete endpoint."""
+    return update_channel_folder(client, folder_id, is_archived=True)
+
+
+def unarchive_channel_folder(client: Any, folder_id: int) -> dict[str, Any]:
+    """Unarchive a channel folder via the feature-level-389 PATCH API."""
+    return update_channel_folder(client, folder_id, is_archived=False)
+
+
+def resolve_channel_folder_token(client: Any, token: str) -> int | None:
+    """Resolve a folder token for channel assignment.
+
+    Accepts a case-insensitive folder name, ``id:N`` for explicit ID
+    lookup, or ``none`` to clear the assignment. Numeric-looking names
+    are treated as names; if absent, the error hints to use ``id:N``.
+    """
+    check_feature_level(client, FEATURE_LEVELS["channel-folders"], "channel-folders")
+    token = token.strip()
+    if not token:
+        raise ZulipValidationError("--folder must not be empty")
+    if token.casefold() == "none":
+        return None
+
+    folders = list_channel_folders(client, include_archived=True)
+    if token.casefold().startswith("id:"):
+        suffix = token[3:].strip()
+        try:
+            wanted = int(suffix)
+        except ValueError as exc:
+            raise ZulipValidationError(f"id: prefix requires a numeric folder ID, got {suffix!r}") from exc
+        if wanted <= 0:
+            raise ZulipValidationError(f"id: prefix requires a positive folder ID, got {wanted}")
+        for folder in folders:
+            if folder["id"] == wanted:
+                return wanted
+        raise ZulipNotFoundError(f"No channel folder with id {wanted}")
+
+    target = token.casefold()
+    matches = [folder for folder in folders if str(folder.get("name", "")).casefold() == target]
+    if not matches:
+        if token.isdigit():
+            raise ZulipNotFoundError(
+                f"No channel folder named {token!r}. If you meant a numeric folder ID, use 'id:{token}'."
+            )
+        raise ZulipNotFoundError(f"No channel folder named {token!r}")
+    if len(matches) > 1:
+        raise ZulipAmbiguityError(
+            f"Channel folder name {token!r} matched {len(matches)} folders; use the id:NUM prefix to disambiguate",
+            matches=[
+                {"id": folder["id"], "name": folder["name"], "is_archived": folder["is_archived"]} for folder in matches
+            ],
+        )
+    folder_id = matches[0]["id"]
+    if not isinstance(folder_id, int):
+        raise ZulipAPIError(f"Resolved folder missing numeric id: {matches[0]!r}")
+    return folder_id
+
+
+# ---------------------------------------------------------------------------
 # Channel subscribers (US7)
 # ---------------------------------------------------------------------------
 
@@ -1002,6 +1295,8 @@ def create_channel(
     can_remove_subscribers_group_value: GroupSettingValue | None = None,
     announce: bool | None = None,
     topic_policy: str | None = None,
+    folder_id: int | None = None,
+    folder_id_specified: bool = False,
 ) -> dict[str, Any]:
     """Create a new Zulip channel (stream).
 
@@ -1027,6 +1322,9 @@ def create_channel(
         ``True`` to announce, ``False`` to suppress, ``None`` for API default.
     topic_policy
         One of ``allow``, ``deny``, ``follow-default``, or ``None``.
+    folder_id
+        Channel folder ID to assign, or ``None`` to clear when
+        ``folder_id_specified`` is true.
 
     Returns
     -------
@@ -1067,6 +1365,9 @@ def create_channel(
     if can_remove_subscribers_group_value is not None:
         check_feature_level(client, FEATURE_LEVELS["can-remove-subscribers-group"], "can-remove-subscribers-group")
 
+    if folder_id is not None or folder_id_specified:
+        check_feature_level(client, FEATURE_LEVELS["channel-folders"], "channel-folders")
+
     # Lockout prevention for private channels:
     # Require at least one subscriber OR a non-None allow_group_value.
     # Callers must validate that allow_group_value is not the Nobody group
@@ -1083,6 +1384,8 @@ def create_channel(
     subscription: dict[str, Any] = {"name": name}
     if description:
         subscription["description"] = description
+    if folder_id is not None or folder_id_specified:
+        subscription["folder_id"] = folder_id
 
     principals: list[int] = list(subscribe_user_ids) if subscribe_user_ids else []
 
@@ -1167,6 +1470,8 @@ def create_channel(
     }
     if topic_policy is not None:
         result["topic_policy_applied"] = topic_policy_applied
+    if folder_id is not None or folder_id_specified:
+        result["folder_id"] = folder_id
     if warnings:
         result["warnings"] = warnings
 
@@ -1586,6 +1891,8 @@ def update_channel(
     user_id_mode: IdMode | None = None,
     allow_group: str | None = None,
     can_remove_subscribers_group: str | None = None,
+    folder_id: int | None = None,
+    folder_id_specified: bool = False,
     include_archived: bool = False,
 ) -> dict[str, Any]:
     """Update channel settings via ``PATCH /api/v1/streams/{stream_id}``.
@@ -1593,8 +1900,8 @@ def update_channel(
     Implements FR-004 (channel update) end-to-end:
 
     * Validates that at least one setting flag is supplied (rename,
-      description, type, topic-policy, allow-group, or
-      can-remove-subscribers-group).
+      description, type, topic-policy, allow-group, folder assignment,
+      or can-remove-subscribers-group).
     * Applies the FR-019 feature-level checks for web-public,
       topic-policy, can-subscribe-group (``--allow-group``) and
       can-remove-subscribers-group.
@@ -1618,22 +1925,27 @@ def update_channel(
     # Argument validation
     # ------------------------------------------------------------------
     subscribe_list: list[str] = list(subscribe_user_specs or [])
-    settings_specified = any(
-        v is not None
-        for v in (
-            new_name,
-            description,
-            channel_type,
-            topic_policy,
-            allow_group,
-            can_remove_subscribers_group,
+    settings_specified = (
+        any(
+            v is not None
+            for v in (
+                new_name,
+                description,
+                channel_type,
+                topic_policy,
+                allow_group,
+                can_remove_subscribers_group,
+            )
         )
-    ) or bool(subscribe_list)
+        or bool(subscribe_list)
+        or folder_id_specified
+        or folder_id is not None
+    )
     if not settings_specified:
         raise ZulipValidationError(
             "channel update requires at least one setting to change "
             "(--name, --description, --type, --topic-policy, --allow-group, "
-            "--subscribe, or --can-remove-subscribers-group)"
+            "--folder, --subscribe, or --can-remove-subscribers-group)"
         )
 
     valid_channel_types = {"public", "private", "web-public"}
@@ -1695,6 +2007,8 @@ def update_channel(
             FEATURE_LEVELS["can-remove-subscribers-group"],
             feature_name="can-remove-subscribers-group",
         )
+    if folder_id is not None or folder_id_specified:
+        check_feature_level(client, FEATURE_LEVELS["channel-folders"], feature_name="channel-folders")
 
     # ------------------------------------------------------------------
     # Resolve target channel
@@ -1822,6 +2136,8 @@ def update_channel(
         request["can_subscribe_group"] = {"new": allow_group_value}
     if can_remove_value is not None:
         request["can_remove_subscribers_group"] = {"new": can_remove_value}
+    if folder_id is not None or folder_id_specified:
+        request["folder_id"] = folder_id
 
     # ------------------------------------------------------------------
     # PATCH /api/v1/streams/{stream_id}
@@ -1842,12 +2158,15 @@ def update_channel(
 
     # Reflect rename in the returned channel_name.
     effective_name = new_name if new_name is not None else resolved_name
-    return {
+    result = {
         "status": "success",
         "channel_id": stream_id,
         "channel_name": effective_name,
         "operation": "update",
     }
+    if folder_id is not None or folder_id_specified:
+        result["folder_id"] = folder_id
+    return result
 
 
 # Topic policy convenience helpers (FR-021)

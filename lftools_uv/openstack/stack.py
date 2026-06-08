@@ -113,8 +113,10 @@ def cost(os_cloud: str, stack_name: str, timeout: int = 60) -> None:
 
     def get_server_info(server_id: str) -> tuple[str, float]:
         server = cloud.compute.find_server(server_id)  # pyright: ignore[reportAttributeAccessIssue]
-        diff = datetime.now(UTC) - parse_iso8601_time(server.launched_at)  # pyright: ignore[reportOptionalMemberAccess]
-        return server.flavor["original_name"], diff.total_seconds()  # pyright: ignore[reportOptionalMemberAccess]
+        if server is None:
+            raise RuntimeError(f"Server {server_id} not found")
+        diff = datetime.now(UTC) - parse_iso8601_time(server.launched_at)
+        return server.flavor["original_name"], diff.total_seconds()
 
     def get_server_ids(stack_name: str) -> list[str]:
         servers = get_resources_by_type(stack_name, "OS::Nova::Server")
