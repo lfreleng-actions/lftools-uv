@@ -7,7 +7,7 @@ SPDX-FileCopyrightText: 2026 The Linux Foundation
 
 **Feature Branch**: `002-zulip-channel-folders`
 **Created**: 2026-06-04
-**Status**: Draft
+**Status**: Implemented
 **Input**: User description: "Add specification artifacts for Zulip channel
 folders, including folder lifecycle commands and channel folder assignment."
 
