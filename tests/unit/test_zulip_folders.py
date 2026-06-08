@@ -138,6 +138,9 @@ def test_list_channel_folders_limit_and_feature_gate() -> None:
         list_channel_folders(old_client)
     assert not any(call["url"] == "channel_folders" for call in old_client.last_requests)
 
+    with pytest.raises(ZulipValidationError, match="non-negative integer"):
+        list_channel_folders(client, limit=1.5)  # type: ignore[arg-type]
+
 
 def test_create_channel_folder_payload_and_limits() -> None:
     """Create sends name/description and validates known length limits."""
@@ -160,6 +163,9 @@ def test_update_archive_unarchive_channel_folder_payloads() -> None:
     assert result["operation"] == "update"
     patch_call = next(call for call in client.last_requests if call["url"] == "channel_folders/10")
     assert patch_call["request"] == {"name": "Engineering"}
+
+    with pytest.raises(ZulipValidationError, match="positive integer"):
+        update_channel_folder(client, 1.5, name="Engineering")  # type: ignore[arg-type]
 
     client = _folder_client()
     archive_channel_folder(client, 10)

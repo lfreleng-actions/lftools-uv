@@ -813,7 +813,7 @@ def list_channel_folders(
     """
     check_feature_level(client, FEATURE_LEVELS["channel-folders"], "channel-folders")
     if limit is not None:
-        if isinstance(limit, bool) or limit < 0:
+        if not isinstance(limit, int) or isinstance(limit, bool) or limit < 0:
             raise ZulipValidationError("--limit must be a non-negative integer")
     raw_folders = _fetch_channel_folders(client, include_archived=include_archived)
     folders = [_normalize_channel_folder(folder) for folder in raw_folders]
@@ -937,8 +937,7 @@ def update_channel_folder(
     The same endpoint implements rename, description updates, archive,
     and unarchive. Zulip exposes no hard-delete endpoint for folders.
     """
-    if isinstance(folder_id, bool) or folder_id <= 0:
-        raise ZulipValidationError(f"folder_id must be a positive integer (got {folder_id})")
+    _validate_channel_folder_assignment_id(folder_id)
     if name is None and description is None and is_archived is None:
         raise ZulipValidationError("folder update requires at least one of --name, --description, or archive state")
     check_feature_level(client, FEATURE_LEVELS["channel-folders"], "channel-folders")
