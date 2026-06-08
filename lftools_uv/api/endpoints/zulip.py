@@ -864,6 +864,12 @@ def _validate_channel_folder_values(
         raise ZulipValidationError(f"Folder description exceeds server limit of {description_limit} characters")
 
 
+def _validate_channel_folder_assignment_id(folder_id: Any) -> None:
+    """Validate a non-null channel folder assignment ID."""
+    if not isinstance(folder_id, int) or isinstance(folder_id, bool) or folder_id <= 0:
+        raise ZulipValidationError(f"folder_id must be a positive integer (got {folder_id})")
+
+
 def _folder_mutation_result(
     response: dict[str, Any],
     *,
@@ -1365,6 +1371,8 @@ def create_channel(
     if can_remove_subscribers_group_value is not None:
         check_feature_level(client, FEATURE_LEVELS["can-remove-subscribers-group"], "can-remove-subscribers-group")
 
+    if folder_id is not None:
+        _validate_channel_folder_assignment_id(folder_id)
     if folder_id is not None or folder_id_specified:
         check_feature_level(client, FEATURE_LEVELS["channel-folders"], "channel-folders")
 
@@ -1958,6 +1966,8 @@ def update_channel(
         raise ZulipValidationError(
             f"Invalid topic_policy {topic_policy!r}; expected one of {', '.join(sorted(valid_topic_policies))}"
         )
+    if folder_id is not None:
+        _validate_channel_folder_assignment_id(folder_id)
 
     # ------------------------------------------------------------------
     # Feature-level gating (FR-019)

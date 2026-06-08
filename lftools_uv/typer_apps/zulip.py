@@ -261,22 +261,6 @@ folder_app = typer.Typer(
 zulip_app.add_typer(folder_app, name="folder")
 
 
-def folder_mutation_result(
-    *,
-    status: str,
-    operation: str,
-    folder_id: int | None,
-    folder_name: str | None,
-) -> dict[str, Any]:
-    """Build the standard folder mutation-result JSON payload."""
-    return {
-        "status": status,
-        "folder_id": folder_id,
-        "folder_name": folder_name,
-        "operation": operation,
-    }
-
-
 @channel_app.command("list")
 def channel_list(
     ctx: typer.Context,

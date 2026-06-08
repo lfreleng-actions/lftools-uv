@@ -207,6 +207,15 @@ def test_create_channel_with_folder_id_in_subscription() -> None:
     assert client.last_create["request"]["subscriptions"] == [{"name": "general", "folder_id": 10}]
 
 
+@pytest.mark.parametrize("bad_folder_id", [0, -1, True, False])
+def test_create_channel_rejects_invalid_folder_id(bad_folder_id: int) -> None:
+    """Channel create validates folder assignments before API calls."""
+    client = _folder_client()
+    with pytest.raises(ZulipValidationError, match="positive integer"):
+        create_channel(client, name="general", folder_id=bad_folder_id, folder_id_specified=True)
+    assert not any(call["url"] == "users/me/subscriptions" for call in client.last_requests)
+
+
 def test_update_channel_folder_id_and_clear() -> None:
     """Channel update sends folder_id for assignment and clearing."""
     client = _folder_client()
@@ -218,6 +227,15 @@ def test_update_channel_folder_id_and_clear() -> None:
     result = update_channel(client, name="general", folder_id=None, folder_id_specified=True)
     assert result["folder_id"] is None
     assert client.last_patch["request"] == {"folder_id": None}
+
+
+@pytest.mark.parametrize("bad_folder_id", [0, -1, True, False])
+def test_update_channel_rejects_invalid_folder_id(bad_folder_id: int) -> None:
+    """Channel update validates folder assignments before API calls."""
+    client = _folder_client()
+    with pytest.raises(ZulipValidationError, match="positive integer"):
+        update_channel(client, name="general", folder_id=bad_folder_id, folder_id_specified=True)
+    assert not any(call["url"].startswith("streams/") for call in client.last_requests)
 
 
 def test_channel_folder_assignment_feature_gate() -> None:
