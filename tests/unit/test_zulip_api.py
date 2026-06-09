@@ -166,6 +166,8 @@ def test_plan_folder_move_positions(
 @pytest.mark.parametrize(
     ("target_id", "reference_id", "expected_error", "message"),
     [
+        (0, 1, ZulipValidationError, "positive integer"),
+        (1, -1, ZulipValidationError, "positive integer"),
         (2, 2, ZulipValidationError, "Cannot move folder relative to itself"),
         (99, 1, ZulipNotFoundError, "Target folder id 99 not found"),
         (1, 99, ZulipNotFoundError, "Reference folder id 99 not found"),

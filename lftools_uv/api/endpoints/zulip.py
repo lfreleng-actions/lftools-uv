@@ -1012,6 +1012,8 @@ def plan_folder_move(
     """Return the folder order produced by moving a folder."""
     if position not in ("before", "after"):
         raise ZulipValidationError(f"Invalid folder move position: {position!r}")
+    _validate_channel_folder_assignment_id(target_id)
+    _validate_channel_folder_assignment_id(reference_id)
     if target_id == reference_id:
         raise ZulipValidationError("Cannot move folder relative to itself")
     if target_id not in current_order:

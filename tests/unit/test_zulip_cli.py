@@ -314,6 +314,15 @@ def test_folder_move_rejects_missing_target(monkeypatch: pytest.MonkeyPatch) -> 
     assert not any(call["method"] == "PATCH" for call in client.last_requests)
 
 
+def test_folder_move_rejects_invalid_target_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The moved folder ID must be a positive integer."""
+    client = _patched_folder_move_client(monkeypatch)
+    result = CliRunner().invoke(zulip_app, ["folder", "move", "--folder-id", "0", "--before", "Projects"])
+    assert result.exit_code == 1
+    assert "positive integer" in (result.stdout + result.stderr)
+    assert not any(call["method"] == "PATCH" for call in client.last_requests)
+
+
 def test_folder_move_rejects_missing_bare_id_reference(monkeypatch: pytest.MonkeyPatch) -> None:
     """Missing bare integer references include the numeric-ID hint."""
     client = _patched_folder_move_client(monkeypatch)
