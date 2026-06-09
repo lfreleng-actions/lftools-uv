@@ -17,7 +17,8 @@ SPDX-FileCopyrightText: 2026 The Linux Foundation
   ```
 
 - A Zulip server at feature level 389 or newer for channel folders
-- Organization admin permissions for folder create/update/archive/unarchive
+- A Zulip server at feature level 414 or newer for folder move
+- Organization admin permissions for folder create/update/archive/unarchive/move
 - A zuliprc file or equivalent configuration
 
 ## Configuration
@@ -76,6 +77,20 @@ lftools-uv zulip folder archive --folder-id 10
 
 # Restore an archived folder
 lftools-uv zulip folder unarchive --folder-id 10
+```
+
+### Move folders
+
+```bash
+# Move a folder before another folder by name
+lftools-uv zulip folder move \
+  --folder-id 12 \
+  --before "Projects"
+
+# Move a folder after another folder by ID
+lftools-uv zulip folder move \
+  --folder-id 10 \
+  --after id:12
 ```
 
 ### Create a channel in a folder

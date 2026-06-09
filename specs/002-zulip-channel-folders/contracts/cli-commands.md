@@ -194,6 +194,64 @@ server.
 
 ---
 
+## `lftools-uv zulip folder move`
+
+**Description**: Move a channel folder before or after another folder.
+Admin-only on the Zulip server.
+
+| Option | Type | Required | Description |
+| --- | --- | --- | --- |
+| `--folder-id` | int | Yes | Folder ID to move |
+| `--before` | str | One of before/after | Reference folder to move before |
+| `--after` | str | One of before/after | Reference folder to move after |
+
+**Reference syntax**:
+
+- `--before Projects` resolves a folder by case-insensitive name.
+- `--after id:10` resolves folder ID 10 explicitly.
+- `--before 10` treats bare numeric references as folder ID 10.
+
+**Constraints**:
+
+- Requires Zulip feature level 414 (`channel-folders-order`).
+- Exactly one of `--before` or `--after` is required.
+- The target folder ID must exist in the complete folder list.
+- The reference folder must resolve to an existing folder.
+- The target and reference folders must differ.
+- The CLI lists folders with `include_archived=true` so the order sent to Zulip
+  includes every channel folder ID exactly once.
+- Calls `PATCH /api/v1/channel_folders` with `order` set to a JSON-encoded
+  array, for example `order=[12,10,11]`.
+- Permission and invalid-order errors are surfaced from Zulip.
+
+**Human Output**: Prints a short move confirmation to stderr.
+
+**JSON Output** (success):
+
+```json
+{
+  "status": "success",
+  "operation": "move",
+  "folder_id": 12,
+  "reference_folder_id": 10,
+  "position": "before",
+  "order": [12, 10, 11]
+}
+```
+
+**Errors**:
+
+```text
+Error: Exactly one of --before or --after is required
+Error: Cannot move folder relative to itself
+Error: Target folder id 99 not found
+Error: No channel folder with id 999. If you meant a numeric folder ID, use 'id:999'.
+```
+
+**Exit Codes**: 0 = success, 1 = error
+
+---
+
 ## Updated `lftools-uv zulip channel create <name>`
 
 **Description**: Create a new channel, optionally assigned to a folder.
@@ -261,3 +319,5 @@ Error: This operation requires Zulip feature level 389 (server has 388)
 
 Folder list keeps a stable `Order` column even when `order` is absent before FL
 414. Missing order values are rendered blank in tables and `null` in JSON.
+`folder move` is the exception: it requires FL 414 before attempting the bulk
+reorder mutation.

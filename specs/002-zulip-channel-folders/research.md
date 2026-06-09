@@ -131,3 +131,24 @@ the source of truth.
 
 - Fetch user role and reject locally: Rejected — duplicates server policy and
   risks false negatives.
+
+## Decision 8: Folder Move Uses Bulk Reorder API
+
+**Decision**: Implement folder reordering with
+`PATCH /api/v1/channel_folders`, sending `order` as a JSON-encoded form value
+containing every channel folder ID exactly once. Expose this through
+`zulip folder move --folder-id N --before REF` and
+`zulip folder move --folder-id N --after REF`, where `REF` accepts a folder
+name, `id:N`, or a bare numeric folder ID.
+
+**Rationale**: Zulip's API only accepts complete bulk order mappings; it does
+not provide a single-folder move endpoint. The CLI can safely derive the
+complete order from the current folder list while presenting a semantic UX that
+matches how administrators think about moving one folder relative to another.
+
+**Alternatives Considered**:
+
+- Raw `folder reorder --order ID,ID,ID`: Rejected — it exposes the low-level API
+  shape and makes it easy for users to omit or duplicate IDs.
+- Per-user folder ordering: Rejected — the API updates organization-wide folder
+  order, and per-user ordering is outside this command's scope.
