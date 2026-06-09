@@ -1011,13 +1011,13 @@ def plan_folder_move(
 ) -> list[int]:
     """Return the folder order produced by moving a folder."""
     if position not in ("before", "after"):
-        raise ValueError(f"Invalid folder move position: {position!r}")
+        raise ZulipValidationError(f"Invalid folder move position: {position!r}")
     if target_id == reference_id:
-        raise ValueError("Cannot move folder relative to itself")
+        raise ZulipValidationError("Cannot move folder relative to itself")
     if target_id not in current_order:
-        raise ValueError(f"Target folder id {target_id} not found")
+        raise ZulipNotFoundError(f"Target folder id {target_id} not found")
     if reference_id not in current_order:
-        raise ValueError(f"Reference folder id {reference_id} not found")
+        raise ZulipNotFoundError(f"Reference folder id {reference_id} not found")
 
     new_order = [folder_id for folder_id in current_order if folder_id != target_id]
     insert_at = new_order.index(reference_id)

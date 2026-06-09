@@ -204,7 +204,7 @@ def _patched_folder_move_client(
         fake.last_requests.append({"url": url, "method": method, "request": request})
         if url == "channel_folders" and method == "GET":
             assert request == {"include_archived": True}
-            return {"result": "success", "channel_folders": folders or MOVE_FOLDERS}
+            return {"result": "success", "channel_folders": folders if folders is not None else MOVE_FOLDERS}
         if url == "channel_folders" and method == "PATCH":
             fake.last_order = json.loads(cast(str, (request or {})["order"]))
             return {"result": "success", "msg": ""}

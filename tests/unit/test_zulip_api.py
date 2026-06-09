@@ -133,7 +133,7 @@ def _folder_reorder_client(
 
     def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> dict[str, Any]:
         client.last_requests.append({"url": url, "method": method, "request": request})
-        return response or {"result": "success", "msg": ""}
+        return response if response is not None else {"result": "success", "msg": ""}
 
     client.call_endpoint.side_effect = call_endpoint
     return client
@@ -164,16 +164,21 @@ def test_plan_folder_move_positions(
 
 
 @pytest.mark.parametrize(
-    ("target_id", "reference_id", "message"),
+    ("target_id", "reference_id", "expected_error", "message"),
     [
-        (2, 2, "Cannot move folder relative to itself"),
-        (99, 1, "Target folder id 99 not found"),
-        (1, 99, "Reference folder id 99 not found"),
+        (2, 2, ZulipValidationError, "Cannot move folder relative to itself"),
+        (99, 1, ZulipNotFoundError, "Target folder id 99 not found"),
+        (1, 99, ZulipNotFoundError, "Reference folder id 99 not found"),
     ],
 )
-def test_plan_folder_move_rejects_invalid_ids(target_id: int, reference_id: int, message: str) -> None:
+def test_plan_folder_move_rejects_invalid_ids(
+    target_id: int,
+    reference_id: int,
+    expected_error: type[Exception],
+    message: str,
+) -> None:
     """Folder move planning validates target and reference membership."""
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises(expected_error, match=message):
         plan_folder_move([1, 2, 3], target_id, reference_id, "before")
 
 
