@@ -32,11 +32,11 @@ completed in atomic commits while preserving feature traceability.
 
 **Purpose**: Add reusable API functions for the channel folder endpoints.
 
-- [ ] T001 [F1] Add `ChannelFolder` parsing helpers in `lftools_uv/api/endpoints/zulip.py` for id, name, order, description, rendered_description, is_archived, date_created, and creator_id (FR-023, FR-034)
-- [ ] T002 [F1] Implement `list_channel_folders(client, include_archived=False, limit=None)` using `GET /api/v1/channel_folders` (FR-023)
-- [ ] T003 [F1] Implement `create_channel_folder(client, name, description="")` using `POST /api/v1/channel_folders/create` and returning `channel_folder_id` (FR-024)
-- [ ] T004 [F1] Implement `update_channel_folder(client, folder_id, *, name=None, description=None, is_archived=None)` using `PATCH /api/v1/channel_folders/{id}` (FR-025, FR-026, FR-027)
-- [ ] T005 [F1] Add thin `archive_channel_folder()` and `unarchive_channel_folder()` wrappers that call `update_channel_folder()` with `is_archived` true or false (FR-026, FR-027)
+- [x] T001 [F1] Add `ChannelFolder` parsing helpers in `lftools_uv/api/endpoints/zulip.py` for id, name, order, description, rendered_description, is_archived, date_created, and creator_id (FR-023, FR-034)
+- [x] T002 [F1] Implement `list_channel_folders(client, include_archived=False, limit=None)` using `GET /api/v1/channel_folders` (FR-023)
+- [x] T003 [F1] Implement `create_channel_folder(client, name, description="")` using `POST /api/v1/channel_folders/create` and returning `channel_folder_id` (FR-024)
+- [x] T004 [F1] Implement `update_channel_folder(client, folder_id, *, name=None, description=None, is_archived=None)` using `PATCH /api/v1/channel_folders/{id}` (FR-025, FR-026, FR-027)
+- [x] T005 [F1] Add thin `archive_channel_folder()` and `unarchive_channel_folder()` wrappers that call `update_channel_folder()` with `is_archived` true or false (FR-026, FR-027)
 
 **Checkpoint**: API layer can call all documented channel folder endpoints.
 
@@ -46,11 +46,11 @@ completed in atomic commits while preserving feature traceability.
 
 **Purpose**: Enforce server compatibility and server-provided folder limits.
 
-- [ ] T006 [F2] Add `FEATURE_LEVELS["channel-folders"] = 389` and `FEATURE_LEVELS["channel-folders-order"] = 414` in `lftools_uv/api/endpoints/zulip.py` (FR-031)
-- [ ] T007 [F2] Gate all folder API helpers and channel folder assignment paths with `check_feature_level(..., 389, "channel-folders")` (FR-030)
-- [ ] T008 [P] [F2] Add `/register` limit lookup helpers for `max_channel_folder_name_length` and `max_channel_folder_description_length` with per-client caching (FR-033)
-- [ ] T009 [F2] Validate folder create/update names and descriptions against known limits and produce clear validation errors before API calls (FR-024, FR-025, FR-033)
-- [ ] T010 [P] [F2] Ensure missing `order` on servers below FL 414 renders as `None` instead of raising parsing errors (FR-034)
+- [x] T006 [F2] Add `FEATURE_LEVELS["channel-folders"] = 389` and `FEATURE_LEVELS["channel-folders-order"] = 414` in `lftools_uv/api/endpoints/zulip.py` (FR-031)
+- [x] T007 [F2] Gate all folder API helpers and channel folder assignment paths with `check_feature_level(..., 389, "channel-folders")` (FR-030)
+- [x] T008 [P] [F2] Add `/register` limit lookup helpers for `max_channel_folder_name_length` and `max_channel_folder_description_length` with per-client caching (FR-033)
+- [x] T009 [F2] Validate folder create/update names and descriptions against known limits and produce clear validation errors before API calls (FR-024, FR-025, FR-033)
+- [x] T010 [P] [F2] Ensure missing `order` on servers below FL 414 renders as `None` instead of raising parsing errors (FR-034)
 
 **Checkpoint**: Unsupported servers and invalid folder values fail safely.
 
@@ -60,12 +60,12 @@ completed in atomic commits while preserving feature traceability.
 
 **Purpose**: Expose folder lifecycle operations in the CLI.
 
-- [ ] T011 [F3] Create `folder` Typer sub-app in `lftools_uv/typer_apps/zulip.py` and register it under the existing `zulip` app (FR-023)
-- [ ] T012 [F3] Implement `folder list` with `--include-archived`, `--limit`, `--json`, stable table columns, and conditional Status column (FR-023, FR-034)
-- [ ] T013 [F3] Implement `folder create` with required `--name`, optional `--description`, human ID output, and JSON mutation output (FR-024)
-- [ ] T014 [F3] Implement `folder update` with required `--folder-id`, optional `--name`/`--description`, and at-least-one-field validation (FR-025)
-- [ ] T015 [F3] Implement `folder archive` and `folder unarchive` commands using required `--folder-id` and JSON mutation output (FR-026, FR-027, FR-036)
-- [ ] T016 [P] [F3] Add help text and error messages documenting admin-only mutations and server-side permission handling (FR-035, FR-037)
+- [x] T011 [F3] Create `folder` Typer sub-app in `lftools_uv/typer_apps/zulip.py` and register it under the existing `zulip` app (FR-023)
+- [x] T012 [F3] Implement `folder list` with `--include-archived`, `--limit`, `--json`, stable table columns, and conditional Status column (FR-023, FR-034)
+- [x] T013 [F3] Implement `folder create` with required `--name`, optional `--description`, human ID output, and JSON mutation output (FR-024)
+- [x] T014 [F3] Implement `folder update` with required `--folder-id`, optional `--name`/`--description`, and at-least-one-field validation (FR-025)
+- [x] T015 [F3] Implement `folder archive` and `folder unarchive` commands using required `--folder-id` and JSON mutation output (FR-026, FR-027, FR-036)
+- [x] T016 [P] [F3] Add help text and error messages documenting admin-only mutations and server-side permission handling (FR-035, FR-037)
 
 **Checkpoint**: `lftools-uv zulip folder ...` commands work independently.
 
@@ -76,9 +76,9 @@ completed in atomic commits while preserving feature traceability.
 **Purpose**: Resolve folder names and explicit IDs consistently for channel
 assignment.
 
-- [ ] T017 [F4] Implement `resolve_channel_folder_token(client, token)` in `lftools_uv/api/endpoints/zulip.py` accepting names, `id:N`, and `none` (FR-028, FR-029, FR-032)
-- [ ] T018 [F4] Add numeric-looking-name not-found errors that hint to use `id:N` for numeric folder IDs (FR-032)
-- [ ] T019 [P] [F4] Add ambiguity and archived-folder behavior tests for folder resolution if Zulip responses can include duplicate or archived names (FR-032)
+- [x] T017 [F4] Implement `resolve_channel_folder_token(client, token)` in `lftools_uv/api/endpoints/zulip.py` accepting names, `id:N`, and `none` (FR-028, FR-029, FR-032)
+- [x] T018 [F4] Add numeric-looking-name not-found errors that hint to use `id:N` for numeric folder IDs (FR-032)
+- [x] T019 [P] [F4] Add ambiguity and archived-folder behavior tests for folder resolution if Zulip responses can include duplicate or archived names (FR-032)
 
 **Checkpoint**: Channel workflows can convert user folder input to `folder_id`.
 
@@ -88,11 +88,11 @@ assignment.
 
 **Purpose**: Add folder assignment to existing channel workflows.
 
-- [ ] T020 [F5] Add `--folder` option to `channel create` in `lftools_uv/typer_apps/zulip.py` and pass resolved `folder_id` to the create API payload (FR-028)
-- [ ] T021 [F5] Add `--folder` option to `channel update` and pass resolved `folder_id` to the stream PATCH payload (FR-029)
-- [ ] T022 [F5] Add `channel update` clear handling for `--folder none` and `--folder-id 0`, both mapping to `folder_id: null`; reject non-zero `--folder-id` with guidance to use `--folder id:N` (FR-029)
-- [ ] T023 [F5] Ensure channel create/update with folder assignment short-circuits below FL 389 before mutation (FR-030)
-- [ ] T024 [F5] Preserve existing channel create/update behavior when no folder flag is supplied (FR-028, FR-029)
+- [x] T020 [F5] Add `--folder` option to `channel create` in `lftools_uv/typer_apps/zulip.py` and pass resolved `folder_id` to the create API payload (FR-028)
+- [x] T021 [F5] Add `--folder` option to `channel update` and pass resolved `folder_id` to the stream PATCH payload (FR-029)
+- [x] T022 [F5] Add `channel update` clear handling for `--folder none` and `--folder-id 0`, both mapping to `folder_id: null`; reject non-zero `--folder-id` with guidance to use `--folder id:N` (FR-029)
+- [x] T023 [F5] Ensure channel create/update with folder assignment short-circuits below FL 389 before mutation (FR-030)
+- [x] T024 [F5] Preserve existing channel create/update behavior when no folder flag is supplied (FR-028, FR-029)
 
 **Checkpoint**: Existing channel workflows support folder assignment safely.
 
@@ -103,12 +103,12 @@ assignment.
 **Purpose**: Cover API helpers, CLI commands, feature gates, and channel
 integration.
 
-- [ ] T025 [P] [F6] Add API tests for folder list/create/update/archive/unarchive in `tests/unit/test_zulip_folders.py` or `tests/unit/test_zulip_api.py` (FR-023 through FR-027)
-- [ ] T026 [P] [F6] Add CLI tests for `folder list` table output, JSON output, `--include-archived`, `--limit`, FL 388 rejection, and missing-order behavior below FL 414 (FR-023, FR-030, FR-034)
-- [ ] T027 [P] [F6] Add CLI tests for folder create/update/archive/unarchive success, validation failures, feature-level errors, no-op archive/unarchive JSON success, and permission error propagation (FR-024 through FR-027, FR-030, FR-035, FR-036)
-- [ ] T028 [P] [F6] Add folder resolution tests for name, `id:N`, `none`, numeric not-found hints, and missing folder errors (FR-032)
-- [ ] T029 [P] [F6] Add channel create/update tests for `--folder` name, `id:N`, `none`, `--folder-id 0`, FL 389 gate, and unchanged behavior without folder flags (FR-028 through FR-030)
-- [ ] T030 [F6] Run `uv run pytest tests/unit/test_zulip_folders.py tests/unit/test_zulip_api.py tests/unit/test_zulip_cli.py` and fix failures (FR-023 through FR-036)
+- [x] T025 [P] [F6] Add API tests for folder list/create/update/archive/unarchive in `tests/unit/test_zulip_folders.py` or `tests/unit/test_zulip_api.py` (FR-023 through FR-027)
+- [x] T026 [P] [F6] Add CLI tests for `folder list` table output, JSON output, `--include-archived`, `--limit`, FL 388 rejection, and missing-order behavior below FL 414 (FR-023, FR-030, FR-034)
+- [x] T027 [P] [F6] Add CLI tests for folder create/update/archive/unarchive success, validation failures, feature-level errors, no-op archive/unarchive JSON success, and permission error propagation (FR-024 through FR-027, FR-030, FR-035, FR-036)
+- [x] T028 [P] [F6] Add folder resolution tests for name, `id:N`, `none`, numeric not-found hints, and missing folder errors (FR-032)
+- [x] T029 [P] [F6] Add channel create/update tests for `--folder` name, `id:N`, `none`, `--folder-id 0`, FL 389 gate, and unchanged behavior without folder flags (FR-028 through FR-030)
+- [x] T030 [F6] Run `uv run pytest tests/unit/test_zulip_folders.py tests/unit/test_zulip_api.py tests/unit/test_zulip_cli.py` and fix failures (FR-023 through FR-036)
 
 **Checkpoint**: Folder feature behavior is covered by unit and CLI tests.
 
@@ -118,10 +118,10 @@ integration.
 
 **Purpose**: Keep user-facing docs and implementation comments aligned.
 
-- [ ] T031 [P] [F7] Update command docstrings and `--help` text for folder commands and channel `--folder` flags in `lftools_uv/typer_apps/zulip.py` (FR-037)
-- [ ] T032 [P] [F7] Ensure API helper docstrings cite FL 389, FL 414, and no hard-delete behavior in `lftools_uv/api/endpoints/zulip.py` (FR-030, FR-034, FR-037)
-- [ ] T033 [F7] Reconcile `specs/002-zulip-channel-folders/` with implemented behavior before final implementation PR review (FR-037)
-- [ ] T034 [F7] Run `SKIP=basedpyright pre-commit run --all-files` and fix all reported issues without bypassing hooks (FR-037)
+- [x] T031 [P] [F7] Update command docstrings and `--help` text for folder commands and channel `--folder` flags in `lftools_uv/typer_apps/zulip.py` (FR-037)
+- [x] T032 [P] [F7] Ensure API helper docstrings cite FL 389, FL 414, and no hard-delete behavior in `lftools_uv/api/endpoints/zulip.py` (FR-030, FR-034, FR-037)
+- [x] T033 [F7] Reconcile `specs/002-zulip-channel-folders/` with implemented behavior before final implementation PR review (FR-037)
+- [x] T034 [F7] Run `SKIP=basedpyright pre-commit run --all-files` and fix all reported issues without bypassing hooks (FR-037)
 
 ---
 

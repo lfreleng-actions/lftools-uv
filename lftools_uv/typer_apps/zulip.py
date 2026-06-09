@@ -39,17 +39,23 @@ from lftools_uv.api.endpoints.zulip import (
     ZulipAmbiguityError,
     ZulipError,
     archive_channel,
+    archive_channel_folder,
+    create_channel_folder,
     get_client,
     get_topic_policy,
+    list_channel_folders,
     list_channels,
     list_groups,
     list_subscribers,
     list_users,
     resolve_channel,
+    resolve_channel_folder_token,
     set_topic_policy,
     subscribe_users,
     unarchive_channel,
+    unarchive_channel_folder,
     update_channel,
+    update_channel_folder,
     zulip_available,
 )
 
@@ -247,6 +253,13 @@ channel_app = typer.Typer(
 )
 zulip_app.add_typer(channel_app, name="channel")
 
+folder_app = typer.Typer(
+    name="folder",
+    help="Manage Zulip channel folders.",
+    no_args_is_help=True,
+)
+zulip_app.add_typer(folder_app, name="folder")
+
 
 @channel_app.command("list")
 def channel_list(
@@ -297,6 +310,175 @@ def channel_list(
             row.append("archived" if c.get("is_archived") else "active")
         rows.append(row)
     emit_table(rows, headers)
+
+
+@folder_app.command("list")
+def folder_list(
+    ctx: typer.Context,
+    include_archived: bool = typer.Option(
+        False,
+        "--include-archived",
+        help="Include archived folders and show their status.",
+    ),
+    limit: int | None = typer.Option(
+        None,
+        "--limit",
+        help="Limit the number of folders displayed.",
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit machine-readable JSON instead of a table.",
+        hidden=True,
+    ),
+) -> None:
+    """List channel folders visible to the authenticated user."""
+    options = {**(ctx.obj or {})}
+    if json_output:
+        options["json_output"] = True
+    try:
+        client = get_client(zuliprc=options.get("zuliprc"))
+        folders = list_channel_folders(client, include_archived=include_archived, limit=limit)
+    except ZulipError as exc:
+        raise handle_zulip_error(exc) from exc
+
+    if options.get("json_output"):
+        emit_json({"folders": folders})
+        return
+
+    headers = ["Folder ID", "Name", "Order", "Description"]
+    if include_archived:
+        headers.append("Status")
+    rows: list[list[Any]] = []
+    for folder in folders:
+        row: list[Any] = [
+            folder.get("id", ""),
+            folder.get("name", ""),
+            folder.get("order"),
+            folder.get("description", ""),
+        ]
+        if include_archived:
+            row.append("Archived" if folder.get("is_archived") else "Active")
+        rows.append(row)
+    emit_table(rows, headers)
+
+
+@folder_app.command("create")
+def folder_create(
+    ctx: typer.Context,
+    name: str = typer.Option(..., "--name", help="Folder name."),
+    description: str = typer.Option(
+        "",
+        "--description",
+        help="Folder description; defaults to empty.",
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit machine-readable JSON instead of text.",
+        hidden=True,
+    ),
+) -> None:
+    """Create a channel folder; Zulip enforces admin permissions."""
+    options = {**(ctx.obj or {})}
+    if json_output:
+        options["json_output"] = True
+    try:
+        client = get_client(zuliprc=options.get("zuliprc"))
+        result = create_channel_folder(client, name=name, description=description)
+    except ZulipError as exc:
+        raise handle_zulip_error(exc) from exc
+
+    if options.get("json_output"):
+        emit_json(result)
+    else:
+        typer.echo(f"Created folder '{result.get('folder_name') or name}' (ID: {result.get('folder_id')})")
+
+
+@folder_app.command("update")
+def folder_update(
+    ctx: typer.Context,
+    folder_id: int = typer.Option(..., "--folder-id", help="Target folder ID."),
+    name: str | None = typer.Option(None, "--name", help="New folder name."),
+    description: str | None = typer.Option(None, "--description", help="New folder description."),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit machine-readable JSON instead of text.",
+        hidden=True,
+    ),
+) -> None:
+    """Update a channel folder name and/or description."""
+    if name is None and description is None:
+        emit_error("folder update requires at least one of --name or --description")
+        raise typer.Exit(code=1)
+    options = {**(ctx.obj or {})}
+    if json_output:
+        options["json_output"] = True
+    try:
+        client = get_client(zuliprc=options.get("zuliprc"))
+        result = update_channel_folder(client, folder_id=folder_id, name=name, description=description)
+    except ZulipError as exc:
+        raise handle_zulip_error(exc) from exc
+
+    if options.get("json_output"):
+        emit_json(result)
+    else:
+        typer.echo(f"Updated folder {result.get('folder_id') or folder_id}")
+
+
+def _folder_archive_common(
+    ctx: typer.Context,
+    *,
+    folder_id: int,
+    json_output: bool,
+    archive: bool,
+) -> None:
+    """Shared implementation for folder archive/unarchive commands."""
+    options = {**(ctx.obj or {})}
+    if json_output:
+        options["json_output"] = True
+    try:
+        client = get_client(zuliprc=options.get("zuliprc"))
+        result = archive_channel_folder(client, folder_id) if archive else unarchive_channel_folder(client, folder_id)
+    except ZulipError as exc:
+        raise handle_zulip_error(exc) from exc
+
+    if options.get("json_output"):
+        emit_json(result)
+    else:
+        verb = "Archived" if archive else "Unarchived"
+        typer.echo(f"{verb} folder {result.get('folder_id') or folder_id}")
+
+
+@folder_app.command("archive")
+def folder_archive(
+    ctx: typer.Context,
+    folder_id: int = typer.Option(..., "--folder-id", help="Target folder ID."),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit machine-readable JSON instead of text.",
+        hidden=True,
+    ),
+) -> None:
+    """Archive a channel folder; Zulip exposes no hard delete."""
+    _folder_archive_common(ctx, folder_id=folder_id, json_output=json_output, archive=True)
+
+
+@folder_app.command("unarchive")
+def folder_unarchive(
+    ctx: typer.Context,
+    folder_id: int = typer.Option(..., "--folder-id", help="Target folder ID."),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit machine-readable JSON instead of text.",
+        hidden=True,
+    ),
+) -> None:
+    """Reactivate an archived channel folder."""
+    _folder_archive_common(ctx, folder_id=folder_id, json_output=json_output, archive=False)
 
 
 def _resolve_channel_target(channel: str | None, channel_id: str | None) -> None:
@@ -455,6 +637,11 @@ def channel_create(
         "--can-remove-subscribers-group",
         help="Comma-separated groups that can remove subscribers; use 'id:NUM' for ID lookup.",
     ),
+    folder: str | None = typer.Option(
+        None,
+        "--folder",
+        help="Folder name, 'id:NUM', or 'none' for no folder.",
+    ),
     announce: bool = typer.Option(
         False,
         "--announce",
@@ -533,6 +720,11 @@ def channel_create(
         if can_remove_subscribers_group:
             _, can_remove_value = resolve_groups(client, can_remove_subscribers_group)
 
+        folder_id: int | None = None
+        folder_id_specified = folder is not None
+        if folder is not None:
+            folder_id = resolve_channel_folder_token(client, folder)
+
         result = create_channel(
             client,
             name=name,
@@ -543,6 +735,8 @@ def channel_create(
             can_remove_subscribers_group_value=can_remove_value,
             announce=announce_value,
             topic_policy=topic_policy,
+            folder_id=folder_id,
+            folder_id_specified=folder_id_specified,
         )
     except ZulipAmbiguityError as exc:
         emit_error(str(exc))
@@ -1169,6 +1363,16 @@ def channel_update(  # noqa: PLR0913 - CLI parity with contract
         "--can-remove-subscribers-group",
         help="Group(s) permitted to remove subscribers (group-setting syntax).",
     ),
+    folder: str | None = typer.Option(
+        None,
+        "--folder",
+        help="Folder name, 'id:NUM', or 'none' to clear the assignment.",
+    ),
+    folder_id: str | None = typer.Option(
+        None,
+        "--folder-id",
+        help="Clear-only compatibility form; only 0 is accepted.",
+    ),
     include_archived: bool = typer.Option(
         False,
         "--include-archived",
@@ -1207,15 +1411,34 @@ def channel_update(  # noqa: PLR0913 - CLI parity with contract
             topic_policy,
             allow_group,
             can_remove_subscribers_group,
+            folder,
+            folder_id,
         )
     ) or bool(subscribe)
     if not any_setting:
         emit_error(
             "channel update requires at least one setting to change "
             "(--name, --description, --type, --topic-policy, --allow-group, "
-            "--subscribe, or --can-remove-subscribers-group)"
+            "--folder, --subscribe, or --can-remove-subscribers-group)"
         )
         raise typer.Exit(code=1)
+
+    if folder is not None and folder_id is not None:
+        emit_error("Specify only one of --folder or --folder-id")
+        raise typer.Exit(code=1)
+
+    parsed_folder_id: int | None = None
+    folder_id_specified = False
+    if folder_id is not None:
+        try:
+            parsed_clear_id = int(folder_id)
+        except ValueError:
+            emit_error("--folder-id must be 0 to clear the folder assignment; use --folder id:N to assign by ID")
+            raise typer.Exit(code=1) from None
+        if parsed_clear_id != 0:
+            emit_error("--folder-id only accepts 0 to clear; use --folder id:N to assign a folder")
+            raise typer.Exit(code=1)
+        folder_id_specified = True
 
     # Validate --type choice locally so the error is presented before
     # any network calls are made.
@@ -1252,6 +1475,9 @@ def channel_update(  # noqa: PLR0913 - CLI parity with contract
     options = ctx.obj or {}
     try:
         client = get_client(zuliprc=options.get("zuliprc"))
+        if folder is not None:
+            parsed_folder_id = resolve_channel_folder_token(client, folder)
+            folder_id_specified = True
         result = update_channel(
             client,
             name=channel,
@@ -1264,6 +1490,8 @@ def channel_update(  # noqa: PLR0913 - CLI parity with contract
             user_id_mode=cast(IdMode | None, user_id_mode),
             allow_group=allow_group,
             can_remove_subscribers_group=can_remove_subscribers_group,
+            folder_id=parsed_folder_id,
+            folder_id_specified=folder_id_specified,
             include_archived=include_archived,
         )
     except ZulipError as exc:

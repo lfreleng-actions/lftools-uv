@@ -1868,6 +1868,7 @@ def test_channel_unsubscribe_json_error_client_init_failure(
         raise ZulipError("config missing")
 
     monkeypatch.setattr(zulip_mod, "get_client", _boom)
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
     runner = CliRunner()
     result = runner.invoke(
         zulip_app,

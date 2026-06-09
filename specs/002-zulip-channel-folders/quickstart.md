@@ -121,9 +121,6 @@ CLI. The CLI does not pre-flight admin role checks.
 
 ## Development
 
-> **Note**: The paths below are planned locations; implementation happens in a
-> later PR.
-
 ```bash
 # Run folder-focused tests once implementation exists
 uv run pytest tests/unit/test_zulip_folders.py
