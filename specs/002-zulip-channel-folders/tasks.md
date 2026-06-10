@@ -125,6 +125,21 @@ integration.
 
 ---
 
+## Phase F8: Folder Move and Bulk Reorder
+
+**Purpose**: Expose Zulip's bulk channel-folder reordering API through a
+semantic move command.
+
+- [x] T035 [F8] Implement `reorder_channel_folders(client, order)` in `lftools_uv/api/endpoints/zulip.py` using `PATCH /api/v1/channel_folders` with JSON-encoded `order` and the existing `channel-folders-order` FL 414 gate (FR-038)
+- [x] T036 [F8] Add pure `plan_folder_move(current_order, target_id, reference_id, position)` helper in `lftools_uv/api/endpoints/zulip.py` for before/after move planning (FR-038)
+- [x] T037 [F8] Extract shared folder token resolution in `lftools_uv/api/endpoints/zulip.py` and add move-reference support for name, `id:N`, and bare integer IDs (FR-038)
+- [x] T038 [F8] Add `zulip folder move --folder-id N --before REF|--after REF` in `lftools_uv/typer_apps/zulip.py`, including mutual exclusion, target/reference validation, archived-folder-inclusive ordering, and success output (FR-038)
+- [x] T039 [P] [F8] Add API tests in `tests/unit/test_zulip_api.py` for reorder payloads, FL 414 gating, API error propagation, and direct move-planner cases (FR-038)
+- [x] T040 [P] [F8] Add CLI tests in `tests/unit/test_zulip_cli.py` for move before/after, reference resolution by name/`id:N`/bare ID, self-move, missing target, missing numeric reference, and before/after mutex errors (FR-038)
+- [x] T041 [F8] Update `specs/002-zulip-channel-folders/` design artifacts to document `folder move`, the bulk reorder API, FL 414 behavior, and quickstart examples (FR-038)
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -138,6 +153,8 @@ integration.
 - **F6 Tests**: Test tasks can be written before implementation and completed
   alongside each phase.
 - **F7 Polish**: Depends on all selected implementation phases.
+- **F8 Folder Move**: Depends on F1 list helpers and F4 folder resolution
+  patterns; tests and spec sync complete alongside implementation.
 
 ### Parallel Opportunities
 
@@ -146,6 +163,8 @@ integration.
   integration test files.
 - F3 folder commands can be implemented in parallel with F4 resolution after
   the shared API helpers exist, as long as final integration waits for F4.
+- T039 and T040 can be implemented in parallel after T035 through T038 define
+  the helper and CLI surfaces.
 
 ## Implementation Strategy
 
@@ -160,14 +179,16 @@ integration.
 1. Add folder lifecycle helpers and commands.
 2. Add folder resolution.
 3. Integrate `--folder` into channel create/update.
-4. Complete tests and polish.
+4. Add `folder move` on top of the existing folder list and resolver helpers.
+5. Complete tests and polish.
 
 ## Notes
 
 - Each task should be small enough to review as a single commit.
 - Tasks that update `tasks.md` remain separate commits per project rules.
-- Do not add implementation code in the spec-only PR.
 - Use Zulip docs for source facts:
   <https://zulip.com/api/get-channel-folders>,
   <https://zulip.com/api/create-channel-folder>, and
   <https://zulip.com/api/update-channel-folder>.
+- `folder move` follows the Zulip bulk reorder API at
+  `PATCH /api/v1/channel_folders` and deliberately avoids a raw order-array CLI.

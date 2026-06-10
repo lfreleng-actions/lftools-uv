@@ -978,23 +978,83 @@ def unarchive_channel_folder(client: Any, folder_id: int) -> dict[str, Any]:
     return update_channel_folder(client, folder_id, is_archived=False)
 
 
-def resolve_channel_folder_token(client: Any, token: str) -> int | None:
-    """Resolve a folder token for channel assignment.
+def reorder_channel_folders(client: Any, order: list[int]) -> dict[str, Any]:
+    """Reorder all channel folders via ``PATCH /channel_folders``.
 
-    Accepts a case-insensitive folder name, ``id:N`` for explicit ID
-    lookup, or ``none`` to clear the assignment. Numeric-looking names
-    are treated as names; if absent, the error hints to use ``id:N``.
+    Zulip requires feature level 414 and expects ``order`` as a
+    JSON-encoded array containing every channel folder ID exactly once.
+    The server enforces admin-only permissions and validates completeness.
     """
-    check_feature_level(client, FEATURE_LEVELS["channel-folders"], "channel-folders")
+    check_feature_level(client, FEATURE_LEVELS["channel-folders-order"], "channel-folders-order")
+    for folder_id in order:
+        _validate_channel_folder_assignment_id(folder_id)
+    request = {"order": json.dumps(order)}
+    try:
+        response = client.call_endpoint(
+            url="channel_folders",
+            method="PATCH",
+            request=request,
+        )
+    except Exception as exc:  # pragma: no cover - network errors
+        raise ZulipAPIError(f"Failed to reorder channel folders: {exc}") from exc
+    if not isinstance(response, dict) or response.get("result") != "success":
+        msg = response.get("msg") if isinstance(response, dict) else None
+        raise ZulipAPIError(f"Failed to reorder channel folders: {msg or response!r}")
+    return response
+
+
+def plan_folder_move(
+    current_order: list[int],
+    target_id: int,
+    reference_id: int,
+    position: Literal["before", "after"],
+) -> list[int]:
+    """Return the folder order produced by moving a folder."""
+    if position not in ("before", "after"):
+        raise ZulipValidationError(f"Invalid folder move position: {position!r}")
+    _validate_channel_folder_assignment_id(target_id)
+    _validate_channel_folder_assignment_id(reference_id)
+    if target_id == reference_id:
+        raise ZulipValidationError("Cannot move folder relative to itself")
+    if target_id not in current_order:
+        raise ZulipNotFoundError(f"Target folder id {target_id} not found")
+    if reference_id not in current_order:
+        raise ZulipNotFoundError(f"Reference folder id {reference_id} not found")
+
+    new_order = [folder_id for folder_id in current_order if folder_id != target_id]
+    insert_at = new_order.index(reference_id)
+    if position == "after":
+        insert_at += 1
+    new_order.insert(insert_at, target_id)
+    return new_order
+
+
+def _resolve_single_channel_folder_token(
+    token: str,
+    folders: list[dict[str, Any]],
+    *,
+    allow_none: bool,
+    bare_int_is_id: bool,
+    option_name: str,
+) -> int | None:
+    """Resolve one folder token against an already-fetched folder list."""
     token = token.strip()
     if not token:
-        raise ZulipValidationError("--folder must not be empty")
-    if token.casefold() == "none":
+        raise ZulipValidationError(f"{option_name} must not be empty")
+    if allow_none and token.casefold() == "none":
         return None
 
-    folders = list_channel_folders(client, include_archived=True)
+    id_lookup = False
     if token.casefold().startswith("id:"):
         suffix = token[3:].strip()
+        id_lookup = True
+    elif bare_int_is_id and token.isdigit():
+        suffix = token
+        id_lookup = True
+    else:
+        suffix = ""
+
+    if id_lookup:
         try:
             wanted = int(suffix)
         except ValueError as exc:
@@ -1004,6 +1064,10 @@ def resolve_channel_folder_token(client: Any, token: str) -> int | None:
         for folder in folders:
             if folder["id"] == wanted:
                 return wanted
+        if bare_int_is_id and token.isdigit():
+            raise ZulipNotFoundError(
+                f"No channel folder with id {wanted}. If you meant a numeric folder ID, use 'id:{wanted}'."
+            )
         raise ZulipNotFoundError(f"No channel folder with id {wanted}")
 
     target = token.casefold()
@@ -1025,6 +1089,38 @@ def resolve_channel_folder_token(client: Any, token: str) -> int | None:
     if not isinstance(folder_id, int):
         raise ZulipAPIError(f"Resolved folder missing numeric id: {matches[0]!r}")
     return folder_id
+
+
+def resolve_channel_folder_reference(token: str, folders: list[dict[str, Any]]) -> int:
+    """Resolve a folder move reference from name, ``id:N``, or bare ID."""
+    folder_id = _resolve_single_channel_folder_token(
+        token,
+        folders,
+        allow_none=False,
+        bare_int_is_id=True,
+        option_name="folder reference",
+    )
+    if folder_id is None:  # pragma: no cover - allow_none=False
+        raise ZulipValidationError("folder reference must identify a folder")
+    return folder_id
+
+
+def resolve_channel_folder_token(client: Any, token: str) -> int | None:
+    """Resolve a folder token for channel assignment.
+
+    Accepts a case-insensitive folder name, ``id:N`` for explicit ID
+    lookup, or ``none`` to clear the assignment. Numeric-looking names
+    are treated as names; if absent, the error hints to use ``id:N``.
+    """
+    check_feature_level(client, FEATURE_LEVELS["channel-folders"], "channel-folders")
+    folders = list_channel_folders(client, include_archived=True)
+    return _resolve_single_channel_folder_token(
+        token,
+        folders,
+        allow_none=True,
+        bare_int_is_id=False,
+        option_name="--folder",
+    )
 
 
 # ---------------------------------------------------------------------------

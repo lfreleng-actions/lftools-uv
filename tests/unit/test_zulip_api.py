@@ -20,7 +20,7 @@ Covers the foundational tasks T016–T019:
 from __future__ import annotations
 
 import json as _json
-from typing import Any, cast
+from typing import Any, Literal, cast
 from unittest import mock
 
 import pytest
@@ -44,6 +44,8 @@ from lftools_uv.api.endpoints.zulip import (
     list_channels,
     list_groups,
     list_users,
+    plan_folder_move,
+    reorder_channel_folders,
     resolve_channel,
     resolve_groups,
     resolve_users,
@@ -114,6 +116,101 @@ def test_feature_level_table_contains_expected_keys() -> None:
         assert key in FEATURE_LEVELS
         assert isinstance(FEATURE_LEVELS[key], int)
         assert FEATURE_LEVELS[key] >= 0
+
+
+def _folder_reorder_client(
+    *,
+    feature_level: int = 500,
+    response: dict[str, Any] | None = None,
+) -> Any:
+    """Return a mock client for channel-folder reorder API tests."""
+    client = mock.MagicMock()
+    client.get_server_settings.return_value = {
+        "result": "success",
+        "zulip_feature_level": feature_level,
+    }
+    client.last_requests = []
+
+    def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> dict[str, Any]:
+        client.last_requests.append({"url": url, "method": method, "request": request})
+        return response if response is not None else {"result": "success", "msg": ""}
+
+    client.call_endpoint.side_effect = call_endpoint
+    return client
+
+
+@pytest.mark.parametrize(
+    ("current_order", "target_id", "reference_id", "position", "expected"),
+    [
+        ([1, 2, 3], 3, 1, "before", [3, 1, 2]),
+        ([1, 2, 3], 1, 3, "after", [2, 3, 1]),
+        ([1, 2, 3, 4], 2, 4, "after", [1, 3, 4, 2]),
+        ([1, 2, 3, 4], 4, 2, "before", [1, 4, 2, 3]),
+        ([1, 2, 3], 2, 1, "before", [2, 1, 3]),
+        ([1, 2, 3], 2, 3, "after", [1, 3, 2]),
+    ],
+)
+def test_plan_folder_move_positions(
+    current_order: list[int],
+    target_id: int,
+    reference_id: int,
+    position: str,
+    expected: list[int],
+) -> None:
+    """Folder move planning covers start, end, forward, and backward moves."""
+    assert (
+        plan_folder_move(current_order, target_id, reference_id, cast(Literal["before", "after"], position)) == expected
+    )
+
+
+@pytest.mark.parametrize(
+    ("target_id", "reference_id", "expected_error", "message"),
+    [
+        (0, 1, ZulipValidationError, "positive integer"),
+        (1, -1, ZulipValidationError, "positive integer"),
+        (2, 2, ZulipValidationError, "Cannot move folder relative to itself"),
+        (99, 1, ZulipNotFoundError, "Target folder id 99 not found"),
+        (1, 99, ZulipNotFoundError, "Reference folder id 99 not found"),
+    ],
+)
+def test_plan_folder_move_rejects_invalid_ids(
+    target_id: int,
+    reference_id: int,
+    expected_error: type[Exception],
+    message: str,
+) -> None:
+    """Folder move planning validates target and reference membership."""
+    with pytest.raises(expected_error, match=message):
+        plan_folder_move([1, 2, 3], target_id, reference_id, "before")
+
+
+def test_reorder_channel_folders_payload() -> None:
+    """Bulk folder reorder sends a JSON-encoded order array to the API."""
+    client = _folder_reorder_client()
+    response = reorder_channel_folders(client, [2, 1, 3])
+    assert response == {"result": "success", "msg": ""}
+    assert client.last_requests == [
+        {
+            "url": "channel_folders",
+            "method": "PATCH",
+            "request": {"order": _json.dumps([2, 1, 3])},
+        }
+    ]
+
+
+def test_reorder_channel_folders_feature_gate() -> None:
+    """Bulk folder reorder requires Zulip feature level 414."""
+    client = _folder_reorder_client(feature_level=413)
+    with pytest.raises(ZulipFeatureLevelError):
+        reorder_channel_folders(client, [1, 2, 3])
+    assert client.last_requests == []
+
+
+def test_reorder_channel_folders_api_error() -> None:
+    """Bulk folder reorder surfaces Zulip API validation failures."""
+    client = _folder_reorder_client(response={"result": "error", "msg": "Invalid order mapping"})
+    with pytest.raises(ZulipAPIError, match="Invalid order mapping"):
+        reorder_channel_folders(client, [1, 1, 2])
 
 
 # ---------------------------------------------------------------------------

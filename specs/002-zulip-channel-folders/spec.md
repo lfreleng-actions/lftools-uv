@@ -40,6 +40,16 @@ folders, including folder lifecycle commands and channel folder assignment."
 - Q: Should archive/unarchive be flags on update? → A: No. Use separate
   `archive` and `unarchive` commands to match the existing channel UX.
 
+### Session 2026-06-09
+
+- Q: How should administrators reorder folders? → A: Add
+  `zulip folder move --folder-id N --before REF` and
+  `zulip folder move --folder-id N --after REF`, where `REF` is a folder
+  name, `id:N`, or bare numeric ID.
+- Q: Should the CLI expose a raw order array? → A: No. Use semantic
+  before/after placement and compute the complete order required by Zulip's
+  bulk reorder API.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Discover channel folders (Priority: P1)
@@ -119,6 +129,33 @@ feature-level errors, and propagated API permission failures.
    it with `--folder none` or `--folder-id 0`, **Then** the update payload
    includes `folder_id: null`.
 
+---
+
+### User Story 4 - Reorder channel folders (Priority: P2)
+
+An organization administrator can move one channel folder before or after
+another folder without manually constructing the complete folder order.
+
+**Why this priority**: Folder order controls the navigation and organization
+experience after folders exist. A semantic move command avoids error-prone raw
+bulk order arrays.
+
+**Independent Test**: Mock `GET /api/v1/channel_folders` and
+`PATCH /api/v1/channel_folders`, then verify `folder move` resolves references,
+plans the complete order, gates at feature level 414, and propagates Zulip
+validation or permission errors.
+
+**Acceptance Scenarios**:
+
+1. **Given** folders Projects, Engineering, and Archive, **When** the admin runs
+   `zulip folder move --folder-id 12 --before Projects`, **Then** the CLI sends
+   an order placing folder 12 before Projects.
+2. **Given** folder IDs 10 and 12, **When** the admin runs
+   `zulip folder move --folder-id 10 --after id:12`, **Then** the CLI sends an
+   order placing folder 10 after folder 12.
+3. **Given** a numeric reference `12`, **When** the admin uses it with
+   `--before` or `--after`, **Then** the CLI treats it as folder ID 12.
+
 ### Edge Cases
 
 - Servers below FL 389 reject all folder commands and `--folder` usage before
@@ -132,6 +169,12 @@ feature-level errors, and propagated API permission failures.
   found, the CLI suggests `--folder id:N` for numeric IDs.
 - Permission errors from admin-only folder mutations are displayed as returned
   by Zulip and are not pre-flight checked by the CLI.
+- `folder move` requires FL 414 because it uses the bulk folder reorder API.
+- `folder move` requires exactly one of `--before` or `--after`.
+- `folder move` rejects moves where the target folder equals the reference
+  folder.
+- `folder move` lists folders with archived entries included so the complete
+  order sent to Zulip preserves every folder ID exactly once.
 - Folder length limits come from `/register` fields
   `max_channel_folder_name_length` and
   `max_channel_folder_description_length`; the CLI validates when those limits
@@ -199,6 +242,16 @@ feature-level errors, and propagated API permission failures.
 - **FR-037**: Contracts and quickstart documentation MUST describe the new
   folder commands, updated channel flags, feature-level gates, and API facts
   from the Zulip channel folders documentation.
+- **FR-038**: System MUST provide a `lftools-uv zulip folder move` command with
+  required `--folder-id` and exactly one of `--before REF` or `--after REF`.
+  `REF` MUST accept a folder name, `id:N`, or bare numeric folder ID. The
+  command MUST fetch the complete folder list including archived folders,
+  compute a complete ID order containing every folder exactly once, and call
+  `PATCH /api/v1/channel_folders` with `order` as a JSON-encoded form value.
+  The command MUST require feature level 414 using the existing
+  `channel-folders-order` gate, reject missing targets or references, reject
+  self-relative moves, and surface server permission or validation errors
+  as-is.
 
 ### Key Entities
 
@@ -224,6 +277,8 @@ feature-level errors, and propagated API permission failures.
   folder commands and `--folder` usage.
 - **SC-013**: JSON output from folder commands is valid parseable JSON and uses
   stable field names for scripting.
+- **SC-014**: Administrators can move a folder before or after another folder
+  with one command, and the server receives a complete valid order array.
 
 ## Assumptions
 
@@ -231,11 +286,12 @@ feature-level errors, and propagated API permission failures.
   and Typer command group from `001-zulip-channel-mgmt` are present.
 - Folder commands use Zulip REST API v1 endpoints documented at
   <https://zulip.com/api/get-channel-folders>,
-  <https://zulip.com/api/create-channel-folder>, and
-  <https://zulip.com/api/update-channel-folder>.
+  <https://zulip.com/api/create-channel-folder>,
+  <https://zulip.com/api/update-channel-folder>, and the bulk reorder
+  `PATCH /api/v1/channel_folders` endpoint.
 - Channel folder APIs are new in Zulip 11.0 at feature level 389. Folder order
   data is available starting at feature level 414.
 - Folder list is available to all authenticated users. Folder mutations are
   admin-only, and channel folder assignment permissions are enforced by Zulip.
-- Per-user folder ordering and bulk folder reorder are out of scope because no
-  API exists for those operations as of the cited channel folder API docs.
+- Per-user folder ordering is out of scope; the bulk reorder endpoint updates
+  the organization-wide folder order.

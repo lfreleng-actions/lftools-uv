@@ -12,15 +12,17 @@ SPDX-FileCopyrightText: 2026 The Linux Foundation
 ## Summary
 
 Add Zulip channel folder management commands to lftools-uv, providing CLI
-commands for listing, creating, updating, archiving, and unarchiving channel
-folders, plus folder assignment on existing channel create/update workflows.
-The implementation extends the existing Zulip API layer
+commands for listing, creating, updating, archiving, unarchiving, and moving
+channel folders, plus folder assignment on existing channel create/update
+workflows. The implementation extends the existing Zulip API layer
 (`lftools_uv/api/endpoints/zulip.py`) and Typer presentation layer
 (`lftools_uv/typer_apps/zulip.py`). Runtime feature-level detection gates all
 folder behavior at Zulip feature level 389, while folder ordering is treated as
-optional until feature level 414. The CLI uses one `--folder` assignment flag
-accepting names, `id:N`, or `none`; `--folder-id 0` is accepted only for the
-explicit clear behavior locked by the spec.
+optional until feature level 414. The `folder move` command uses Zulip's bulk
+`PATCH /api/v1/channel_folders` reorder API at FL 414 and exposes semantic
+`--before`/`--after` placement instead of a raw order array. The CLI uses one
+`--folder` assignment flag accepting names, `id:N`, or `none`; `--folder-id 0`
+is accepted only for the explicit clear behavior locked by the spec.
 
 ## Technical Context
 
@@ -34,9 +36,9 @@ for CLI tests
 **Project Type**: CLI tool (extending existing multi-command CLI)
 **Performance Goals**: List operations <5s for 100 folders (SC-009)
 **Constraints**: Feature-level gate at FL 389; folder `order` optional before
-FL 414; no hard-delete endpoint
-**Scale/Scope**: Single Zulip server per invocation; channel folder lifecycle
-and channel assignment only
+FL 414; folder move requires FL 414; no hard-delete endpoint
+**Scale/Scope**: Single Zulip server per invocation; channel folder lifecycle,
+ordering, and channel assignment only
 
 ## Constitution Check
 
@@ -100,9 +102,11 @@ manageable.
 
 Research confirms Zulip channel folders are exposed by the
 `/api/v1/channel_folders` resource family, new in Zulip 11.0 at feature level
-389. Folder order is available starting at feature level 414. There is no
-hard-delete endpoint; archive and unarchive use the update endpoint. Channel
-assignment uses existing stream create/update endpoints with `folder_id`.
+389. Folder order is available starting at feature level 414, and bulk reorder
+uses `PATCH /api/v1/channel_folders` with a complete JSON-encoded `order`
+array. There is no hard-delete endpoint; archive and unarchive use the update
+endpoint. Channel assignment uses existing stream create/update endpoints with
+`folder_id`.
 
 See `research.md` for details and API references.
 
@@ -129,6 +133,7 @@ Tasks map FRs to implementation phases:
 | F5 | Channel `--folder` integration | FR-028, FR-029 |
 | F6 | Tests | FR-023 through FR-036 |
 | F7 | Spec sync and help text | FR-037 |
+| F8 | Folder move and reorder | FR-038 |
 
 ## Testing Approach
 
@@ -139,16 +144,18 @@ Tasks map FRs to implementation phases:
   permission error propagation.
 - Add channel create/update tests covering `--folder` by name, `id:N`, numeric
   not-found hint, `none`, and `--folder-id 0` clearing.
+- Add folder move tests covering reorder payloads, FL 414 gating, before/after
+  planning, name/`id:N`/bare-ID references, self-move rejection, missing target
+  and reference errors, and server error propagation.
 - Add feature-level tests for FL 388 rejection, FL 389 success without order,
   and FL 414 order display.
 - Run `uv run pytest tests/`, `uv run ruff check .`, `uv run mypy lftools_uv`,
-  and `uv run basedpyright` before implementation PRs. For this spec-only PR,
-  run pre-commit with the repository's accepted `SKIP=basedpyright` setting.
+  and pre-commit with the repository's accepted `SKIP=basedpyright` setting
+  before implementation PRs.
 
 ## Out of Scope
 
-- Implementation code in this PR.
 - Per-user folder ordering changes; no API exists as of FL 389.
-- Bulk folder reorder.
+- A raw `folder reorder --order ID,ID,ID` command.
 - Hard-delete of channel folders; Zulip exposes archive only.
 - Client-side role pre-flight checks for admin-only folder mutations.

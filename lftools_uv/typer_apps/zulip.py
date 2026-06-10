@@ -48,7 +48,10 @@ from lftools_uv.api.endpoints.zulip import (
     list_groups,
     list_subscribers,
     list_users,
+    plan_folder_move,
+    reorder_channel_folders,
     resolve_channel,
+    resolve_channel_folder_reference,
     resolve_channel_folder_token,
     set_topic_policy,
     subscribe_users,
@@ -479,6 +482,74 @@ def folder_unarchive(
 ) -> None:
     """Reactivate an archived channel folder."""
     _folder_archive_common(ctx, folder_id=folder_id, json_output=json_output, archive=False)
+
+
+def _current_folder_order(folders: list[dict[str, Any]]) -> list[int]:
+    """Return folder IDs in the server's current order."""
+    indexed: list[tuple[bool, int, int, int]] = []
+    for index, folder in enumerate(folders):
+        folder_id = folder.get("id")
+        if not isinstance(folder_id, int) or isinstance(folder_id, bool):
+            raise ValueError(f"Channel folder missing numeric id: {folder!r}")
+        order = folder.get("order")
+        if isinstance(order, int) and not isinstance(order, bool):
+            indexed.append((False, order, index, folder_id))
+        else:
+            indexed.append((True, index, index, folder_id))
+    return [folder_id for _missing, _order, _index, folder_id in sorted(indexed)]
+
+
+@folder_app.command("move")
+def folder_move(
+    ctx: typer.Context,
+    folder_id: int = typer.Option(..., "--folder-id", help="Folder ID to move."),
+    before: str | None = typer.Option(None, "--before", help="Move before this folder name, id:NUM, or ID."),
+    after: str | None = typer.Option(None, "--after", help="Move after this folder name, id:NUM, or ID."),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit machine-readable JSON instead of text.",
+        hidden=True,
+    ),
+) -> None:
+    """Move a channel folder before or after another folder."""
+    if (before is None) == (after is None):
+        emit_error("Exactly one of --before or --after is required")
+        raise typer.Exit(code=1)
+
+    options = {**(ctx.obj or {})}
+    if json_output:
+        options["json_output"] = True
+    position: Literal["before", "after"] = "before" if before is not None else "after"
+    reference_token = before if before is not None else after
+    assert reference_token is not None
+
+    try:
+        client = get_client(zuliprc=options.get("zuliprc"))
+        folders = list_channel_folders(client, include_archived=True)
+        reference_id = resolve_channel_folder_reference(reference_token, folders)
+        current_order = _current_folder_order(folders)
+        new_order = plan_folder_move(current_order, folder_id, reference_id, position)
+        reorder_channel_folders(client, new_order)
+    except ValueError as exc:
+        emit_error(str(exc))
+        raise typer.Exit(code=1) from exc
+    except ZulipError as exc:
+        raise handle_zulip_error(exc) from exc
+
+    if options.get("json_output"):
+        emit_json(
+            {
+                "status": "success",
+                "operation": "move",
+                "folder_id": folder_id,
+                "reference_folder_id": reference_id,
+                "position": position,
+                "order": new_order,
+            }
+        )
+    else:
+        typer.echo(f"Moved folder {folder_id} {position} folder {reference_id}", err=True)
 
 
 def _resolve_channel_target(channel: str | None, channel_id: str | None) -> None:

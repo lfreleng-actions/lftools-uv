@@ -183,6 +183,39 @@ def _patched_channel_client(monkeypatch: pytest.MonkeyPatch, response: dict[str,
     return fake
 
 
+MOVE_FOLDERS = [
+    {"id": 10, "name": "Projects", "description": "", "order": 1, "is_archived": False},
+    {"id": 11, "name": "Engineering", "description": "", "order": 2, "is_archived": False},
+    {"id": 12, "name": "Old", "description": "", "order": 3, "is_archived": True},
+]
+
+
+def _patched_folder_move_client(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    folders: list[dict[str, Any]] | None = None,
+) -> mock.MagicMock:
+    """Patch ``get_client`` with a fake client for folder move tests."""
+    fake = mock.MagicMock()
+    fake.get_server_settings.return_value = {"result": "success", "zulip_feature_level": 500}
+    fake.last_requests = []
+
+    def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> dict[str, Any]:
+        fake.last_requests.append({"url": url, "method": method, "request": request})
+        if url == "channel_folders" and method == "GET":
+            assert request == {"include_archived": True}
+            return {"result": "success", "channel_folders": folders if folders is not None else MOVE_FOLDERS}
+        if url == "channel_folders" and method == "PATCH":
+            fake.last_order = json.loads(cast(str, (request or {})["order"]))
+            return {"result": "success", "msg": ""}
+        return {"result": "error", "msg": f"unexpected endpoint {method} {url}"}
+
+    fake.call_endpoint.side_effect = call_endpoint
+    monkeypatch.setattr(zulip_mod, "get_client", lambda **_kw: fake)
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
+    return fake
+
+
 def test_channel_list_table_output(monkeypatch: pytest.MonkeyPatch) -> None:
     """Default invocation prints a table with the documented columns."""
     _patched_channel_client(monkeypatch, _LIST_RESPONSE)
@@ -216,6 +249,89 @@ def test_channel_list_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
         assert by_id[2]["type"] == "private"
         assert by_id[1]["subscriber_count"] == 42
         assert by_id[1]["is_archived"] is False
+
+
+def test_folder_move_before_by_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``folder move --before`` resolves a folder name and patches order."""
+    client = _patched_folder_move_client(monkeypatch)
+    result = CliRunner().invoke(zulip_app, ["folder", "move", "--folder-id", "12", "--before", "Projects"])
+    assert result.exit_code == 0, result.output
+    assert client.last_order == [12, 10, 11]
+
+
+def test_folder_move_after_by_id_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``folder move --after`` accepts explicit ``id:N`` references."""
+    client = _patched_folder_move_client(monkeypatch)
+    result = CliRunner().invoke(zulip_app, ["--json", "folder", "move", "--folder-id", "10", "--after", "id:12"])
+    assert result.exit_code == 0, result.output
+    assert client.last_order == [11, 12, 10]
+    payload = json.loads(result.stdout)
+    assert payload["operation"] == "move"
+    assert payload["order"] == [11, 12, 10]
+
+
+def test_folder_move_after_by_bare_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``folder move`` treats bare integer references as folder IDs."""
+    client = _patched_folder_move_client(monkeypatch)
+    result = CliRunner().invoke(zulip_app, ["folder", "move", "--folder-id", "10", "--after", "12"])
+    assert result.exit_code == 0, result.output
+    assert client.last_order == [11, 12, 10]
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["folder", "move", "--folder-id", "10"],
+        ["folder", "move", "--folder-id", "10", "--before", "Projects", "--after", "Engineering"],
+    ],
+)
+def test_folder_move_requires_exactly_one_position(
+    monkeypatch: pytest.MonkeyPatch,
+    args: list[str],
+) -> None:
+    """``folder move`` requires exactly one of ``--before`` or ``--after``."""
+    _patched_folder_move_client(monkeypatch)
+    result = CliRunner().invoke(zulip_app, args)
+    assert result.exit_code == 1
+    assert "Exactly one of --before or --after is required" in (result.stdout + result.stderr)
+
+
+def test_folder_move_rejects_self_reference(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Moving a folder relative to itself is rejected before PATCH."""
+    client = _patched_folder_move_client(monkeypatch)
+    result = CliRunner().invoke(zulip_app, ["folder", "move", "--folder-id", "10", "--before", "id:10"])
+    assert result.exit_code == 1
+    assert "Cannot move folder relative to itself" in (result.stdout + result.stderr)
+    assert not any(call["method"] == "PATCH" for call in client.last_requests)
+
+
+def test_folder_move_rejects_missing_target(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The moved folder ID must exist in the complete folder order."""
+    client = _patched_folder_move_client(monkeypatch)
+    result = CliRunner().invoke(zulip_app, ["folder", "move", "--folder-id", "99", "--before", "Projects"])
+    assert result.exit_code == 1
+    assert "Target folder id 99 not found" in (result.stdout + result.stderr)
+    assert not any(call["method"] == "PATCH" for call in client.last_requests)
+
+
+def test_folder_move_rejects_invalid_target_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The moved folder ID must be a positive integer."""
+    client = _patched_folder_move_client(monkeypatch)
+    result = CliRunner().invoke(zulip_app, ["folder", "move", "--folder-id", "0", "--before", "Projects"])
+    assert result.exit_code == 1
+    assert "positive integer" in (result.stdout + result.stderr)
+    assert not any(call["method"] == "PATCH" for call in client.last_requests)
+
+
+def test_folder_move_rejects_missing_bare_id_reference(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Missing bare integer references include the numeric-ID hint."""
+    client = _patched_folder_move_client(monkeypatch)
+    result = CliRunner().invoke(zulip_app, ["folder", "move", "--folder-id", "10", "--before", "999"])
+    assert result.exit_code == 1
+    output = result.stdout + result.stderr
+    assert "No channel folder with id 999" in output
+    assert "id:999" in output
+    assert not any(call["method"] == "PATCH" for call in client.last_requests)
 
 
 def test_channel_list_accepts_global_zuliprc(monkeypatch: pytest.MonkeyPatch) -> None:

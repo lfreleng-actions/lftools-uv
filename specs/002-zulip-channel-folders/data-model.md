@@ -33,8 +33,12 @@ Represents a Zulip channel folder returned by the channel folders API.
   `max_channel_folder_description_length` when that `/register` value is
   available.
 - `order` may be `None` when connected to servers at FL 389 through FL 413.
+- `order` is mutable at FL 414 and newer through the bulk reorder endpoint.
+  Reorder requests must include every channel folder ID exactly once.
 - Folder mutation commands require Zulip feature level 389 and admin
   permissions enforced by the server.
+- Folder move requires Zulip feature level 414 and admin permissions enforced
+  by the server.
 
 **State Transitions**:
 
@@ -47,6 +51,8 @@ Represents a Zulip channel folder returned by the channel folders API.
 ```
 
 There is no hard-delete transition. Zulip only exposes archival.
+Moving a folder changes its relative `order` value through
+`PATCH /api/v1/channel_folders`; it does not change the active/archive state.
 
 ---
 
@@ -80,7 +86,7 @@ Standard response schema for folder mutation operations.
 | `status` | `str (enum)` | Outcome: success or error |
 | `folder_id` | `int \| None` | Folder ID, if known |
 | `folder_name` | `str \| None` | Folder name, if known |
-| `operation` | `str` | create/update/archive/unarchive |
+| `operation` | `str` | create/update/archive/unarchive/move |
 
 ## Relationships
 
