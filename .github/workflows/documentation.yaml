@@ -192,9 +192,12 @@ jobs:
         # yamllint disable-line rule:line-length
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
         with:
-          enable-cache: true
-          cache-dependency-glob: "uv.lock"
-          cache-suffix: "documentation"
+          # Caching is intentionally disabled on this publish path. The
+          # workflow deploys to GitHub Pages and only runs on tag pushes
+          # and manual dispatch, so a restored dependency cache (which a
+          # lower-privileged PR/branch run could populate) would be an
+          # avoidable cache-poisoning vector for negligible speed-up.
+          enable-cache: false
 
       - name: 'Set up Python'
         run: uv python install 3.13
