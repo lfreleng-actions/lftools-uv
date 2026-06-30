@@ -68,7 +68,7 @@ jobs:
     if: github.event_name == 'push'
     runs-on: 'ubuntu-latest'
     permissions:
-      contents: read
+      contents: read  # Check out the repository to validate the tag
     timeout-minutes: 5
     outputs:
       tag: ${{ steps.tag-validate.outputs.tag_name }}
@@ -84,6 +84,7 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+          persist-credentials: false
 
       - name: 'Verify pushed tag'
         id: 'tag-validate'
@@ -111,8 +112,8 @@ jobs:
           || needs.tag-validate.result == 'skipped')
     runs-on: 'ubuntu-latest'
     permissions:
-      contents: read
-      pull-requests: read
+      contents: read  # Check out the repository to build the docs
+      pull-requests: read  # Read PR metadata for repository-metadata-action
     timeout-minutes: 15
     outputs:
       project_name: ${{ steps.resolve-name.outputs.name }}
@@ -131,6 +132,7 @@ jobs:
           # (hatch-vcs / setuptools-scm / etc.) can derive the correct
           # version. Statically versioned projects are unaffected.
           fetch-depth: 0
+          persist-credentials: false
 
       - name: 'Gather repository metadata'
         id: repo-metadata
@@ -274,8 +276,8 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     permissions:
-      pages: write
-      id-token: write
+      pages: write  # Publish the built site to GitHub Pages
+      id-token: write  # OIDC token for the Pages deployment
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

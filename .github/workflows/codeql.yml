@@ -28,9 +28,8 @@ jobs:
     # yamllint disable-line rule:line-length
     uses: lfit/releng-reusable-workflows/.github/workflows/reuse-python-codeql.yaml@f43b219b8a91dcd082f26419008c8bf5544ec212  # v0.6.0
     permissions:
-      security-events: write
-      # required to fetch internal or private CodeQL packs
-      packages: read
-      # only required for workflows in private repositories
-      actions: read
-      contents: read
+      # yamllint disable-line rule:line-length
+      security-events: write  # Upload CodeQL results to the code-scanning dashboard
+      packages: read  # Fetch internal or private CodeQL packs
+      actions: read  # Required for workflows in private repositories
+      contents: read  # Check out the repository to scan

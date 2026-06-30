@@ -79,6 +79,10 @@ name: "Functional Tests"
 permissions:
   contents: read
 
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
 jobs:
   # Determine whether the credential-dependent tests can run.
   #
@@ -143,6 +147,10 @@ jobs:
     name: "Functional Tests"
     runs-on: ubuntu-latest
     needs: check-actor
+    # Dedicated environment so the credential-dependent tests access
+    # their secrets through a gated environment rather than directly at
+    # the repository scope (satisfies zizmor's secrets-outside-env).
+    environment: 'functional-testing'
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -211,12 +219,18 @@ jobs:
 
       - name: "Checkout"
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       - name: "Skip credential-dependent matrix entry"
         id: skip-check
         if: >-
           matrix.requires_secrets
           && needs.check-actor.outputs.skip-credential-tests == 'true'
+        env:
+          MATRIX_DESCRIPTION: ${{ matrix.description }}
+          MATRIX_TEST_FILTER: ${{ matrix.test_filter }}
+          SKIP_REASON: ${{ needs.check-actor.outputs.skip-reason }}
         run: |
           # Mark this matrix entry as skipped without failing the job.
           # Secrets are unavailable on Dependabot/fork PRs; the same
@@ -225,14 +239,14 @@ jobs:
           # Run this *before* any expensive setup steps so that
           # checkout-only is the floor cost for skipped entries.
           {
-            echo "## Skipped: ${{ matrix.description }}"
+            echo "## Skipped: ${MATRIX_DESCRIPTION}"
             echo ""
-            echo "Reason: ${{ needs.check-actor.outputs.skip-reason }}"
+            echo "Reason: ${SKIP_REASON}"
             echo ""
             echo "These tests will run on the \`push\` event once the"
             echo "change merges to the base branch."
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "::notice::Skipping ${{ matrix.test_filter }} (secrets not available on this trigger)"
+          echo "::notice::Skipping ${MATRIX_TEST_FILTER} (secrets not available on this trigger)"
 
       - name: "Generate lftools.ini, clouds.yaml, and public-clouds.yaml"
         if: >-
@@ -407,6 +421,8 @@ jobs:
         if: >-
           !(matrix.requires_secrets
             && needs.check-actor.outputs.skip-credential-tests == 'true')
+        env:
+          MATRIX_DESCRIPTION: ${{ matrix.description }}
         run: |
           set -euo pipefail
 
@@ -476,7 +492,7 @@ jobs:
           # Extract summary for step output
           if [[ -f functional-test-results/results.json ]]; then
             {
-              echo "## Functional Test Results: ${{ matrix.description }}"
+              echo "## Functional Test Results: ${MATRIX_DESCRIPTION}"
               echo ""
             } >> "$GITHUB_STEP_SUMMARY"
 
@@ -532,8 +548,10 @@ jobs:
         # secrets that are not available on this trigger) exit_code is
         # empty, so this step is a no-op.
         if: steps.functional-tests.outputs.exit_code == '1'
+        env:
+          MATRIX_TEST_FILTER: ${{ matrix.test_filter }}
         run: |
-          echo "Functional tests failed for filter: ${{ matrix.test_filter }}"
+          echo "Functional tests failed for filter: ${MATRIX_TEST_FILTER}"
           exit 1
 
   # Aggregate results job
@@ -545,6 +563,10 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: "Check matrix results"
+        env:
+          SKIP_CREDENTIAL_TESTS: ${{ needs.check-actor.outputs.skip-credential-tests }}
+          SKIP_REASON: ${{ needs.check-actor.outputs.skip-reason }}
+          MATRIX_RESULT: ${{ needs.functional-test-matrix.result }}
         run: |
           {
             echo "## Overall Functional Test Results"
@@ -553,11 +575,11 @@ jobs:
 
           # Note skipped credential-dependent entries
           # (Dependabot/fork PRs).
-          if [[ "${{ needs.check-actor.outputs.skip-credential-tests }}" == "true" ]]; then
+          if [[ "${SKIP_CREDENTIAL_TESTS}" == "true" ]]; then
             {
               echo "ℹ️ Credential-dependent matrix entries skipped."
               echo ""
-              echo "**Reason:** ${{ needs.check-actor.outputs.skip-reason }}"
+              echo "**Reason:** ${SKIP_REASON}"
               echo ""
               echo "GitHub Actions does not expose repository secrets to"
               echo "workflows triggered by Dependabot PRs or pull requests"
@@ -571,15 +593,14 @@ jobs:
           fi
 
           # Check if any jobs failed
-          matrix_result="${{ needs.functional-test-matrix.result }}"
-          if [[ "$matrix_result" == "failure" ]]; then
+          if [[ "${MATRIX_RESULT}" == "failure" ]]; then
             {
               echo "❌ Some functional test categories failed."
               echo ""
               echo "Please check the individual job results above for details."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 1
-          elif [[ "$matrix_result" == "success" ]]; then
+          elif [[ "${MATRIX_RESULT}" == "success" ]]; then
             {
               echo "✅ All functional test categories passed!"
               echo ""
@@ -598,6 +619,10 @@ jobs:
     name: "Security Baseline Check"
     runs-on: ubuntu-latest
     needs: check-actor
+    # Dedicated environment so the credential-dependent checks access
+    # their secrets through a gated environment rather than directly at
+    # the repository scope (satisfies zizmor's secrets-outside-env).
+    environment: 'functional-testing'
     # Run only when credential-dependent tests are permitted
     # (skipped for Dependabot PRs and fork PRs, which lack secret access).
     if: needs.check-actor.outputs.skip-credential-tests != 'true'
@@ -610,6 +635,8 @@ jobs:
 
       - name: "Checkout"
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       - name: "Generate lftools.ini, clouds.yaml, and public-clouds.yaml"
         shell: bash
