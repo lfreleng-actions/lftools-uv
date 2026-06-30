@@ -28,6 +28,10 @@ on:
 # Declare default permissions as none.
 permissions: {}
 
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
 jobs:
   sonatype-lifecycle:
     name: 'Sonatype Lifecycle'
@@ -46,7 +50,7 @@ jobs:
     name: 'Python Tests (coverage)'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: read  # Check out the repository to run the tests
     timeout-minutes: 12
     steps:
       # yamllint disable-line rule:line-length
@@ -56,6 +60,8 @@ jobs:
 
       # yamllint disable-line rule:line-length
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          persist-credentials: false
 
       - name: 'Python tests [pytest]'
         # yamllint disable-line rule:line-length
@@ -70,12 +76,15 @@ jobs:
     runs-on: ubuntu-24.04
     needs: 'python-tests'
     if: ${{ !cancelled() && needs.python-tests.result == 'success' }}
+    # Dedicated environment so SONAR_TOKEN is accessed through a gated
+    # environment rather than directly at the repository scope
+    # (satisfies zizmor's secrets-outside-env).
+    environment: 'sonarcloud'
     permissions:
-      contents: read
-      # Needed to upload the results to code-scanning dashboard.
-      security-events: write
-      # Needed to publish results and get a badge (see publish_results below).
-      id-token: write
+      contents: read  # Check out the repository for the scan
+      # yamllint disable-line rule:line-length
+      security-events: write  # Upload scan results to the code-scanning dashboard
+      id-token: write  # Publish results and obtain a badge via OIDC
     timeout-minutes: 10
     steps:
       # yamllint disable-line rule:line-length
@@ -88,6 +97,7 @@ jobs:
         with:
           # SonarCloud uses git history for blame / new-code detection.
           fetch-depth: 0
+          persist-credentials: false
 
       - name: 'Download coverage artefact'
         # yamllint disable-line rule:line-length
