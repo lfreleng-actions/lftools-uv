@@ -113,7 +113,7 @@ version-major:
 
 # Security audit
 audit:
-	uv run --extra dev safety check
+	uv run --extra dev pip-audit
 
 # Shell with all dependencies available
 shell:
