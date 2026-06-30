@@ -86,7 +86,10 @@ dev = [
     "tox",
     "ruff",
     "bandit",
-    "safety",
+    # pip-audit replaces safety: safety hard-depends on nltk, which has an
+    # unpatched high-severity path traversal advisory (CVE-2026-54293 /
+    # GHSA-p4gq-832x-fm9v, affects nltk <= 3.9.4 with no fixed release).
+    "pip-audit",
     "types-requests",
     "types-PyYAML",
     "types-tabulate",
@@ -306,8 +309,6 @@ constraint-dependencies = [
     "authlib>=1.6.9",
     # Fixes CVE-2026-26007 (subgroup attack on SECT curves)
     "cryptography>=46.0.5",
-    # Fixes CVE-2025-14009 (Zip Slip) and CVE-2026-33230 (XSS)
-    "nltk>=3.9.4",
     # Bump transitive dependency to latest stable
     "pygments>=2.20.0",
 ]
