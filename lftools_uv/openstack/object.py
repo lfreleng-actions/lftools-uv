@@ -14,6 +14,7 @@ from __future__ import annotations
 
 __author__ = "Thanh Ha"
 
+# aislop-ignore-file hallucinated-import -- the declared openstacksdk dependency provides the `openstack` import package
 import openstack
 import openstack.connection
 

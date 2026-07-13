@@ -15,6 +15,7 @@ import logging
 import sys
 from typing import TYPE_CHECKING
 
+# aislop-ignore-file hallucinated-import -- the declared PyGithub dependency provides the `github` import package
 from github import Github, GithubException
 from github.NamedUser import NamedUser
 from github.Organization import Organization
@@ -224,7 +225,6 @@ def helper_user_github(  # noqa: C901, PLR0912
     except GithubException as ghe:
         log.error(ghe)
 
-    # get teams
     try:
         get_teams_fn = org.get_teams
     except GithubException as ghe:

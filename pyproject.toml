@@ -69,6 +69,9 @@ dependencies = [
     "tabulate",
     "tqdm",
     "typer",
+    # typing.override is only available on Python >= 3.12; earlier
+    # interpreters need the backport from typing-extensions.
+    "typing-extensions>=4.4.0; python_version < '3.12'",
     "urllib3>=2.6.3,<3.0.0",
     "websocket-client",
     "wrapt",

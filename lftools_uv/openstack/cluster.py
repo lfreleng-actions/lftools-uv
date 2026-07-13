@@ -16,6 +16,7 @@ __author__ = "Anil Belur"
 import json
 import sys
 
+# aislop-ignore-file hallucinated-import -- the declared openstacksdk dependency provides the `openstack` import package
 import openstack
 import openstack.connection
 import requests
@@ -54,7 +55,6 @@ def _fetch_jenkins_builds(jenkins_urls: list[str]) -> list[str]:
             else:
                 silo = jenkins.split("/")[-1]
 
-            # Parse JSON and extract build identifiers
             try:
                 data = response.json()
             except json.JSONDecodeError as e:
@@ -74,10 +74,13 @@ def _fetch_jenkins_builds(jenkins_urls: list[str]) -> list[str]:
 
         except requests.exceptions.Timeout:
             print(f"ERROR: Timeout fetching data from {jenkins_url}")
+            continue
         except requests.exceptions.RequestException as e:
             print(f"ERROR: Request failed for {jenkins_url}: {e}")
+            continue
         except Exception as e:
             print(f"ERROR: Unexpected error fetching from {jenkins_url}: {e}")
+            continue
 
     return builds
 
@@ -127,7 +130,6 @@ def cleanup(os_cloud: str, jenkins_urls: str | None = None) -> None:
     :arg str os_cloud: Cloud name as defined in OpenStack clouds.yaml.
     :arg str jenkins_urls: Space-separated list of Jenkins URLs to check for active builds.
     """
-    # Parse Jenkins URLs
     jenkins_url_list: list[str] = []
     if jenkins_urls:
         jenkins_url_list = [url.strip() for url in jenkins_urls.split() if url.strip()]
@@ -138,20 +140,17 @@ def cleanup(os_cloud: str, jenkins_urls: str | None = None) -> None:
 
     print(f"INFO: Checking Jenkins URLs for active builds: {' '.join(jenkins_url_list)}")
 
-    # Fetch active builds from Jenkins
     active_builds = _fetch_jenkins_builds(jenkins_url_list)
     print(f"INFO: Found {len(active_builds)} active builds in Jenkins")
 
     cloud = openstack.connection.from_config(cloud=os_cloud)
 
-    # Fetch COE cluster list
     try:
         clusters = cloud.list_coe_clusters()
         cluster_names = [cluster.name for cluster in clusters]
 
         print(f"INFO: Found {len(cluster_names)} COE clusters on cloud {os_cloud}")
 
-        # Delete orphaned clusters
         deleted_count = 0
         for cluster_name in cluster_names:
             # Check if cluster is managed (long-lived)
@@ -164,7 +163,6 @@ def cleanup(os_cloud: str, jenkins_urls: str | None = None) -> None:
                 print(f"INFO: Cluster {cluster_name} is in use by active build, skipping")
                 continue
 
-            # Delete orphaned cluster
             print(f"INFO: Deleting orphaned k8s cluster: {cluster_name}")
             try:
                 cloud.delete_coe_cluster(cluster_name)
@@ -172,6 +170,7 @@ def cleanup(os_cloud: str, jenkins_urls: str | None = None) -> None:
                 print(f"INFO: Successfully deleted cluster: {cluster_name}")
             except OpenStackCloudException as e:
                 print(f"ERROR: Failed to delete cluster {cluster_name}: {e}")
+                continue
 
         print(f"INFO: Deleted {deleted_count} orphaned cluster(s)")
 

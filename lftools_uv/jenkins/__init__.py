@@ -17,7 +17,7 @@ import configparser
 import logging
 import os
 
-import jenkins
+import jenkins  # aislop-ignore-line hallucinated-import -- the declared python-jenkins dependency provides the `jenkins` package
 
 log: logging.Logger = logging.getLogger(__name__)
 
