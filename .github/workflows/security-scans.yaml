@@ -35,6 +35,8 @@ concurrency:
 jobs:
   sonatype-lifecycle:
     name: 'Sonatype Lifecycle'
+    permissions:
+      contents: read  # Reusable scan job checks out the repo
     # yamllint disable-line rule:line-length
     uses: lfit/releng-reusable-workflows/.github/workflows/reuse-sonatype-lifecycle.yaml@fd3c1b43bc919e9e70787b009ffa2768ddbb1267 # v0.7.2
     with:
