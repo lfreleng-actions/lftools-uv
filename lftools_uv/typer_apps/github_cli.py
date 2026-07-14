@@ -14,6 +14,8 @@ __author__ = "DW Talton"
 import logging
 
 import typer
+
+# aislop-ignore-next-line hallucinated-import -- the declared PyGithub dependency provides the `github` package
 from github import Github, GithubException
 
 from lftools_uv import config
@@ -140,10 +142,8 @@ def update_repo(
         org = g.get_organization(organization)
         repo_obj = org.get_repo(repository)
 
-        # Update repository settings
         repo_obj.edit(has_issues=has_issues, has_projects=has_projects, has_wiki=has_wiki)
 
-        # Handle team operations
         if add_team:
             team_obj = org.get_team_by_slug(add_team)
             team_obj.add_to_repos(repo_obj)

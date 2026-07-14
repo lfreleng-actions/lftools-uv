@@ -32,6 +32,8 @@ from typing import Any, NoReturn
 
 import boto3
 import requests
+
+# aislop-ignore-next-line hallucinated-import -- botocore ships with the declared boto3 dependency
 from botocore.exceptions import ClientError
 from defusedxml.minidom import parseString
 
@@ -228,9 +230,9 @@ def _remove_duplicates_and_sort(lst: list[str]) -> list[str]:
     no_dups_lst.sort()
 
     duplicated_list: list[str] = []
-    for i in range(len(no_dups_lst)):
-        if lst.count(no_dups_lst[i]) > 1:
-            duplicated_list.append(no_dups_lst[i])
+    for item in no_dups_lst:
+        if lst.count(item) > 1:
+            duplicated_list.append(item)
     log.debug("duplicates  : %s", duplicated_list)
 
     return no_dups_lst
@@ -345,7 +347,6 @@ def copy_archives(workspace: str, pattern: list[str] | None = None) -> None:
         else:
             log.info("Not copying directories: %s.", src)
 
-    # Create a temp file to handle empty dirs in AWS S3 buckets.
     if os.environ.get("S3_BUCKET") is not None:
         now: datetime.datetime = datetime.datetime.now()
         p = now.strftime("_%d%m%Y_%H%M%S_")
@@ -578,7 +579,6 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
     # Copy archive files to tmp dir
     copy_archives(workspace, pattern)
 
-    # Create build logs
     build_details = open("_build-details.log", "w+")  # noqa: PTH123, SIM115
     _ = build_details.write(f"build-url: {build_url}")
 
@@ -623,7 +623,6 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
     with open("console-timestamp.log", "w+", encoding="utf-8") as f:  # noqa: PTH123
         _ = f.write(str(resp.content.decode("utf-8").split(MAGIC_STRING)[0]))
 
-    # Create _tmpfile
     """ Because s3 does not have a filesystem, this file is uploaded to generate/update the
         index.html file in the top level "directories". """
     open("_tmpfile", "a").close()  # noqa: PTH123, SIM115
@@ -631,7 +630,6 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
     # Compress tmp directory
     _compress_text(work_dir)
 
-    # Create file list to upload
     file_list: list[str] = []
     files: list[str] = glob.glob("**/*", recursive=True)
     for file in files:
@@ -652,7 +650,6 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
     log.info("Finished deploying from %s to %s/%s", work_dir, s3_bucket, s3_path)
     log.info(_BANNER_HASHES)
 
-    # Cleanup
     s3.Object(s3_bucket, "{}{}".format(logs_dir, "_tmpfile")).delete()
     s3.Object(s3_bucket, "{}{}".format(silo_dir, "_tmpfile")).delete()
     s3.Object(s3_bucket, "{}{}".format(jenkins_node_dir, "_tmpfile")).delete()

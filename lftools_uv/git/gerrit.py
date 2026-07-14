@@ -68,7 +68,6 @@ class Gerrit:
             git_config.set_value("user", "email", self.params["creds"]["email"])
         self.origin: Remote = self.repo.remote(name="origin")
 
-        # Get the default branch from the repo
         default_ref = self.repo.git.rev_parse("origin/HEAD", abbrev_ref=True)
         self.default_branch: str = default_ref.split("/")[-1]
 
@@ -271,10 +270,7 @@ class Gerrit:
         log.debug(f"config-params.yaml contents:\n{server_creds_content}")
 
         config_path = f"jenkins-config/managed-config-files/mavenSettings/{project_dashed}-settings"
-        try:
-            os.makedirs(config_path)
-        except FileExistsError:
-            pass
+        os.makedirs(config_path, exist_ok=True)
 
         self.add_symlink(
             os.path.join(config_path, content_path), "../../../managed-config-templates/mavenSettings-content"

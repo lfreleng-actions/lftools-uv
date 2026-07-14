@@ -23,6 +23,7 @@ import urllib.request
 from datetime import datetime, timedelta
 from typing import Any
 
+# aislop-ignore-file hallucinated-import -- the declared openstacksdk dependency provides the `openstack` import package
 import openstack
 import openstack.connection
 from openstack.cloud.exc import OpenStackCloudException
