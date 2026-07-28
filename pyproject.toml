@@ -48,7 +48,11 @@ dependencies = [
     "docker",
     "email-validator",
     "filelock",
-    "GitPython",
+    # Security floor covering four high severity advisories: argument
+    # injection and unsafe git option guard bypasses, fixed across 3.1.53
+    # (GHSA-3rp5-jjmw-4wv2) and 3.1.54 (GHSA-6p8h-3wgx-97gf,
+    # GHSA-fjr4-x663-mwxc, GHSA-r9mr-m37c-5fr3).
+    "GitPython>=3.1.54",
     "identify",
     "idna",
     "jinja2",

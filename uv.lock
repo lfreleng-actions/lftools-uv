@@ -1100,7 +1100,7 @@ requires-dist = [
     { name = "email-validator" },
     { name = "filelock" },
     { name = "furo", marker = "extra == 'docs'" },
-    { name = "gitpython" },
+    { name = "gitpython", specifier = ">=3.1.54" },
     { name = "google-auth" },
     { name = "google-auth-oauthlib" },
     { name = "identify" },
