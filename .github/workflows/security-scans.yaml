@@ -38,7 +38,7 @@ jobs:
     permissions:
       contents: read  # Reusable scan job checks out the repo
     # yamllint disable-line rule:line-length
-    uses: lfit/releng-reusable-workflows/.github/workflows/reuse-sonatype-lifecycle.yaml@973bba87aa9cc4ab43242ba9afac37d70c72f134 # v0.9.1
+    uses: lfit/releng-reusable-workflows/.github/workflows/reuse-sonatype-lifecycle.yaml@0688b118b3290649e0cb3580612e6369b6509774 # v0.10.0
     with:
       APPLICATION_ID: "lftools-uv"
     secrets:
