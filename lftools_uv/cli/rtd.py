@@ -8,26 +8,48 @@
 # http://www.eclipse.org/legal/epl-v10.html
 ##############################################################################
 
-"""Read the Docs interface."""
+"""Read the Docs interface.
+
+.. deprecated::
+    This Click command group is retained for backwards compatibility and
+    reachable only via ``LEGACY_CLI=1``. It reproduces the historical
+    output formats verbatim, including their inconsistencies. New
+    callers should use the Typer implementation in
+    :mod:`lftools_uv.typer_apps.rtd`, which offers ``--json`` on every
+    command.
+"""
 
 __author__ = "DW Talton"
 
 
+import json
 import logging
 from pprint import pformat
 
 import click
 
 from lftools_uv.api.endpoints import readthedocs
+from lftools_uv.api.endpoints.readthedocs import ReadTheDocsError, ReadTheDocsNotFoundError
 
 log = logging.getLogger(__name__)
+
+_DEPRECATION_NOTICE = (
+    "The legacy Click 'rtd' commands are deprecated and will be removed "
+    "in a future release. Use the default Typer CLI, which provides "
+    "--json output on every command."
+)
+
+
+def _emit_json(data: object) -> None:
+    """Print a payload as JSON, matching the historical output format."""
+    log.info(json.dumps(data, indent=2))
 
 
 @click.group()
 @click.pass_context
 def rtd(ctx):
     """Read the Docs interface."""
-    pass
+    log.warning(_DEPRECATION_NOTICE)
 
 
 @click.command(name="project-list")
@@ -77,7 +99,7 @@ def project_version_update(ctx, project_slug, version_slug, active):
     """
     r = readthedocs.ReadTheDocs()
     data = r.project_version_update(project_slug, version_slug, active)
-    log.info(data)
+    log.info(pformat(data))
 
 
 @click.command(name="project-version-details")
@@ -88,7 +110,7 @@ def project_version_details(ctx, project_slug, version_slug):
     """Retrieve project version details."""
     r = readthedocs.ReadTheDocs()
     data = r.project_version_details(project_slug, version_slug)
-    log.info(data)
+    _emit_json(data)
 
 
 @click.command(name="project-create")
@@ -116,7 +138,7 @@ def project_create(ctx, project_name, repository_url, repository_type, homepage,
 @click.argument("project-name")
 @click.pass_context
 def project_update(ctx, project_name):
-    """Create a new project."""
+    """Update an existing project."""
     r = readthedocs.ReadTheDocs()
     d = {}
     for item in ctx.args:
@@ -133,7 +155,10 @@ def project_build_list(ctx, project_slug):
     """Retrieve a list of a project's builds."""
     r = readthedocs.ReadTheDocs()
     data = r.project_build_list(project_slug)
-    log.info(data)
+    if data:
+        _emit_json({"count": len(data), "results": data})
+    else:
+        log.info("There are no active builds.")
 
 
 @click.command(name="project-build-details")
@@ -144,7 +169,7 @@ def project_build_details(ctx, project_slug, build_id):
     """Retrieve specific project build details."""
     r = readthedocs.ReadTheDocs()
     data = r.project_build_details(project_slug, build_id)
-    log.info(data)
+    _emit_json(data)
 
 
 @click.command(name="project-build-trigger")
@@ -155,7 +180,7 @@ def project_build_trigger(ctx, project_slug, version_slug):
     """Trigger a new build."""
     r = readthedocs.ReadTheDocs()
     data = r.project_build_trigger(project_slug, version_slug)
-    log.info(data)
+    _emit_json(data)
 
 
 @click.command(name="subproject-list")
@@ -201,11 +226,15 @@ def subproject_create(ctx, project_slug, subproject_slug):
 def subproject_delete(ctx, project_slug, subproject_slug):
     """Delete a project-subproject relationship."""
     r = readthedocs.ReadTheDocs()
-    data = r.subproject_delete(project_slug, subproject_slug)
-    if data:
-        log.info(f"Successfully removed the {project_slug} {subproject_slug} relationship")
-    else:
+    try:
+        _ = r.subproject_delete(project_slug, subproject_slug)
+    except ReadTheDocsNotFoundError:
         log.error("Request failed. Is there a subproject relationship?")
+        return
+    except ReadTheDocsError:
+        log.exception("Request failed")
+        return
+    log.info(f"Successfully removed the {project_slug} {subproject_slug} relationship")
 
 
 rtd.add_command(project_list)
