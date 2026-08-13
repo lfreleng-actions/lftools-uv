@@ -260,6 +260,13 @@ python_functions = ["test_*"]
 
 [tool.coverage.run]
 source = ["lftools_uv"]
+# Absolute path, deliberately outside the working tree. coverage.py
+# resolves a relative data_file against the current directory, and
+# several tests (e.g. tests/test_version.py) monkeypatch.chdir() into a
+# pytest-datafiles fixture directory and then assert over iterdir(), so
+# a stray .coverage written there would break them. Override with the
+# COVERAGE_FILE environment variable if a different location is needed.
+data_file = "/tmp/lftools-uv-coverage/.coverage"
 omit = [
     "*/tests/*",
     "*/test_*",
