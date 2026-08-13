@@ -1628,7 +1628,7 @@ wheels = [
 
 [[package]]
 name = "openstacksdk"
-version = "4.17.0"
+version = "4.18.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
@@ -1644,9 +1644,9 @@ dependencies = [
     { name = "psutil" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/48/1d/0238c57f7eb64170be6ff1703c3f87afa44a648f0672c91de7f66a58a11e/openstacksdk-4.17.0.tar.gz", hash = "sha256:827e1ade488db6116f59af1da6c97dbdfeeb879d3fc96bca99b19351f15df8ba", size = 1399124, upload-time = "2026-06-24T09:25:09.839Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/60/d0/514c38d0b7f4d3652321baf0c5136ac29ce9360a2094fcdcd78f865cb7c9/openstacksdk-4.18.0.tar.gz", hash = "sha256:466f2f869bcf6dec717a5e6c65c0522b1bd061d53310c7bf11982e0d9244f70c", size = 1403478, upload-time = "2026-08-03T12:27:08.152Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4e/b8/7c48faf004219cba8cd160800f11fd8440a5ae18e621679da2d4607fa1fd/openstacksdk-4.17.0-py3-none-any.whl", hash = "sha256:3c968f8b97b38b7d73ddb88d16c6a7d80bcc554c5fbfcc12638a7b51bdae144e", size = 1988252, upload-time = "2026-06-24T09:25:08.325Z" },
+    { url = "https://files.pythonhosted.org/packages/41/75/1c68b79bc71b1d9ea1d7acfd9a90f52bddfc2485ac3f8e1d1be488fcbcb8/openstacksdk-4.18.0-py3-none-any.whl", hash = "sha256:17d033c19a07df90116b67c0750b2218acdc45cdcf659d4c137f084667b26993", size = 1993600, upload-time = "2026-08-03T12:27:06.589Z" },
 ]
 
 [[package]]
