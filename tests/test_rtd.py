@@ -16,6 +16,12 @@ import pytest
 import responses
 
 import lftools_uv.api.endpoints.readthedocs as client
+from lftools_uv.api.endpoints.readthedocs import (
+    ReadTheDocsAPIError,
+    ReadTheDocsNotFoundError,
+    ReadTheDocsValidationError,
+    version_slug,
+)
 
 creds = {"authtype": "token", "endpoint": "https://readthedocs.org/api/v3/", "token": "xyz"}
 rtd = client.ReadTheDocs(creds=creds)
@@ -24,6 +30,41 @@ FIXTURE_DIR = os.path.join(
     os.path.dirname(os.path.realpath(__file__)),
     "fixtures",
 )
+
+
+# ---------------------------------------------------------------------------
+# Version slug conversion
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("branch", "expected"),
+    [
+        ("master", "master"),
+        ("latest", "latest"),
+        ("maintenance/3.7.10", "maintenance-3.7.10"),
+        ("mr/879/126960/2", "mr-879-126960-2"),
+        ("Montreal", "montreal"),
+        ("feature/ABC-123_thing", "feature-abc-123_thing"),
+        ("release/1.0", "release-1.0"),
+        ("  spaced/branch  ", "spaced-branch"),
+    ],
+)
+def test_version_slug(branch, expected):
+    """Branch names convert to the slug Read the Docs stores."""
+    assert version_slug(branch) == expected
+
+
+@pytest.mark.parametrize("branch", ["", "   ", "///", "!!!"])
+def test_version_slug_rejects_unusable(branch):
+    """Empty or punctuation-only branch names raise."""
+    with pytest.raises(ReadTheDocsValidationError):
+        version_slug(branch)
+
+
+# ---------------------------------------------------------------------------
+# Projects
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.datafiles(
@@ -49,7 +90,63 @@ def test_project_details(datafiles):
     responses.add(
         responses.GET, url="https://readthedocs.org/api/v3/projects/TestProject1/", json=json_data, status=200
     )
-    assert "slug" in rtd.project_details("TestProject1")
+    details = rtd.project_details("TestProject1")
+    assert isinstance(details, dict)
+    assert "slug" in details
+
+
+@responses.activate
+def test_project_details_not_found():
+    """A 404 raises a typed error rather than returning prose."""
+    responses.add(
+        responses.GET,
+        url="https://readthedocs.org/api/v3/projects/nope/",
+        json={"detail": "Not found."},
+        status=404,
+    )
+    with pytest.raises(ReadTheDocsNotFoundError) as excinfo:
+        rtd.project_details("nope")
+    assert excinfo.value.status_code == 404
+
+
+@responses.activate
+def test_project_details_server_error():
+    """A 500 raises an API error carrying the status code."""
+    responses.add(
+        responses.GET,
+        url="https://readthedocs.org/api/v3/projects/boom/",
+        json={"detail": "Server Error"},
+        status=500,
+    )
+    with pytest.raises(ReadTheDocsAPIError) as excinfo:
+        rtd.project_details("boom")
+    assert excinfo.value.status_code == 500
+
+
+@pytest.mark.datafiles(
+    os.path.join(FIXTURE_DIR, "rtd"),
+)
+@responses.activate
+def test_project_exists_true(datafiles):
+    os.chdir(str(datafiles))
+    json_file = open("project_details.json")
+    json_data = json.loads(json_file.read())
+    responses.add(
+        responses.GET, url="https://readthedocs.org/api/v3/projects/TestProject1/", json=json_data, status=200
+    )
+    assert rtd.project_exists("TestProject1") is True
+
+
+@responses.activate
+def test_project_exists_false():
+    """Absence reports as False rather than an error string."""
+    responses.add(
+        responses.GET,
+        url="https://readthedocs.org/api/v3/projects/nope/",
+        json={"detail": "Not found."},
+        status=404,
+    )
+    assert rtd.project_exists("nope") is False
 
 
 @pytest.mark.datafiles(
@@ -84,7 +181,23 @@ def test_project_version_details(datafiles):
         json=json_data,
         status=200,
     )
-    assert "slug" in rtd.project_version_details("TestProject1", "latest")
+    details = rtd.project_version_details("TestProject1", "latest")
+    assert isinstance(details, dict)
+    assert "slug" in details
+
+
+@responses.activate
+def test_project_version_details_uses_slug():
+    """A slugified branch resolves; the raw branch name would not."""
+    responses.add(
+        responses.GET,
+        url="https://readthedocs.org/api/v3/projects/onap-cps/versions/maintenance-3.7.10/",
+        json={"slug": "maintenance-3.7.10", "verbose_name": "maintenance/3.7.10", "active": False},
+        status=200,
+    )
+    details = rtd.project_version_details("onap-cps", version_slug("maintenance/3.7.10"))
+    assert details["verbose_name"] == "maintenance/3.7.10"
+    assert details["active"] is False
 
 
 @responses.activate
@@ -95,7 +208,10 @@ def test_project_version_update():
         body="",
         status=204,
     )
-    assert rtd.project_version_update("TestProject1", "latest", True)
+    result = rtd.project_version_update("TestProject1", "latest", True)
+    assert result["status"] == "success"
+    assert result["version"] == "latest"
+    assert result["active"] is True
 
 
 @responses.activate
@@ -108,9 +224,34 @@ def test_project_create():
         "language": "en",
     }
     responses.add(responses.POST, url="https://readthedocs.org/api/v3/projects/", json=data, status=201)
-    assert rtd.project_create(
+    result = rtd.project_create(
         "TestProject1", "https://repository_url", "my_repo_type", "https://homepageurl", "py", "en"
     )
+    assert result["name"] == "TestProject1"
+
+
+@responses.activate
+def test_project_update():
+    responses.add(
+        responses.PATCH,
+        url="https://readthedocs.org/api/v3/projects/TestProject1/",
+        body="",
+        status=204,
+    )
+    result = rtd.project_update("TestProject1", {"default_version": "latest"})
+    assert result["status"] == "success"
+    assert result["updated"] == {"default_version": "latest"}
+
+
+def test_project_update_rejects_empty_payload():
+    """An empty update raises a typed error rather than IndexError."""
+    with pytest.raises(ReadTheDocsValidationError):
+        rtd.project_update("TestProject1", {})
+
+
+# ---------------------------------------------------------------------------
+# Builds
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.datafiles(
@@ -128,7 +269,22 @@ def test_project_build_list(datafiles):
         status=200,
         match_querystring=True,
     )
-    assert "success" in rtd.project_build_list("testproject1")
+    builds = rtd.project_build_list("testproject1")
+    assert isinstance(builds, list)
+    assert builds[0]["success"] is True
+
+
+@responses.activate
+def test_project_build_list_empty_returns_list():
+    """No running builds yields an empty list, never prose."""
+    responses.add(
+        responses.GET,
+        url="https://readthedocs.org/api/v3/projects/testproject1/builds/?running=True",
+        json={"count": 0, "results": []},
+        status=200,
+        match_querystring=True,
+    )
+    assert rtd.project_build_list("testproject1") == []
 
 
 @pytest.mark.datafiles(
@@ -145,19 +301,42 @@ def test_project_build_details(datafiles):
         json=json_data,
         status=200,
     )
-    assert "id" in rtd.project_build_details("testproject1", "9584913")
+    details = rtd.project_build_details("testproject1", "9584913")
+    assert isinstance(details, dict)
+    assert "id" in details
 
 
 @responses.activate
 def test_project_build_trigger():
-    data = {"project": "testproject1", "version": "latest"}
+    data = {"project": "testproject1", "version": "latest", "build": {"id": 12345}}
     responses.add(
         responses.POST,
         url="https://readthedocs.org/api/v3/projects/testproject1/versions/latest/builds/",  # noqa
         json=data,
         status=201,
     )
-    assert rtd.project_build_trigger("testproject1", "latest")
+    result = rtd.project_build_trigger("testproject1", "latest")
+    build = result["build"]
+    assert isinstance(build, dict)
+    assert build["id"] == 12345
+
+
+@responses.activate
+def test_project_build_trigger_unknown_version():
+    """Triggering an unknown version raises rather than emitting a jq-breaking body."""
+    responses.add(
+        responses.POST,
+        url="https://readthedocs.org/api/v3/projects/onap-cps/versions/maintenance-3.7.10/builds/",
+        json={"detail": "Not found."},
+        status=404,
+    )
+    with pytest.raises(ReadTheDocsNotFoundError):
+        rtd.project_build_trigger("onap-cps", "maintenance-3.7.10")
+
+
+# ---------------------------------------------------------------------------
+# Subprojects
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.datafiles(
@@ -182,6 +361,24 @@ def test_subproject_list(datafiles):
     os.path.join(FIXTURE_DIR, "rtd"),
 )
 @responses.activate
+def test_subproject_exists(datafiles):
+    os.chdir(str(datafiles))
+    json_file = open("subproject_list.json")
+    json_data = json.loads(json_file.read())
+    responses.add(
+        responses.GET,
+        url="https://readthedocs.org/api/v3/projects/TestProject1/subprojects/?limit=999",
+        json=json_data,
+        status=200,
+        match_querystring=True,
+    )
+    assert rtd.subproject_exists("TestProject1", "testproject2") is True
+
+
+@pytest.mark.datafiles(
+    os.path.join(FIXTURE_DIR, "rtd"),
+)
+@responses.activate
 def test_subproject_details(datafiles):
     os.chdir(str(datafiles))
     json_file = open("subproject_details.json")
@@ -192,7 +389,9 @@ def test_subproject_details(datafiles):
         json=json_data,
         status=200,
     )
-    assert "child" in rtd.subproject_details("TestProject1", "testproject2")
+    details = rtd.subproject_details("TestProject1", "testproject2")
+    assert isinstance(details, dict)
+    assert "child" in details
 
 
 @responses.activate
@@ -202,8 +401,30 @@ def test_subproject_create():
         url="https://readthedocs.org/api/v3/projects/TestProject1/subprojects/",
         status=201,  # NOQA
     )
-    assert rtd.subproject_create("TestProject1", "testproject2")
+    result = rtd.subproject_create("TestProject1", "testproject2")
+    assert result["status"] == "success"
+    assert result["subproject"] == "testproject2"
 
 
+@responses.activate
 def test_subproject_delete():
-    assert "untested because responses doesn't have DELETE support"
+    responses.add(
+        responses.DELETE,
+        url="https://readthedocs.org/api/v3/projects/TestProject1/subprojects/testproject2/",
+        status=204,
+    )
+    result = rtd.subproject_delete("TestProject1", "testproject2")
+    assert result["status"] == "success"
+
+
+@responses.activate
+def test_subproject_delete_missing():
+    """Deleting an absent relationship raises a typed error."""
+    responses.add(
+        responses.DELETE,
+        url="https://readthedocs.org/api/v3/projects/TestProject1/subprojects/nope/",
+        json={"detail": "Not found."},
+        status=404,
+    )
+    with pytest.raises(ReadTheDocsNotFoundError):
+        rtd.subproject_delete("TestProject1", "nope")
