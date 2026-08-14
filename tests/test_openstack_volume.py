@@ -11,7 +11,7 @@
 """Test openstack volume module."""
 
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 from openstack.cloud.exc import OpenStackCloudException
@@ -109,7 +109,7 @@ class TestCleanupVolumes:
 
         os_volume.cleanup("test-cloud", days=5)
 
-        mock_cloud.delete_volume.assert_called_once_with(mock_volume.name)
+        mock_cloud.delete_volume.assert_called_once_with(mock_volume.id)
 
     def test_cleanup_multiple_volumes(self, mock_from_config, mock_cloud):
         """Test cleanup of multiple volumes."""
@@ -138,7 +138,7 @@ class TestCleanupVolumes:
         # Should not raise exception, just skip the volume
         os_volume.cleanup("test-cloud")
 
-        mock_cloud.delete_volume.assert_called_once_with(mock_volume.name)
+        mock_cloud.delete_volume.assert_called_once_with(mock_volume.id)
 
     def test_cleanup_multiple_matches_new_format(self, mock_from_config, mock_cloud, mock_volume):
         """Test handling of duplicate volume exception with new format."""
@@ -151,7 +151,7 @@ class TestCleanupVolumes:
         # Should not raise exception, just skip the volume
         os_volume.cleanup("test-cloud")
 
-        mock_cloud.delete_volume.assert_called_once_with(mock_volume.name)
+        mock_cloud.delete_volume.assert_called_once_with(mock_volume.id)
 
     def test_cleanup_unexpected_exception(self, mock_from_config, mock_cloud, mock_volume):
         """Test that unexpected exceptions are raised."""
@@ -171,7 +171,7 @@ class TestCleanupVolumes:
         # Should not raise exception, just log warning
         os_volume.cleanup("test-cloud")
 
-        mock_cloud.delete_volume.assert_called_once_with(mock_volume.name)
+        mock_cloud.delete_volume.assert_called_once_with(mock_volume.id)
 
     def test_cleanup_mixed_results(self, mock_from_config, mock_cloud):
         """Test cleanup with one success and one duplicate exception."""
@@ -196,6 +196,38 @@ class TestCleanupVolumes:
         os_volume.cleanup("test-cloud")
 
         assert mock_cloud.delete_volume.call_count == 2
+
+    def test_cleanup_duplicate_names_deleted_by_id(self, mock_from_config, mock_cloud):
+        """Duplicate volume names must not stop those volumes being removed.
+
+        Cinder does not enforce unique volume names. Addressing a volume by
+        name makes the lookup ambiguous for a duplicated name, which raised
+        DuplicateResource and skipped the volume on every run. Addressing by
+        id always resolves to exactly one volume, so every copy is removed.
+        """
+
+        def _volume(name, volume_id):
+            v = MagicMock()
+            v.name = name
+            v.id = volume_id
+            v.created_at = (datetime.now() - timedelta(days=10)).strftime("%Y-%m-%dT%H:%M:%S.%f")
+            return v
+
+        first = _volume("duplicate-name", "volume-aaa")
+        second = _volume("duplicate-name", "volume-bbb")
+        unique = _volume("unique-name", "volume-ccc")
+
+        mock_from_config.return_value = mock_cloud
+        mock_cloud.list_volumes.return_value = [first, second, unique]
+        mock_cloud.delete_volume.return_value = True
+
+        os_volume.cleanup("test-cloud", days=5)
+
+        assert mock_cloud.delete_volume.call_args_list == [
+            call("volume-aaa"),
+            call("volume-bbb"),
+            call("volume-ccc"),
+        ]
 
 
 @patch("openstack.connection.from_config")

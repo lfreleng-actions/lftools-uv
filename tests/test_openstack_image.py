@@ -11,7 +11,7 @@
 """Test openstack image module."""
 
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 from openstack.cloud.exc import OpenStackCloudException
@@ -135,7 +135,7 @@ class TestCleanupImages:
 
         os_image.cleanup("test-cloud", days=5)
 
-        mock_cloud.delete_image.assert_called_once_with(mock_image.name)
+        mock_cloud.delete_image.assert_called_once_with(mock_image.id)
 
     def test_cleanup_protected_image(self, mock_from_config, mock_cloud, mock_image):
         """Test that protected images are not deleted."""
@@ -176,7 +176,7 @@ class TestCleanupImages:
         # Should not raise exception, just skip the image
         os_image.cleanup("test-cloud")
 
-        mock_cloud.delete_image.assert_called_once_with(mock_image.name)
+        mock_cloud.delete_image.assert_called_once_with(mock_image.id)
 
     def test_cleanup_multiple_matches_new_format(self, mock_from_config, mock_cloud, mock_image):
         """Test handling of duplicate image exception with new format."""
@@ -189,7 +189,7 @@ class TestCleanupImages:
         # Should not raise exception, just skip the image
         os_image.cleanup("test-cloud")
 
-        mock_cloud.delete_image.assert_called_once_with(mock_image.name)
+        mock_cloud.delete_image.assert_called_once_with(mock_image.id)
 
     def test_cleanup_unexpected_exception(self, mock_from_config, mock_cloud, mock_image):
         """Test that unexpected exceptions are raised."""
@@ -209,7 +209,44 @@ class TestCleanupImages:
         # Should not raise exception, just log warning
         os_image.cleanup("test-cloud")
 
-        mock_cloud.delete_image.assert_called_once_with(mock_image.name)
+        mock_cloud.delete_image.assert_called_once_with(mock_image.id)
+
+    def test_cleanup_duplicate_names_deleted_by_id(self, mock_from_config, mock_cloud):
+        """Duplicate image names must not stop those images being removed.
+
+        Glance does not enforce unique image names, and retried builds do
+        produce duplicates. Addressing an image by name makes the lookup
+        ambiguous for a duplicated name, which raised DuplicateResource and
+        skipped the image on every run. Addressing by id always resolves to
+        exactly one image, so every copy is removed.
+        """
+
+        def _image(name, image_id):
+            i = MagicMock()
+            i.name = name
+            i.id = image_id
+            i.is_protected = False
+            i.visibility = "private"
+            i.owner = "project-123"
+            i.properties = {"ci_managed": "yes"}
+            i.created_at = (datetime.now() - timedelta(days=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            return i
+
+        first = _image("duplicate-name", "image-aaa")
+        second = _image("duplicate-name", "image-bbb")
+        unique = _image("unique-name", "image-ccc")
+
+        mock_from_config.return_value = mock_cloud
+        mock_cloud.list_images.return_value = [first, second, unique]
+        mock_cloud.delete_image.return_value = True
+
+        os_image.cleanup("test-cloud", days=5)
+
+        assert mock_cloud.delete_image.call_args_list == [
+            call("image-aaa"),
+            call("image-bbb"),
+            call("image-ccc"),
+        ]
 
     def test_cleanup_multiple_clouds(self, mock_from_config, mock_cloud, mock_image):
         """Test cleanup across multiple clouds."""

@@ -55,8 +55,13 @@ def cleanup(os_cloud, days=0):
         print(f"Removing {len(servers)} servers from {cloud.cloud_config.name}.")
         for server in servers:
             try:
-                result = cloud.delete_server(server.name)
+                # Delete by id, not name. Names are not unique, and a duplicate
+                # name made the lookup ambiguous, which skipped the server on
+                # every run.
+                result = cloud.delete_server(server.id)
             except OpenStackCloudException as e:
+                # Deleting by id cannot raise these duplicate-name errors. The
+                # branch stays as a safety net, so keep it and its tests.
                 error_msg = str(e)
                 if error_msg.startswith("Multiple matches found for") or error_msg.startswith(
                     "More than one Server exists with the name"
@@ -69,10 +74,11 @@ def cleanup(os_cloud, days=0):
 
             if not result:
                 print(
-                    f'WARNING: Failed to remove "{server.name}" from {cloud.cloud_config.name}. Possibly already deleted.'
+                    f'WARNING: Failed to remove "{server.name}" ({server.id}) from '
+                    f"{cloud.cloud_config.name}. Possibly already deleted."
                 )
             else:
-                print(f'Removed "{server.name}" from {cloud.cloud_config.name}.')
+                print(f'Removed "{server.name}" ({server.id}) from {cloud.cloud_config.name}.')
 
     cloud = openstack.connection.from_config(cloud=os_cloud)
     servers = cloud.list_servers()
@@ -96,6 +102,6 @@ def remove(os_cloud, server_name, minutes=0):
     if datetime.strptime(server.created_at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC) >= datetime.now(UTC) - timedelta(
         minutes=minutes
     ):
-        print(f'WARN: Server "{server.name}" is not older than {minutes} minutes.')
+        print(f'WARN: Server "{server.name}" ({server.id}) is not older than {minutes} minutes.')
     else:
-        cloud.delete_server(server.name)
+        cloud.delete_server(server.id)

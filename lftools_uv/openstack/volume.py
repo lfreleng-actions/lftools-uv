@@ -59,8 +59,13 @@ def cleanup(os_cloud: str, days: int = 0) -> None:
         print(f"Removing {len(volumes)} volumes from {cloud.cloud_config.name}.")
         for volume in volumes:
             try:
-                result = cloud.delete_volume(volume.name)
+                # Delete by id, not name. Names are not unique, and a duplicate
+                # name made the lookup ambiguous, which skipped the volume on
+                # every run.
+                result = cloud.delete_volume(volume.id)
             except OpenStackCloudException as e:
+                # Deleting by id cannot raise these duplicate-name errors. The
+                # branch stays as a safety net, so keep it and its tests.
                 error_msg = str(e)
                 if error_msg.startswith("Multiple matches found for") or error_msg.startswith(
                     "More than one Volume exists with the name"
@@ -73,10 +78,11 @@ def cleanup(os_cloud: str, days: int = 0) -> None:
 
             if not result:
                 print(
-                    f'WARNING: Failed to remove "{volume.name}" from {cloud.cloud_config.name}. Possibly already deleted.'
+                    f'WARNING: Failed to remove "{volume.name}" ({volume.id}) from '
+                    f"{cloud.cloud_config.name}. Possibly already deleted."
                 )
             else:
-                print(f'Removed "{volume.name}" from {cloud.cloud_config.name}.')
+                print(f'Removed "{volume.name}" ({volume.id}) from {cloud.cloud_config.name}.')
 
     cloud = openstack.connection.from_config(cloud=os_cloud)
     volumes = cloud.list_volumes()
@@ -101,6 +107,6 @@ def remove(os_cloud: str, volume_id: str, minutes: int = 0) -> None:
     if datetime.strptime(volume.created_at, "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=UTC) >= datetime.now(
         UTC
     ) - timedelta(minutes=minutes):
-        print(f'WARN: volume "{volume.name}" is not older than {minutes} minutes.')
+        print(f'WARN: volume "{volume.name}" ({volume.id}) is not older than {minutes} minutes.')
     else:
         cloud.delete_volume(volume.id)
