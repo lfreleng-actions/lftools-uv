@@ -59,8 +59,13 @@ def cleanup(os_cloud: str, days: int = 0) -> None:
         print(f"Removing {len(volumes)} volumes from {cloud.cloud_config.name}.")
         for volume in volumes:
             try:
-                result = cloud.delete_volume(volume.name)
+                # Delete by id, not name. Names are not unique, and a duplicate
+                # name made the lookup ambiguous, which skipped the volume on
+                # every run.
+                result = cloud.delete_volume(volume.id)
             except OpenStackCloudException as e:
+                # Deleting by id cannot raise these duplicate-name errors. The
+                # branch stays as a safety net, so keep it and its tests.
                 error_msg = str(e)
                 if error_msg.startswith("Multiple matches found for") or error_msg.startswith(
                     "More than one Volume exists with the name"

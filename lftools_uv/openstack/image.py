@@ -99,6 +99,8 @@ def cleanup(os_cloud, days=0, hide_public=False, ci_managed=True, clouds=None):
                 # the image on every run.
                 result = cloud.delete_image(image.id)
             except OpenStackCloudException as e:
+                # Deleting by id cannot raise these duplicate-name errors. The
+                # branch stays as a safety net, so keep it and its tests.
                 error_msg = str(e)
                 if error_msg.startswith("Multiple matches found for") or error_msg.startswith(
                     "More than one Image exists with the name"

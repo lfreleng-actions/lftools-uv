@@ -11,7 +11,7 @@
 """Test openstack server module."""
 
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 from openstack.cloud.exc import OpenStackCloudException
@@ -109,7 +109,7 @@ class TestCleanupServers:
 
         os_server.cleanup("test-cloud", days=5)
 
-        mock_cloud.delete_server.assert_called_once_with(mock_server.name)
+        mock_cloud.delete_server.assert_called_once_with(mock_server.id)
 
     def test_cleanup_multiple_servers(self, mock_from_config, mock_cloud):
         """Test cleanup of multiple servers."""
@@ -138,7 +138,7 @@ class TestCleanupServers:
         # Should not raise exception, just skip the server
         os_server.cleanup("test-cloud")
 
-        mock_cloud.delete_server.assert_called_once_with(mock_server.name)
+        mock_cloud.delete_server.assert_called_once_with(mock_server.id)
 
     def test_cleanup_multiple_matches_new_format(self, mock_from_config, mock_cloud, mock_server):
         """Test handling of duplicate server exception with new format."""
@@ -151,7 +151,7 @@ class TestCleanupServers:
         # Should not raise exception, just skip the server
         os_server.cleanup("test-cloud")
 
-        mock_cloud.delete_server.assert_called_once_with(mock_server.name)
+        mock_cloud.delete_server.assert_called_once_with(mock_server.id)
 
     def test_cleanup_unexpected_exception(self, mock_from_config, mock_cloud, mock_server):
         """Test that unexpected exceptions are raised."""
@@ -171,7 +171,7 @@ class TestCleanupServers:
         # Should not raise exception, just log warning
         os_server.cleanup("test-cloud")
 
-        mock_cloud.delete_server.assert_called_once_with(mock_server.name)
+        mock_cloud.delete_server.assert_called_once_with(mock_server.id)
 
     def test_cleanup_mixed_results(self, mock_from_config, mock_cloud):
         """Test cleanup with one success and one duplicate exception."""
@@ -197,6 +197,38 @@ class TestCleanupServers:
 
         assert mock_cloud.delete_server.call_count == 2
 
+    def test_cleanup_duplicate_names_deleted_by_id(self, mock_from_config, mock_cloud):
+        """Duplicate server names must not stop those servers being removed.
+
+        Nova does not enforce unique server names. Addressing a server by
+        name makes the lookup ambiguous for a duplicated name, which raised
+        DuplicateResource and skipped the server on every run. Addressing by
+        id always resolves to exactly one server, so every copy is removed.
+        """
+
+        def _server(name, server_id):
+            s = MagicMock()
+            s.name = name
+            s.id = server_id
+            s.created_at = (datetime.now() - timedelta(days=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            return s
+
+        first = _server("duplicate-name", "server-aaa")
+        second = _server("duplicate-name", "server-bbb")
+        unique = _server("unique-name", "server-ccc")
+
+        mock_from_config.return_value = mock_cloud
+        mock_cloud.list_servers.return_value = [first, second, unique]
+        mock_cloud.delete_server.return_value = True
+
+        os_server.cleanup("test-cloud", days=5)
+
+        assert mock_cloud.delete_server.call_args_list == [
+            call("server-aaa"),
+            call("server-bbb"),
+            call("server-ccc"),
+        ]
+
 
 @patch("openstack.connection.from_config")
 class TestRemoveServer:
@@ -210,7 +242,7 @@ class TestRemoveServer:
 
         os_server.remove("test-cloud", "test-server", minutes=5)
 
-        mock_cloud.delete_server.assert_called_once_with(mock_server.name)
+        mock_cloud.delete_server.assert_called_once_with(mock_server.id)
 
     def test_remove_server_not_found(self, mock_from_config, mock_cloud):
         """Test removal when server is not found."""
@@ -243,4 +275,4 @@ class TestRemoveServer:
         os_server.remove("test-cloud", "test-server", minutes=0)
 
         # Should delete the server regardless of age
-        mock_cloud.delete_server.assert_called_once_with(mock_server.name)
+        mock_cloud.delete_server.assert_called_once_with(mock_server.id)
