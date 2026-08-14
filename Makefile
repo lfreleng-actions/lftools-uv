@@ -56,7 +56,7 @@ format:
 # Clean build artifacts and cache
 clean:
 	rm -rf build/ dist/ *.egg-info/
-	rm -rf .pytest_cache/ .coverage htmlcov/
+	rm -rf .pytest_cache/ .coverage htmlcov/ /tmp/lftools-uv-coverage/
 	rm -rf docs/_build/
 	find . -type d -name __pycache__ -delete
 	find . -type f -name "*.pyc" -delete
