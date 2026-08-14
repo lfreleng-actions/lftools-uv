@@ -74,10 +74,11 @@ def cleanup(os_cloud, days=0):
 
             if not result:
                 print(
-                    f'WARNING: Failed to remove "{server.name}" from {cloud.cloud_config.name}. Possibly already deleted.'
+                    f'WARNING: Failed to remove "{server.name}" ({server.id}) from '
+                    f"{cloud.cloud_config.name}. Possibly already deleted."
                 )
             else:
-                print(f'Removed "{server.name}" from {cloud.cloud_config.name}.')
+                print(f'Removed "{server.name}" ({server.id}) from {cloud.cloud_config.name}.')
 
     cloud = openstack.connection.from_config(cloud=os_cloud)
     servers = cloud.list_servers()
@@ -101,6 +102,6 @@ def remove(os_cloud, server_name, minutes=0):
     if datetime.strptime(server.created_at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC) >= datetime.now(UTC) - timedelta(
         minutes=minutes
     ):
-        print(f'WARN: Server "{server.name}" is not older than {minutes} minutes.')
+        print(f'WARN: Server "{server.name}" ({server.id}) is not older than {minutes} minutes.')
     else:
         cloud.delete_server(server.id)

@@ -78,10 +78,11 @@ def cleanup(os_cloud: str, days: int = 0) -> None:
 
             if not result:
                 print(
-                    f'WARNING: Failed to remove "{volume.name}" from {cloud.cloud_config.name}. Possibly already deleted.'
+                    f'WARNING: Failed to remove "{volume.name}" ({volume.id}) from '
+                    f"{cloud.cloud_config.name}. Possibly already deleted."
                 )
             else:
-                print(f'Removed "{volume.name}" from {cloud.cloud_config.name}.')
+                print(f'Removed "{volume.name}" ({volume.id}) from {cloud.cloud_config.name}.')
 
     cloud = openstack.connection.from_config(cloud=os_cloud)
     volumes = cloud.list_volumes()
@@ -106,6 +107,6 @@ def remove(os_cloud: str, volume_id: str, minutes: int = 0) -> None:
     if datetime.strptime(volume.created_at, "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=UTC) >= datetime.now(
         UTC
     ) - timedelta(minutes=minutes):
-        print(f'WARN: volume "{volume.name}" is not older than {minutes} minutes.')
+        print(f'WARN: volume "{volume.name}" ({volume.id}) is not older than {minutes} minutes.')
     else:
         cloud.delete_volume(volume.id)
