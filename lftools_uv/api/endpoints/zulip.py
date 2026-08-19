@@ -60,11 +60,6 @@ if TYPE_CHECKING:  # pragma: no cover
 log = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Domain exceptions
-# ---------------------------------------------------------------------------
-
-
 class ZulipError(Exception):
     """Base class for all Zulip-related errors raised by this module."""
 
@@ -112,11 +107,6 @@ class ZulipValidationError(ZulipError):
     """Raised for client-side validation failures (e.g. mutex flags)."""
 
 
-# ---------------------------------------------------------------------------
-# Optional-dependency detection
-# ---------------------------------------------------------------------------
-
-
 def zulip_available() -> bool:
     """Return ``True`` when the optional ``zulip`` package is importable."""
     return _zulip_module is not None
@@ -136,11 +126,6 @@ def _require_zulip() -> Any:
             "The 'zulip' Python package is not installed. Install with: pip install \"lftools-uv[zulip]\""
         )
     return _zulip_module
-
-
-# ---------------------------------------------------------------------------
-# Configuration resolution (FR-011 / FR-012)
-# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -255,11 +240,6 @@ def resolve_config(
     )
 
 
-# ---------------------------------------------------------------------------
-# Client factory
-# ---------------------------------------------------------------------------
-
-
 def get_client(zuliprc: Path | None = None, *, config: ZulipConfig | None = None) -> Any:
     """Instantiate a ``zulip.Client`` from the resolved configuration.
 
@@ -289,11 +269,6 @@ def get_client(zuliprc: Path | None = None, *, config: ZulipConfig | None = None
         api_key=resolved.api_key,
         site=resolved.site,
     )
-
-
-# ---------------------------------------------------------------------------
-# Feature-level detection (FR-019)
-# ---------------------------------------------------------------------------
 
 
 #: Hardcoded feature-level thresholds determined by consulting the Zulip
@@ -365,11 +340,6 @@ def check_feature_level(
         )
 
 
-# ---------------------------------------------------------------------------
-# Channel resolution
-# ---------------------------------------------------------------------------
-
-
 def _fetch_streams(client: Any, include_archived: bool) -> list[dict[str, Any]]:
     """Return the raw stream listing from the Zulip server.
 
@@ -439,11 +409,6 @@ def resolve_channel(
                     f"Channel '{name}' is archived. Use --include-archived to operate on archived channels."
                 )
     raise ZulipNotFoundError(f"Channel '{name}' not found")
-
-
-# ---------------------------------------------------------------------------
-# User resolution
-# ---------------------------------------------------------------------------
 
 
 IdMode = Literal["email", "id", "name"]
@@ -531,11 +496,6 @@ def resolve_users(
     """
     members = _fetch_users(client)
     return [_resolve_single_user(ident, members, mode=mode) for ident in identifiers]
-
-
-# ---------------------------------------------------------------------------
-# Group resolution
-# ---------------------------------------------------------------------------
 
 
 #: Display-name → API name mapping for built-in system role groups.
@@ -686,11 +646,6 @@ def resolve_groups(
     return resolved, _build_group_setting_value(group_ids)
 
 
-# ---------------------------------------------------------------------------
-# US1 — List Channels (T022)
-# ---------------------------------------------------------------------------
-
-
 def _normalize_channel(stream: dict[str, Any]) -> dict[str, Any]:
     """Project a raw Zulip stream dict into the documented shape.
 
@@ -735,11 +690,6 @@ def list_channels(client: Any, *, include_archived: bool = False) -> list[dict[s
     """
     streams = _fetch_streams(client, include_archived=include_archived)
     return [_normalize_channel(s) for s in streams]
-
-
-# ---------------------------------------------------------------------------
-# Channel folders
-# ---------------------------------------------------------------------------
 
 
 def _normalize_channel_folder(raw: dict[str, Any]) -> dict[str, Any]:
@@ -1123,11 +1073,6 @@ def resolve_channel_folder_token(client: Any, token: str) -> int | None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Channel subscribers (US7)
-# ---------------------------------------------------------------------------
-
-
 def list_subscribers(
     client: Any,
     *,
@@ -1213,11 +1158,6 @@ def list_subscribers(
     return enriched
 
 
-# ---------------------------------------------------------------------------
-# User listing (US2)
-# ---------------------------------------------------------------------------
-
-
 def _normalize_user(member: dict[str, Any]) -> dict[str, Any]:
     """Project a raw Zulip ``members`` entry to the CLI/JSON contract shape.
 
@@ -1274,11 +1214,6 @@ def list_users(
             continue
         result.append(_normalize_user(member))
     return result
-
-
-# ---------------------------------------------------------------------------
-# Group listing (US3)
-# ---------------------------------------------------------------------------
 
 
 def _normalize_group(raw: dict[str, Any]) -> dict[str, Any]:
@@ -1366,11 +1301,6 @@ def list_groups(
         return matches
 
     return normalized
-
-
-# ---------------------------------------------------------------------------
-# US4 — Create Channel (T034)
-# ---------------------------------------------------------------------------
 
 
 #: Valid topic-policy values per spec.
@@ -1581,11 +1511,6 @@ def create_channel(
     return result
 
 
-# ---------------------------------------------------------------------------
-# Subscription management (US5)
-# ---------------------------------------------------------------------------
-
-
 #: Spec-defined maximum number of users that can be subscribed in a single
 #: invocation. See data-model.md / contracts/cli-commands.md.
 MAX_SUBSCRIBE_USERS = 50
@@ -1753,10 +1678,6 @@ def subscribe_users(
         "results": results,
         "errors": errors,
     }
-
-
-# Subscription mutations (US6 — unsubscribe)
-# ---------------------------------------------------------------------------
 
 
 def unsubscribe_users(
@@ -1930,10 +1851,6 @@ def unsubscribe_users(
     }
 
 
-# Channel update (US8 — FR-004)
-# ---------------------------------------------------------------------------
-
-
 #: Allowed values for the ``--type`` flag on ``channel update``.
 ChannelType = Literal["public", "private", "web-public"]
 
@@ -2024,9 +1941,6 @@ def update_channel(
     * Returns the standard ``MutationResult`` dict
       (``status``/``channel_id``/``channel_name``/``operation``).
     """
-    # ------------------------------------------------------------------
-    # Argument validation
-    # ------------------------------------------------------------------
     subscribe_list: list[str] = list(subscribe_user_specs or [])
     settings_specified = (
         any(
@@ -2064,9 +1978,6 @@ def update_channel(
     if folder_id is not None:
         _validate_channel_folder_assignment_id(folder_id)
 
-    # ------------------------------------------------------------------
-    # Feature-level gating (FR-019)
-    # ------------------------------------------------------------------
     if channel_type == "web-public":
         # Fetch server settings ONCE and reuse for both the feature-
         # level check (by priming the cached level) and the spectator-
@@ -2115,9 +2026,6 @@ def update_channel(
     if folder_id is not None or folder_id_specified:
         check_feature_level(client, FEATURE_LEVELS["channel-folders"], feature_name="channel-folders")
 
-    # ------------------------------------------------------------------
-    # Resolve target channel
-    # ------------------------------------------------------------------
     channel = resolve_channel(
         client,
         name=name,
@@ -2133,9 +2041,7 @@ def update_channel(
         raise ZulipAPIError(f"Resolved channel missing name: {channel!r}")
     resolved_name = name_raw
 
-    # ------------------------------------------------------------------
     # Resolve --allow-group (with lockout-aware allow_nobody)
-    # ------------------------------------------------------------------
     # ``allow_group`` is always resolved with allow_nobody=True; the
     # lockout-prevention block below decides whether a Nobody-only
     # value is acceptable in the current context. (Per spec, Nobody is
@@ -2156,9 +2062,6 @@ def update_channel(
     if can_remove_subscribers_group is not None:
         _, can_remove_value = resolve_groups(client, can_remove_subscribers_group)
 
-    # ------------------------------------------------------------------
-    # Lockout prevention on type→private (spec scenarios 13/14, FR-004)
-    # ------------------------------------------------------------------
     is_type_to_private = channel_type == "private" and not bool(channel.get("invite_only"))
     if is_type_to_private:
         has_subs_to_add = bool(subscribe_list)
@@ -2182,13 +2085,11 @@ def update_channel(
                     "non-Nobody --allow-group to retain access."
                 )
 
-    # ------------------------------------------------------------------
     # Resolve --subscribe identifiers. When supplied we actually
     # subscribe the users BEFORE issuing the PATCH so that
     # type-to-private conversions truly retain access — relying on the
     # lockout-prevention bypass without actually subscribing would
     # still lock the channel out.
-    # ------------------------------------------------------------------
     if subscribe_list and channel_type != "private":
         raise ZulipValidationError("--subscribe is only valid when using --type private")
     if subscribe_list and user_id_mode is None:
@@ -2224,9 +2125,6 @@ def update_channel(
                 msg = str(sub_response.get("msg") or sub_response)
             raise ZulipAPIError(f"Subscribe-during-update failed: {msg or sub_response!r}")
 
-    # ------------------------------------------------------------------
-    # Build PATCH request
-    # ------------------------------------------------------------------
     request: dict[str, Any] = {}
     if new_name is not None:
         request["new_name"] = new_name
@@ -2244,9 +2142,6 @@ def update_channel(
     if folder_id is not None or folder_id_specified:
         request["folder_id"] = folder_id
 
-    # ------------------------------------------------------------------
-    # PATCH /api/v1/streams/{stream_id}
-    # ------------------------------------------------------------------
     try:
         response = client.call_endpoint(
             url=f"streams/{stream_id}",
@@ -2272,10 +2167,6 @@ def update_channel(
     if folder_id is not None or folder_id_specified:
         result["folder_id"] = folder_id
     return result
-
-
-# Topic policy convenience helpers (FR-021)
-# ---------------------------------------------------------------------------
 
 
 def _normalize_topic_policy(raw_policy: Any) -> TopicPolicy:
@@ -2384,10 +2275,6 @@ def set_topic_policy(
     }
 
 
-# US9 — Archive a channel (T054)
-# ---------------------------------------------------------------------------
-
-
 def archive_channel(
     client: Any,
     channel: str | int,
@@ -2472,11 +2359,6 @@ def archive_channel(
         "channel_name": name,
         "operation": "archive",
     }
-
-
-# ---------------------------------------------------------------------------
-# Channel mutations — unarchive (US10)
-# ---------------------------------------------------------------------------
 
 
 def unarchive_channel(

@@ -51,10 +51,6 @@ class Nexus3(client.RestApi):
 
         super().__init__(**params)
 
-    # -----------------------------------------------------------------------
-    # Helpers
-    # -----------------------------------------------------------------------
-
     @staticmethod
     def _as_dict(obj: object) -> dict[str, object]:
         """Narrow an object to ``dict[str, object]``.
@@ -83,10 +79,6 @@ class Nexus3(client.RestApi):
             ]
         return []
 
-    # -----------------------------------------------------------------------
-    # Roles
-    # -----------------------------------------------------------------------
-
     def create_role(self, name: str, description: str, privileges: str, roles: str) -> str:
         """Create a new role.
 
@@ -114,10 +106,6 @@ class Nexus3(client.RestApi):
             return f"Role {name} created"
         resp.raise_for_status()
         return "Failed to create role"
-
-    # -----------------------------------------------------------------------
-    # Scripts
-    # -----------------------------------------------------------------------
 
     def create_script(self, name: str, content: str) -> str:
         """Create a new script.
@@ -219,10 +207,6 @@ class Nexus3(client.RestApi):
                 list_of_scripts.append(str(script.get("name", "")))
         return list_of_scripts
 
-    # -----------------------------------------------------------------------
-    # Tags
-    # -----------------------------------------------------------------------
-
     def create_tag(self, name: str, attributes: str | None) -> str:
         """Create a new tag.
 
@@ -308,10 +292,6 @@ class Nexus3(client.RestApi):
         if list_of_tags:
             return list_of_tags
         return "There are no tags"
-
-    # -----------------------------------------------------------------------
-    # Users
-    # -----------------------------------------------------------------------
 
     def create_user(
         self,
@@ -414,10 +394,6 @@ class Nexus3(client.RestApi):
                 )
         return list_of_users
 
-    # -----------------------------------------------------------------------
-    # Assets & Components
-    # -----------------------------------------------------------------------
-
     def list_assets(self, repository: str) -> list[str] | str:
         """List the assets of a given repo.
 
@@ -471,10 +447,6 @@ class Nexus3(client.RestApi):
             list_of_assets.append(str(item.get("path", "")))
         return list_of_assets
 
-    # -----------------------------------------------------------------------
-    # Blob stores
-    # -----------------------------------------------------------------------
-
     def list_blobstores(self) -> list[str]:
         """List server blobstores."""
         response: ApiResponse = self.get("service/rest/beta/blobstores")
@@ -485,10 +457,6 @@ class Nexus3(client.RestApi):
             if blob:
                 list_of_blobstores.append(str(blob.get("name", "")))
         return list_of_blobstores
-
-    # -----------------------------------------------------------------------
-    # Privileges
-    # -----------------------------------------------------------------------
 
     def list_privileges(self) -> list[list[object]]:
         """List server-configured privileges."""
@@ -508,10 +476,6 @@ class Nexus3(client.RestApi):
                 )
         return list_of_privileges
 
-    # -----------------------------------------------------------------------
-    # Repositories
-    # -----------------------------------------------------------------------
-
     def list_repositories(self) -> list[str]:
         """List server repositories."""
         response: ApiResponse = self.get("service/rest/v1/repositories")
@@ -523,10 +487,6 @@ class Nexus3(client.RestApi):
                 list_of_repositories.append(str(repo.get("name", "")))
         return list_of_repositories
 
-    # -----------------------------------------------------------------------
-    # Roles (list)
-    # -----------------------------------------------------------------------
-
     def list_roles(self) -> list[list[str]]:
         """List server roles."""
         response: ApiResponse = self.get("service/rest/beta/security/roles")
@@ -537,10 +497,6 @@ class Nexus3(client.RestApi):
             if role:
                 list_of_roles.append([str(role.get("name", ""))])
         return list_of_roles
-
-    # -----------------------------------------------------------------------
-    # Tasks
-    # -----------------------------------------------------------------------
 
     def list_tasks(self) -> list[list[object]]:
         """List all tasks."""
@@ -557,10 +513,6 @@ class Nexus3(client.RestApi):
                 ]
             )
         return list_of_tasks
-
-    # -----------------------------------------------------------------------
-    # Staging
-    # -----------------------------------------------------------------------
 
     def staging_promotion(self, destination_repo: str, tag: str) -> ApiResponse:
         """Promote repo assets to a new location.

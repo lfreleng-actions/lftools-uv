@@ -51,10 +51,6 @@ class Nexus2(client.RestApi):
 
         super().__init__(**params)
 
-    # -----------------------------------------------------------------------
-    # Helpers
-    # -----------------------------------------------------------------------
-
     @staticmethod
     def _as_dict(obj: object) -> dict[str, object]:
         """Narrow an object to ``dict[str, object]``.
@@ -86,10 +82,6 @@ class Nexus2(client.RestApi):
                 typed_data: list[object] = cast(_LIST_OBJECT_TYPE, data)
                 return [cast("dict[str, object]", item) for item in typed_data if isinstance(item, dict)]
         return []
-
-    # -----------------------------------------------------------------------
-    # Privileges
-    # -----------------------------------------------------------------------
 
     def privilege_list(self) -> list[list[object]]:
         """List privileges."""
@@ -143,10 +135,6 @@ class Nexus2(client.RestApi):
         if resp.status_code == 204:
             return "Privilege successfully deleted."
         return f"Failed to delete privilege {privilege_id}."
-
-    # -----------------------------------------------------------------------
-    # Repositories
-    # -----------------------------------------------------------------------
 
     def repo_list(self) -> list[list[object]]:
         """Get a list of repositories."""
@@ -255,10 +243,6 @@ class Nexus2(client.RestApi):
         log.error("Failed to delete repository %s", repo_id)
         sys.exit(1)
 
-    # -----------------------------------------------------------------------
-    # Roles
-    # -----------------------------------------------------------------------
-
     def role_list(self) -> list[list[object]]:
         """List all roles."""
         response: ApiResponse = self.get("service/local/roles")
@@ -349,10 +333,6 @@ class Nexus2(client.RestApi):
         if resp.status_code == 204:
             return "Role successfully deleted."
         return f"Failed to delete role {role_id}."
-
-    # -----------------------------------------------------------------------
-    # Users
-    # -----------------------------------------------------------------------
 
     def user_list(self) -> list[list[object]]:
         """List all users."""

@@ -44,11 +44,6 @@ _HTTP_BAD_REQUEST = 400
 _SLUG_KEEP = re.compile(r"[^a-z0-9._-]+")
 
 
-# ---------------------------------------------------------------------------
-# Error hierarchy
-# ---------------------------------------------------------------------------
-
-
 class ReadTheDocsError(Exception):
     """Base class for all Read the Docs errors raised by this module."""
 
@@ -74,11 +69,6 @@ class ReadTheDocsNotFoundError(ReadTheDocsAPIError):
 
 class ReadTheDocsValidationError(ReadTheDocsError):
     """Raised for client-side validation failures."""
-
-
-# ---------------------------------------------------------------------------
-# Slug helpers
-# ---------------------------------------------------------------------------
 
 
 def version_slug(branch: str) -> str:

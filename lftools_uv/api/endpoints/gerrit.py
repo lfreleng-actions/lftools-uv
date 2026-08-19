@@ -60,10 +60,6 @@ class Gerrit(client.RestApi):
 
         super().__init__(**params)
 
-    # -----------------------------------------------------------------------
-    # Helpers
-    # -----------------------------------------------------------------------
-
     @staticmethod
     def _as_dict(obj: object) -> dict[str, object]:
         """Narrow an object to ``dict[str, object]``.
@@ -80,10 +76,6 @@ class Gerrit(client.RestApi):
         if isinstance(obj, str):
             return obj
         return str(obj) if obj is not None else ""
-
-    # -----------------------------------------------------------------------
-    # Changes
-    # -----------------------------------------------------------------------
 
     def create_change(
         self,
@@ -183,8 +175,6 @@ class Gerrit(client.RestApi):
         gerrit_project test/test1
         jjbrepo ci-mangement
         """
-        ###############################################################
-        # Setup
         signed_off_by: str = config.get_setting(fqdn, "sob")
         gerrit_project_dashed: str = gerrit_project.replace("/", "-")
         filename: str = f"{gerrit_project_dashed}.yaml"
@@ -329,10 +319,6 @@ class Gerrit(client.RestApi):
                 return self._json_body(abandon_response)
         return None
 
-    # -----------------------------------------------------------------------
-    # Sanity & review helpers
-    # -----------------------------------------------------------------------
-
     def sanity_check(self, _fqdn: str, gerrit_project: str) -> dict[str, object]:
         """Perform a sanity check."""
         gerrit_project_encoded: str = quote(gerrit_project, safe="", encoding=None, errors=None)
@@ -369,8 +355,6 @@ class Gerrit(client.RestApi):
         signed_off_by: str = config.get_setting(fqdn, "sob")
         _ = self.sanity_check(fqdn, gerrit_project)
 
-        ###############################################################
-        # Create A change set.
         filename: str = ".gitreview"
         payload: str = self.create_change(filename, gerrit_project, issue_id, signed_off_by)
         log.info(payload)
@@ -381,8 +365,6 @@ class Gerrit(client.RestApi):
         log.info(result)
         changeid: str = self._str_val(result.get("id"))
 
-        ###############################################################
-        # Add a file to a change set.
         my_inline_file: str = f"""
         [gerrit]
         host={fqdn}
@@ -422,13 +404,8 @@ class Gerrit(client.RestApi):
             submit_result: ApiResponse = self.submit_change(fqdn, gerrit_project, changeid, publish_payload)
             log.info(submit_result)
 
-    # -----------------------------------------------------------------------
-    # Groups
-    # -----------------------------------------------------------------------
-
     def create_saml_group(self, _fqdn: str, ldap_group: str) -> ApiResponse:
         """Create saml group from ldap group."""
-        ###############################################################
         payload: str = json.dumps({"visible_to_all": "false"})
         saml_group: str = f"saml/{ldap_group}"
         saml_group_encoded: str = quote(saml_group, safe="", encoding=None, errors=None)
@@ -439,8 +416,6 @@ class Gerrit(client.RestApi):
 
     def add_github_rights(self, _fqdn: str, gerrit_project: str) -> None:
         """Grant github read to a project."""
-        ###############################################################
-        # Github Rights
 
         gerrit_project_encoded: str = quote(gerrit_project, safe="", encoding=None, errors=None)
         # GET /groups/?m=test%2F HTTP/1.0
@@ -481,10 +456,6 @@ class Gerrit(client.RestApi):
             log.info(pretty)
         else:
             log.info("Error no githubid found")
-
-    # -----------------------------------------------------------------------
-    # Projects
-    # -----------------------------------------------------------------------
 
     def create_project(
         self,
