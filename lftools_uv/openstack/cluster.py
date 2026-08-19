@@ -80,7 +80,7 @@ def _fetch_builds_from(jenkins: str) -> list[str]:
         log.error("Request failed for %s: %s", jenkins_url, e)
         return []
     except Exception as e:
-        log.exception("Unexpected error fetching from %s: %s", jenkins_url, e)
+        log.error("Unexpected error fetching from %s: %s", jenkins_url, e)
         return []
 
     if response.status_code != 200:
