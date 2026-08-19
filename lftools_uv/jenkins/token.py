@@ -9,6 +9,10 @@
 ##############################################################################
 """Jenkins token functions."""
 
+# aislop-ignore-file unused-import -- the Groovy script this module sends to the
+# Jenkins script console is embedded in an f-string, and its `import` lines are
+# Groovy source rather than Python imports
+
 from __future__ import annotations
 
 __author__ = "Thanh Ha"
