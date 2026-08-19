@@ -16,6 +16,7 @@ import logging
 import os
 import re
 import subprocess
+import sys
 from os import chdir, getcwd
 
 log = logging.getLogger(__name__)
@@ -55,7 +56,7 @@ def get_branches(path=getcwd(), invert=False):
             return False
     except subprocess.CalledProcessError as e:
         log.exception(e)
-        exit(1)
+        sys.exit(1)
 
 
 def check(path=getcwd(), signoffs_dir="dco_signoffs"):
@@ -64,7 +65,7 @@ def check(path=getcwd(), signoffs_dir="dco_signoffs"):
     try:
         hashes = get_branches(path, invert=True)
         if not hashes:
-            exit(0)
+            sys.exit(0)
         else:
             missing = []
             for commit in hashes:
@@ -72,7 +73,7 @@ def check(path=getcwd(), signoffs_dir="dco_signoffs"):
                     missing.append(commit.split(" ")[0])
 
             if not missing:
-                exit(0)
+                sys.exit(0)
 
             # de-dupe the commit list
             missing_list = list(dict.fromkeys(missing))
@@ -87,10 +88,10 @@ def check(path=getcwd(), signoffs_dir="dco_signoffs"):
             if missing_list:
                 for commit in missing_list:
                     log.info(f"{commit}")
-                exit(1)
+                sys.exit(1)
     except subprocess.CalledProcessError as e:
         log.exception(e)
-        exit(1)
+        sys.exit(1)
 
 
 def match(path=getcwd(), signoffs_dir="dco_signoffs"):
@@ -100,7 +101,7 @@ def match(path=getcwd(), signoffs_dir="dco_signoffs"):
         hashes = get_branches(path)
         exit_code = 0
         if not hashes:
-            exit(exit_code)
+            sys.exit(exit_code)
 
         # de-dupe the commit list
         hashes_list = list(dict.fromkeys(hashes))
@@ -137,7 +138,7 @@ def match(path=getcwd(), signoffs_dir="dco_signoffs"):
                 )
                 exit_code = 1
 
-        exit(exit_code)
+        sys.exit(exit_code)
     except subprocess.CalledProcessError as e:
         log.exception(e)
-        exit(1)
+        sys.exit(1)

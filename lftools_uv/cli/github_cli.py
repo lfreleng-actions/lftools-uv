@@ -190,7 +190,7 @@ def updaterepo(ctx, organization, repository, has_issues, has_projects, has_wiki
 
         if repo_actual is None:
             log.error("repo not found")
-            exit(1)
+            sys.exit(1)
 
         for team in teams:
             if team.name == add_team:
