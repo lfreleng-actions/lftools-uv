@@ -32,6 +32,10 @@ from lftools_uv.jenkins import Jenkins
 
 log = logging.getLogger(__name__)
 
+# Vexxhost publishes per-flavour pricing used by the `stack cost` command.
+# Format arguments are the flavour name and the elapsed run time in seconds.
+_PRICING_API_URL = "https://pricing.vexxhost.net/v1/pricing/%s/cost?seconds=%d"
+
 
 def create(
     os_cloud: str, name: str, template_file: str, parameter_file: str, timeout: int = 900, tries: int = 2
@@ -97,8 +101,7 @@ def cost(os_cloud: str, stack_name: str, timeout: int = 60) -> None:
     def get_server_cost(server_id: str) -> float:
         try:
             flavor, seconds = get_server_info(server_id)
-            url = "https://pricing.vexxhost.net/v1/pricing/%s/cost?seconds=%d"
-            with urllib.request.urlopen(url % (flavor, seconds), timeout=timeout) as response:  # nosec
+            with urllib.request.urlopen(_PRICING_API_URL % (flavor, seconds), timeout=timeout) as response:  # nosec
                 data = json.loads(response.read())
             return float(data["cost"])
         except (TimeoutError, urllib.error.URLError) as e:

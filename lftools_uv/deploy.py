@@ -43,6 +43,10 @@ _BANNER_HASHES = "#######################################################"
 
 
 log: logging.Logger = logging.getLogger(__name__)
+
+# Scheme assumed for Nexus URLs supplied without one, preserving the historical
+# behaviour of the shell scripts these helpers replaced.
+_DEFAULT_URL_SCHEME = "http://"
 logging.getLogger("botocore").setLevel(logging.CRITICAL)
 
 
@@ -79,7 +83,7 @@ def _format_url(url: str) -> str:
     """Ensure url starts with http and trim trailing '/'s."""
     start_pattern: re.Pattern[str] = re.compile("^(http|https)://")
     if not start_pattern.match(url):
-        url = f"http://{url}"
+        url = f"{_DEFAULT_URL_SCHEME}{url}"
 
     if url.endswith("/"):
         url = url.rstrip("/")
