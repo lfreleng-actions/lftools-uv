@@ -196,7 +196,12 @@ def helper_user_github(  # noqa: C901, PLR0912
     delete: bool,
     admin: bool,
 ) -> None:
-    """Add and Remove users from an org team."""
+    """Add and Remove users from an org team.
+
+    Removal covers accepted memberships only. A user holding an unaccepted
+    invitation is reported but left in place, because revoking a pending
+    invitation is not implemented.
+    """
     token: str = config.get_setting("github", "token")
     g: Github = Github(token)
     org: Organization = _get_org(g, organization)
@@ -251,7 +256,6 @@ def helper_user_github(  # noqa: C901, PLR0912
         else:
             # Use print() for user-facing output to avoid logging PII
             print("User is not a member of org, cannot delete")  # noqa: T201
-            # TODO add revoke invite
             log.info("Code does not handle revoking invitations.")
 
     if user and not delete:
