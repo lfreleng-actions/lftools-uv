@@ -493,7 +493,9 @@ class Gerrit(client.RestApi):
             log.info(resp)
             log.error("A problem was encountered while querying the Gerrit API: %s", exc)
             log.debug(resp.text)
-            sys.exit(resp.status_code)
+            # Not resp.status_code: an unparsable body can arrive with any
+            # status, and an HTTP code is not a meaningful process exit code.
+            sys.exit(1)
 
         if results_dict:
             log.info("Project already exists")
