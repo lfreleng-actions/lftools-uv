@@ -354,8 +354,8 @@ class DockerTagClass(TagClass):
                         still_more = True
                     else:
                         still_more = False
-                except Exception:
-                    log.debug(f"Issue fetching tags for {combined_repo_name}")
+                except Exception as exc:
+                    log.warning("Issue fetching tags for %s: %s", combined_repo_name, exc)
             else:
                 self.repository_exist = False
                 return

@@ -37,8 +37,8 @@ def get_credentials(settings_file: str | None, url: str | None = None) -> dict[s
         try:
             with open(settings_file) as f:
                 settings: dict[str, str] = yaml.safe_load(f)
-        except OSError:
-            log.error(f'Error reading settings file "{settings_file}"')
+        except OSError as exc:
+            log.error(f'Error reading settings file "{settings_file}": {exc}')
             sys.exit(1)
 
         if url and {"user", "password"}.issubset(settings):
@@ -65,8 +65,8 @@ def get_url(settings_file: str | None) -> str:
         try:
             with open(settings_file) as f:
                 settings = yaml.safe_load(f)
-        except OSError:
-            log.error(f'Error reading settings file "{settings_file}"')
+        except OSError as exc:
+            log.error(f'Error reading settings file "{settings_file}": {exc}')
             sys.exit(1)
 
         if "nexus" in settings:
@@ -94,8 +94,8 @@ def reorder_staged_repos(settings_file: str) -> None:
 
     try:
         repo_id = _nexus.get_repo_group("Staging Repositories")
-    except LookupError:
-        log.error("Staging repository 'Staging Repositories' cannot be found")
+    except LookupError as exc:
+        log.error(f"Staging repository 'Staging Repositories' cannot be found: {exc}")
         sys.exit(1)
 
     repo_details = cast(dict[str, Any], _nexus.get_repo_group_details(repo_id))

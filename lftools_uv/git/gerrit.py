@@ -225,12 +225,13 @@ class Gerrit:
         try:
             credential_json = config.get_setting(self.fqdn, "additional_credentials")
             additional_credentials = json.loads(credential_json)
-        except configparser.NoOptionError:
-            log.debug("No additional credentials found")
-        except json.decoder.JSONDecodeError:
+        except configparser.NoOptionError as exc:
+            log.debug("No additional credentials found: %s", exc)
+        except json.decoder.JSONDecodeError as exc:
             log.error(
-                'Improperly formatted JSON in "additional_credentials". '
-                + "Please ensure that all credentials are on a single line, and are not quoted."
+                'Improperly formatted JSON in "additional_credentials" (%s). '
+                "Please ensure that all credentials are on a single line, and are not quoted.",
+                exc,
             )
 
         if not nexus3_url:
@@ -249,8 +250,8 @@ class Gerrit:
         elif nexus3_ports:
             try:
                 nexus3_port_list = nexus3_ports.split(",")
-            except AttributeError:
-                log.error("Invalid nexus3_ports designated.")
+            except AttributeError as exc:
+                log.error("Invalid nexus3_ports designated: %s", exc)
 
         jinja_env = Environment(
             loader=PackageLoader(_LFTOOLS_UV_GIT), autoescape=select_autoescape(), keep_trailing_newline=True
