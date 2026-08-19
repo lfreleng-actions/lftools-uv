@@ -503,8 +503,16 @@ class ReadTheDocs(client.RestApi):
         :param subproject: The other project's slug that is to be subordinated
         :param alias: An alias (not required). (user-defined slug)
         :return: {status payload}
+
+        The alias key stays out of the payload when no alias arrives.
+        Sending an explicit JSON null makes readthedocs.org fail with an
+        unhandled HTTP 500 rather than a validation error, and the server
+        already defaults the alias to the child's slug when the key is
+        absent.
         """
-        data: dict[str, str | None] = {"child": subproject, "alias": alias}
+        data: dict[str, str] = {"child": subproject}
+        if alias is not None:
+            data["alias"] = alias
         json_data: str = json.dumps(data)
         result: ApiResponse = self.post(f"projects/{project}/subprojects/", data=json_data)
         resp = self._check(
