@@ -15,12 +15,81 @@ __author__ = "Anil Belur"
 
 import json
 import sys
+from collections.abc import Iterator
+from typing import Any
 
 # aislop-ignore-file hallucinated-import -- the declared openstacksdk dependency provides the `openstack` import package
 import openstack
 import openstack.connection
 import requests
 from openstack.cloud.exc import OpenStackCloudException
+
+
+def _silo_name(jenkins: str) -> str:
+    """Derive the silo label used to namespace build identifiers."""
+    if "jenkins." in jenkins and (".org" in jenkins or ".io" in jenkins):
+        return "production"
+    return jenkins.split("/")[-1]
+
+
+def _executable_urls(data: dict[str, Any]) -> Iterator[str]:
+    """Yield the URL of every executable currently running on any node."""
+    for computer in data.get("computer", []):
+        for executor in computer.get("executors", []) + computer.get("oneOffExecutors", []):
+            current = executor.get("currentExecutable") or {}
+            url = current.get("url")
+            if url and url != "null":
+                yield url
+
+
+def _build_id(silo: str, executable_url: str) -> str | None:
+    """Return a ``silo-job-build`` identifier, or None if the URL lacks both parts."""
+    parts = executable_url.rstrip("/").split("/")
+    if len(parts) < 2:
+        return None
+    job_name, build_num = parts[-2], parts[-1]
+    return f"{silo}-{job_name}-{build_num}"
+
+
+def _fetch_builds_from(jenkins: str) -> list[str]:
+    """Return the active build identifiers reported by a single Jenkins.
+
+    Returns an empty list when the server cannot be reached or its reply
+    cannot be parsed; the caller treats an unreachable Jenkins as having
+    no active builds.
+    """
+    params = "tree=computer[executors[currentExecutable[url]],oneOffExecutors[currentExecutable[url]]]"
+    params += "&xpath=//url&wrapper=builds"
+    jenkins_url = f"{jenkins}/computer/api/json?{params}"
+
+    try:
+        response = requests.get(
+            jenkins_url,
+            headers={"Content-Type": "application/json"},
+            timeout=30,
+        )
+    except requests.exceptions.Timeout:
+        print(f"ERROR: Timeout fetching data from {jenkins_url}")
+        return []
+    except requests.exceptions.RequestException as e:
+        print(f"ERROR: Request failed for {jenkins_url}: {e}")
+        return []
+    except Exception as e:
+        print(f"ERROR: Unexpected error fetching from {jenkins_url}: {e}")
+        return []
+
+    if response.status_code != 200:
+        print(f"ERROR: Failed to fetch data from {jenkins_url} with status code {response.status_code}")
+        return []
+
+    try:
+        data = response.json()
+    except json.JSONDecodeError as e:
+        print(f"ERROR: Failed to parse JSON from {jenkins_url}: {e}")
+        return []
+
+    silo = _silo_name(jenkins)
+    return [build for url in _executable_urls(data) if (build := _build_id(silo, url)) is not None]
 
 
 def _fetch_jenkins_builds(jenkins_urls: list[str]) -> list[str]:
@@ -30,58 +99,8 @@ def _fetch_jenkins_builds(jenkins_urls: list[str]) -> list[str]:
     :returns: List of active build identifiers (silo-job-build format).
     """
     builds: list[str] = []
-
     for jenkins in jenkins_urls:
-        jenkins = jenkins.rstrip("/")
-        params = "tree=computer[executors[currentExecutable[url]],oneOffExecutors[currentExecutable[url]]]"
-        params += "&xpath=//url&wrapper=builds"
-        jenkins_url = f"{jenkins}/computer/api/json?{params}"
-
-        try:
-            # Use requests to fetch data
-            response = requests.get(
-                jenkins_url,
-                headers={"Content-Type": "application/json"},
-                timeout=30,
-            )
-
-            if response.status_code != 200:
-                print(f"ERROR: Failed to fetch data from {jenkins_url} with status code {response.status_code}")
-                continue
-
-            # Determine silo name
-            if "jenkins." in jenkins and (".org" in jenkins or ".io" in jenkins):
-                silo = "production"
-            else:
-                silo = jenkins.split("/")[-1]
-
-            try:
-                data = response.json()
-            except json.JSONDecodeError as e:
-                print(f"ERROR: Failed to parse JSON from {jenkins_url}: {e}")
-                continue
-
-            for computer in data.get("computer", []):
-                for executor in computer.get("executors", []) + computer.get("oneOffExecutors", []):
-                    current_exec = executor.get("currentExecutable", {})
-                    url = current_exec.get("url")
-                    if url and url != "null":
-                        parts = url.rstrip("/").split("/")
-                        if len(parts) >= 2:
-                            job_name = parts[-2]
-                            build_num = parts[-1]
-                            builds.append(f"{silo}-{job_name}-{build_num}")
-
-        except requests.exceptions.Timeout:
-            print(f"ERROR: Timeout fetching data from {jenkins_url}")
-            continue
-        except requests.exceptions.RequestException as e:
-            print(f"ERROR: Request failed for {jenkins_url}: {e}")
-            continue
-        except Exception as e:
-            print(f"ERROR: Unexpected error fetching from {jenkins_url}: {e}")
-            continue
-
+        builds.extend(_fetch_builds_from(jenkins.rstrip("/")))
     return builds
 
 
