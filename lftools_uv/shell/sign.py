@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: EPL-1.0
 ##############################################################################
 # Copyright (c) 2017, 2023 The Linux Foundation and others.
