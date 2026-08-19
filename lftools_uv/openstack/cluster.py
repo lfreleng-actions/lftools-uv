@@ -14,6 +14,7 @@ from __future__ import annotations
 __author__ = "Anil Belur"
 
 import json
+import logging
 import sys
 from collections.abc import Iterator
 from typing import Any
@@ -23,6 +24,10 @@ import openstack
 import openstack.connection
 import requests
 from openstack.cloud.exc import OpenStackCloudException
+
+from lftools_uv.output import echo
+
+log = logging.getLogger(__name__)
 
 
 def _silo_name(jenkins: str) -> str:
@@ -69,23 +74,23 @@ def _fetch_builds_from(jenkins: str) -> list[str]:
             timeout=30,
         )
     except requests.exceptions.Timeout:
-        print(f"ERROR: Timeout fetching data from {jenkins_url}")
+        log.error("Timeout fetching data from %s", jenkins_url)
         return []
     except requests.exceptions.RequestException as e:
-        print(f"ERROR: Request failed for {jenkins_url}: {e}")
+        log.error("Request failed for %s: %s", jenkins_url, e)
         return []
     except Exception as e:
-        print(f"ERROR: Unexpected error fetching from {jenkins_url}: {e}")
+        log.exception("Unexpected error fetching from %s: %s", jenkins_url, e)
         return []
 
     if response.status_code != 200:
-        print(f"ERROR: Failed to fetch data from {jenkins_url} with status code {response.status_code}")
+        log.error("Failed to fetch data from %s with status code %s", jenkins_url, response.status_code)
         return []
 
     try:
         data = response.json()
     except json.JSONDecodeError as e:
-        print(f"ERROR: Failed to parse JSON from {jenkins_url}: {e}")
+        log.error("Failed to parse JSON from %s: %s", jenkins_url, e)
         return []
 
     silo = _silo_name(jenkins)
@@ -134,15 +139,15 @@ def list_clusters(os_cloud: str) -> None:
         clusters = cloud.list_coe_clusters()
 
         for cluster in clusters:
-            print(cluster.name)
+            echo(cluster.name)
 
     except OpenStackCloudException as e:
-        print(f"ERROR: Failed to list clusters: {e}")
+        log.error("Failed to list clusters: %s", e)
         sys.exit(1)
     except AttributeError:
         # Fallback if list_coe_clusters is not available
-        print("ERROR: COE cluster operations not supported by this OpenStack SDK version")
-        print("Please ensure openstacksdk >= 4.0.0 is installed")
+        log.error("COE cluster operations not supported by this OpenStack SDK version")
+        log.error("Please ensure openstacksdk >= 4.0.0 is installed")
         sys.exit(1)
 
 
@@ -161,13 +166,13 @@ def cleanup(os_cloud: str, jenkins_urls: str | None = None) -> None:
         jenkins_url_list = [url.strip() for url in jenkins_urls.split() if url.strip()]
 
     if not jenkins_url_list:
-        print("WARN: No Jenkins URLs provided, skipping cluster cleanup to be safe")
+        log.warning("No Jenkins URLs provided, skipping cluster cleanup to be safe")
         return
 
-    print(f"INFO: Checking Jenkins URLs for active builds: {' '.join(jenkins_url_list)}")
+    log.info("Checking Jenkins URLs for active builds: %s", " ".join(jenkins_url_list))
 
     active_builds = _fetch_jenkins_builds(jenkins_url_list)
-    print(f"INFO: Found {len(active_builds)} active builds in Jenkins")
+    log.info("Found %d active builds in Jenkins", len(active_builds))
 
     cloud = openstack.connection.from_config(cloud=os_cloud)
 
@@ -175,36 +180,36 @@ def cleanup(os_cloud: str, jenkins_urls: str | None = None) -> None:
         clusters = cloud.list_coe_clusters()
         cluster_names = [cluster.name for cluster in clusters]
 
-        print(f"INFO: Found {len(cluster_names)} COE clusters on cloud {os_cloud}")
+        log.info("Found %d COE clusters on cloud %s", len(cluster_names), os_cloud)
 
         deleted_count = 0
         for cluster_name in cluster_names:
             # Check if cluster is managed (long-lived)
             if "-managed-prod-k8s-" in cluster_name or "-managed-test-k8s-" in cluster_name:
-                print(f"INFO: Skipping managed cluster: {cluster_name}")
+                log.info("Skipping managed cluster: %s", cluster_name)
                 continue
 
             # Check if cluster is in active Jenkins builds
             if _cluster_in_jenkins(cluster_name, active_builds):
-                print(f"INFO: Cluster {cluster_name} is in use by active build, skipping")
+                log.info("Cluster %s is in use by active build, skipping", cluster_name)
                 continue
 
-            print(f"INFO: Deleting orphaned k8s cluster: {cluster_name}")
+            log.info("Deleting orphaned k8s cluster: %s", cluster_name)
             try:
                 cloud.delete_coe_cluster(cluster_name)
                 deleted_count += 1
-                print(f"INFO: Successfully deleted cluster: {cluster_name}")
+                log.info("Successfully deleted cluster: %s", cluster_name)
             except OpenStackCloudException as e:
-                print(f"ERROR: Failed to delete cluster {cluster_name}: {e}")
+                log.error("Failed to delete cluster %s: %s", cluster_name, e)
                 continue
 
-        print(f"INFO: Deleted {deleted_count} orphaned cluster(s)")
+        log.info("Deleted %d orphaned cluster(s)", deleted_count)
 
     except OpenStackCloudException as e:
-        print(f"ERROR: Failed to list clusters: {e}")
+        log.error("Failed to list clusters: %s", e)
         sys.exit(1)
     except AttributeError:
         # Fallback if COE operations are not available
-        print("ERROR: COE cluster operations not supported by this OpenStack SDK version")
-        print("Please ensure openstacksdk >= 4.0.0 is installed")
+        log.error("COE cluster operations not supported by this OpenStack SDK version")
+        log.error("Please ensure openstacksdk >= 4.0.0 is installed")
         sys.exit(1)

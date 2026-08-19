@@ -12,6 +12,7 @@
 
 __author__ = "Anil Belur"
 
+import logging
 import sys
 from datetime import UTC, datetime, timedelta
 
@@ -19,6 +20,10 @@ from datetime import UTC, datetime, timedelta
 import openstack
 import openstack.connection
 from openstack.cloud.exc import OpenStackCloudException
+
+from lftools_uv.output import echo
+
+log = logging.getLogger(__name__)
 
 
 def _filter_servers(servers, days=0):
@@ -41,7 +46,7 @@ def list(os_cloud, days=0):
 
     filtered_servers = _filter_servers(servers, days)
     for server in filtered_servers:
-        print(server.name)
+        echo(server.name)
 
 
 def cleanup(os_cloud, days=0):
@@ -52,7 +57,7 @@ def cleanup(os_cloud, days=0):
     """
 
     def _remove_servers_from_cloud(servers, cloud):
-        print(f"Removing {len(servers)} servers from {cloud.cloud_config.name}.")
+        log.info("Removing %d servers from %s.", len(servers), cloud.cloud_config.name)
         for server in servers:
             try:
                 # Delete by id, not name. Names are not unique, and a duplicate
@@ -66,19 +71,21 @@ def cleanup(os_cloud, days=0):
                 if error_msg.startswith("Multiple matches found for") or error_msg.startswith(
                     "More than one Server exists with the name"
                 ):
-                    print(f"WARNING: {error_msg}. Skipping server...")
+                    log.warning("%s. Skipping server...", error_msg)
                     continue
                 else:
-                    print(f"ERROR: Unexpected exception: {error_msg}")
+                    log.error("Unexpected exception: %s", error_msg)
                     raise
 
             if not result:
-                print(
-                    f'WARNING: Failed to remove "{server.name}" ({server.id}) from '
-                    f"{cloud.cloud_config.name}. Possibly already deleted."
+                log.warning(
+                    'Failed to remove "%s" (%s) from %s. Possibly already deleted.',
+                    server.name,
+                    server.id,
+                    cloud.cloud_config.name,
                 )
             else:
-                print(f'Removed "{server.name}" ({server.id}) from {cloud.cloud_config.name}.')
+                log.info('Removed "%s" (%s) from %s.', server.name, server.id, cloud.cloud_config.name)
 
     cloud = openstack.connection.from_config(cloud=os_cloud)
     servers = cloud.list_servers()
@@ -96,12 +103,12 @@ def remove(os_cloud, server_name, minutes=0):
     server = cloud.get_server(server_name)
 
     if not server:
-        print("ERROR: Server not found.")
+        log.error("Server not found.")
         sys.exit(1)
 
     if datetime.strptime(server.created_at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC) >= datetime.now(UTC) - timedelta(
         minutes=minutes
     ):
-        print(f'WARN: Server "{server.name}" ({server.id}) is not older than {minutes} minutes.')
+        log.warning('Server "%s" (%s) is not older than %d minutes.', server.name, server.id, minutes)
     else:
         cloud.delete_server(server.id)

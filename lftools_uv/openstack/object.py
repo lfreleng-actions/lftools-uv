@@ -18,6 +18,8 @@ __author__ = "Thanh Ha"
 import openstack
 import openstack.connection
 
+from lftools_uv.output import echo
+
 
 def list_containers(os_cloud: str) -> None:
     """List volumes found according to parameters."""
@@ -25,4 +27,4 @@ def list_containers(os_cloud: str) -> None:
     containers = cloud.list_containers()
 
     for container in containers:
-        print(container)
+        echo(container)

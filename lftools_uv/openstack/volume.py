@@ -15,6 +15,7 @@ from __future__ import annotations
 __author__ = "Thanh Ha"
 
 import builtins
+import logging
 import sys
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -23,6 +24,10 @@ from typing import Any
 import openstack
 import openstack.connection
 from openstack.cloud.exc import OpenStackCloudException
+
+from lftools_uv.output import echo
+
+log = logging.getLogger(__name__)
 
 
 def _filter_volumes(volumes: builtins.list[Any], days: int = 0) -> builtins.list[Any]:
@@ -45,7 +50,7 @@ def list(os_cloud: str, days: int = 0) -> None:
 
     filtered_volumes = _filter_volumes(volumes, days)
     for volume in filtered_volumes:
-        print(volume.name)
+        echo(volume.name)
 
 
 def cleanup(os_cloud: str, days: int = 0) -> None:
@@ -56,7 +61,7 @@ def cleanup(os_cloud: str, days: int = 0) -> None:
     """
 
     def _remove_volumes_from_cloud(volumes: builtins.list[Any], cloud: Any) -> None:
-        print(f"Removing {len(volumes)} volumes from {cloud.cloud_config.name}.")
+        log.info("Removing %d volumes from %s.", len(volumes), cloud.cloud_config.name)
         for volume in volumes:
             try:
                 # Delete by id, not name. Names are not unique, and a duplicate
@@ -70,19 +75,21 @@ def cleanup(os_cloud: str, days: int = 0) -> None:
                 if error_msg.startswith("Multiple matches found for") or error_msg.startswith(
                     "More than one Volume exists with the name"
                 ):
-                    print(f"WARNING: {error_msg}. Skipping volume...")
+                    log.warning("%s. Skipping volume...", error_msg)
                     continue
                 else:
-                    print(f"ERROR: Unexpected exception: {error_msg}")
+                    log.error("Unexpected exception: %s", error_msg)
                     raise
 
             if not result:
-                print(
-                    f'WARNING: Failed to remove "{volume.name}" ({volume.id}) from '
-                    f"{cloud.cloud_config.name}. Possibly already deleted."
+                log.warning(
+                    'Failed to remove "%s" (%s) from %s. Possibly already deleted.',
+                    volume.name,
+                    volume.id,
+                    cloud.cloud_config.name,
                 )
             else:
-                print(f'Removed "{volume.name}" ({volume.id}) from {cloud.cloud_config.name}.')
+                log.info('Removed "%s" (%s) from %s.', volume.name, volume.id, cloud.cloud_config.name)
 
     cloud = openstack.connection.from_config(cloud=os_cloud)
     volumes = cloud.list_volumes()
@@ -101,12 +108,12 @@ def remove(os_cloud: str, volume_id: str, minutes: int = 0) -> None:
     volume = cloud.get_volume_by_id(volume_id)
 
     if not volume:
-        print("ERROR: volume not found.")
+        log.error("volume not found.")
         sys.exit(1)
 
     if datetime.strptime(volume.created_at, "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=UTC) >= datetime.now(
         UTC
     ) - timedelta(minutes=minutes):
-        print(f'WARN: volume "{volume.name}" ({volume.id}) is not older than {minutes} minutes.')
+        log.warning('volume "%s" (%s) is not older than %d minutes.', volume.name, volume.id, minutes)
     else:
         cloud.delete_volume(volume.id)

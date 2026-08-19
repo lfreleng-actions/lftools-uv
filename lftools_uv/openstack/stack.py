@@ -29,6 +29,7 @@ import openstack.connection
 from openstack.cloud.exc import OpenStackCloudHTTPError
 
 from lftools_uv.jenkins import Jenkins
+from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ def create(
     stack_success = False
     stack = None
 
-    print(f"Creating stack {name}")
+    log.info("Creating stack %s", name)
     for _attempt in range(tries):
         try:
             stack = cloud.create_stack(
@@ -53,9 +54,9 @@ def create(
             )
         except OpenStackCloudHTTPError as e:
             if cloud.search_stacks(name):
-                print(f"Stack with name {name} already exists.")
+                log.error("Stack with name %s already exists.", name)
             else:
-                print(e)
+                log.error("%s", e)
             sys.exit(1)
 
         stack_id = stack.id  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
@@ -65,26 +66,26 @@ def create(
             stack = cloud.get_stack(stack_id)
 
             if stack.status == "CREATE_IN_PROGRESS":  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
-                print("Waiting to initialize infrastructure...")
+                log.info("Waiting to initialize infrastructure...")
             elif stack.status == "CREATE_COMPLETE":  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
-                print("Stack initialization successful.")
+                log.info("Stack initialization successful.")
                 stack_success = True
                 break
             elif stack.status == "CREATE_FAILED":  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
-                print(f"WARN: Failed to initialize stack. Reason: {stack.status_reason}")  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
+                log.warning("Failed to initialize stack. Reason: %s", stack.status_reason)  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
                 if delete(os_cloud, stack_id):
                     break
             else:
-                print(f"Unexpected status: {stack.status}")  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
+                log.warning("Unexpected status: %s", stack.status)  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
 
         if stack_success:
             break
 
-    print("------------------------------------")
-    print("Stack Details")
-    print("------------------------------------")
+    echo("------------------------------------")
+    echo("Stack Details")
+    echo("------------------------------------")
     cloud.pprint(stack)
-    print("------------------------------------")
+    echo("------------------------------------")
 
 
 def cost(os_cloud: str, stack_name: str, timeout: int = 60) -> None:
@@ -154,12 +155,12 @@ def cost(os_cloud: str, stack_name: str, timeout: int = 60) -> None:
 
         if not server_ids:
             log.info("No servers found in stack %s", stack_name)
-            print("total: 0.0")
+            echo("total: 0.0")
             return
 
         for server in server_ids:
             total_cost += get_server_cost(server)
-        print("total: " + str(total_cost))
+        echo("total: " + str(total_cost))
     except Exception:
         # The per-server pricing lookup above already falls back to 0.0 on a
         # flaky pricing API, so reaching here means stack enumeration itself
@@ -175,7 +176,7 @@ def delete(os_cloud: str, name_or_id: str, force: bool = False, timeout: int = 9
     Return True if delete was successful.
     """
     cloud = openstack.connection.from_config(cloud=os_cloud)
-    print(f"Deleting stack {name_or_id}")
+    log.info("Deleting stack %s", name_or_id)
     cloud.delete_stack(name_or_id)
 
     t_end = time.time() + timeout
@@ -184,20 +185,20 @@ def delete(os_cloud: str, name_or_id: str, force: bool = False, timeout: int = 9
         stack = cloud.get_stack(name_or_id)
 
         if not stack or stack.status == "DELETE_COMPLETE":  # pyright: ignore[reportAttributeAccessIssue]
-            print(f"Successfully deleted stack {name_or_id}")
+            log.info("Successfully deleted stack %s", name_or_id)
             return True
         elif stack.status == "DELETE_IN_PROGRESS":  # pyright: ignore[reportAttributeAccessIssue]
-            print("Waiting for stack to delete...")
+            log.info("Waiting for stack to delete...")
         elif stack.status == "DELETE_FAILED":  # pyright: ignore[reportAttributeAccessIssue]
-            print(f"WARN: Failed to delete $STACK_NAME. Reason: {stack.status_reason}")  # pyright: ignore[reportAttributeAccessIssue]
-            print("Retrying delete...")
+            log.warning("Failed to delete stack %s. Reason: %s", name_or_id, stack.status_reason)  # pyright: ignore[reportAttributeAccessIssue]
+            log.info("Retrying delete...")
             cloud.delete_stack(name_or_id)
         else:
-            print(f"WARN: Unexpected delete status: {stack.status}")  # pyright: ignore[reportAttributeAccessIssue]
-            print("Retrying delete...")
+            log.warning("Unexpected delete status: %s", stack.status)  # pyright: ignore[reportAttributeAccessIssue]
+            log.info("Retrying delete...")
             cloud.delete_stack(name_or_id)
 
-    print(f"Failed to delete stack {name_or_id}")
+    log.error("Failed to delete stack %s", name_or_id)
     if not force:
         return False
     return None
