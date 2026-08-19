@@ -292,9 +292,15 @@ def check_votes(ctx, info_file, endpoint, change_number, tsc, github_repo):
 
     """
 
-    # aislop-ignore-next-line too-many-params -- Click binds one parameter per CLI option
+    # aislop-ignore-next-line too-many-params -- recursion state, not CLI options; see below
     def main(ctx, info_file, endpoint, change_number, tsc, github_repo, majority_of_committers):
-        """Function so we can iterate into TSC members after committer vote has happened."""
+        """Function so we can iterate into TSC members after committer vote has happened.
+
+        Recurses once to re-check the TSC INFO file after a committer
+        majority is reached. The command inputs are forwarded explicitly
+        rather than closed over so the recursive call can vary info_file
+        and majority_of_committers, which is why the signature is long.
+        """
         info_data: dict[str, Any] = {}
         with open(info_file) as file:
             try:
