@@ -72,9 +72,7 @@ def copy_archives(
         pattern: Space-separated list of Unix style glob patterns of files to
                  copy for archiving.
     """
-    # TODO: Implement copy_archives functionality
-    typer.echo(f"Copy archives from {workspace} with pattern {pattern}")
-    typer.echo("Note: This functionality needs to be implemented")
+    deploy_sys.copy_archives(workspace, pattern if pattern else None)
 
 
 @deploy_app.command(name="file")
