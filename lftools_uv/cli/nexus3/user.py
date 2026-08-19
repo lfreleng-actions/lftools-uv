@@ -57,6 +57,7 @@ def search_user(ctx, username):
 @click.argument("roles")
 @click.argument("password", required=False)
 @click.pass_context
+# aislop-ignore-next-line too-many-params -- Click binds one parameter per CLI option
 def user_create(ctx, username, first_name, last_name, email_address, roles, password):
     """Create a new user account."""
     r = ctx.obj["nexus3"]

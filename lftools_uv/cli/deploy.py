@@ -96,6 +96,7 @@ def copy_archives(ctx, workspace, pattern):
 @click.argument("file")
 @click.option("-c", "--classifier", default="")
 @click.pass_context
+# aislop-ignore-next-line too-many-params -- Click binds one parameter per CLI option
 def file(ctx, nexus_url, nexus_repo_id, group_id, artifact_id, version, packaging, classifier, file):
     """Upload file to Nexus as a Maven artifact using cURL.
 
@@ -168,6 +169,7 @@ def s3(ctx, s3_bucket, s3_path, build_url, workspace, pattern):
 @click.option("-g", "--group-id", help="Maven Group ID")
 @click.option("-v", "--version", help="Maven artifact version.")
 @click.pass_context
+# aislop-ignore-next-line too-many-params -- Click binds one parameter per CLI option
 def maven_file(
     # Maven Config
     ctx,

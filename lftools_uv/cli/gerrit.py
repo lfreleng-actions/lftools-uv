@@ -194,6 +194,7 @@ def list_project_inherits_from(ctx, gerrit_fqdn, gerrit_project):
     help="Comma-separated list of ports supported by the Nexus 3 server specified",
 )
 @click.pass_context
+# aislop-ignore-next-line too-many-params -- Click binds one parameter per CLI option
 def addmavenconfig(ctx, gerrit_fqdn, gerrit_project, jjbrepo, issue_id, nexus3, nexus3_ports):
     """Add maven config file for JCasC.
 

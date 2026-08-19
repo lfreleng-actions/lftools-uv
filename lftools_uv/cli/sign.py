@@ -100,6 +100,7 @@ def sigul(ctx, directory, mode):
 @click.option("-r", "--root-domain", type=str, default="org", help="Root download path of staging repo. (default org)")
 @click.option("-w", "--sign-with", type=str, default="gpg", help="Sign artifacts with GPG or Sigul. (default gpg)")
 @click.pass_context
+# aislop-ignore-next-line too-many-params -- Click binds one parameter per CLI option
 def deploy_nexus(ctx, nexus_url, nexus_repo, staging_profile_id, sign_dir, sign_with, root_domain, mode):
     """Sign artifacts from a Nexus repo then upload to a staging repo.
 

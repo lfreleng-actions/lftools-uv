@@ -292,6 +292,7 @@ def check_votes(ctx, info_file, endpoint, change_number, tsc, github_repo):
 
     """
 
+    # aislop-ignore-next-line too-many-params -- Click binds one parameter per CLI option
     def main(ctx, info_file, endpoint, change_number, tsc, github_repo, majority_of_committers):
         """Function so we can iterate into TSC members after committer vote has happened."""
         info_data: dict[str, Any] = {}

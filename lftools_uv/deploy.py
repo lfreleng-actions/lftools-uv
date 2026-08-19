@@ -802,6 +802,7 @@ def nexus_stage_repo_close(nexus_url: str, staging_profile_id: str, staging_repo
         _log_error_and_exit(f"Failed with status code {resp.status_code}", resp.text)
 
 
+# aislop-ignore-next-line too-many-params -- these are the Maven GAV coordinates plus the Nexus target
 def upload_maven_file_to_nexus(
     nexus_url: str,
     nexus_repo_id: str,
