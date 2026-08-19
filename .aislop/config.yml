@@ -17,8 +17,18 @@
 # excluding docstrings and decorator blocks, is past the point where a function
 # is doing one thing.
 #
+# Note that these are budgets, not the exact points at which the scanner
+# complains. aislop reports only once a value exceeds ceil(budget * 1.1), so
+# with the settings below a Python file is reported from 661 lines and a
+# function from 112 body lines. The function figure is 112 rather than 111
+# because 100 * 1.1 evaluates to 110.00000000000001 in IEEE-754 arithmetic,
+# which ceil rounds to 111.
+#
+# Treat 600 and 100 as the targets, and the grace band as room to land a change
+# before splitting rather than as headroom to settle into.
+#
 # Raising these values to silence a report is not the intent. When a file or a
-# function exceeds them, split it.
+# function outgrows its budget, split it.
 
 version: 1
 
