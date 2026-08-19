@@ -407,6 +407,60 @@ def test_subproject_create():
 
 
 @responses.activate
+def test_subproject_create_omits_absent_alias():
+    """The payload carries no alias key when the caller supplies none.
+
+    readthedocs.org fails with an unhandled HTTP 500 when the alias
+    arrives as an explicit JSON null, rather than rejecting it as
+    invalid, and it defaults the alias to the child's slug when the key
+    stays absent. Every ONAP project publishing documentation for the
+    first time hit the 500 through rtd-build-action, which passes no
+    alias. See lfreleng-actions/rtd-build-action#5.
+    """
+    responses.add(
+        responses.POST,
+        url="https://readthedocs.org/api/v3/projects/TestProject1/subprojects/",
+        status=201,
+    )
+    _ = rtd.subproject_create("TestProject1", "testproject2")
+    body = responses.calls[0].request.body
+    assert body is not None
+    payload = json.loads(body)
+    assert payload == {"child": "testproject2"}
+    assert "alias" not in payload
+
+
+@responses.activate
+def test_subproject_create_sends_supplied_alias():
+    """A caller-supplied alias reaches the payload unchanged."""
+    responses.add(
+        responses.POST,
+        url="https://readthedocs.org/api/v3/projects/TestProject1/subprojects/",
+        status=201,
+    )
+    _ = rtd.subproject_create("TestProject1", "testproject2", alias="docs")
+    body = responses.calls[0].request.body
+    assert body is not None
+    payload = json.loads(body)
+    assert payload == {"child": "testproject2", "alias": "docs"}
+
+
+@responses.activate
+def test_subproject_create_sends_empty_alias():
+    """An explicit empty-string alias survives; the guard omits None."""
+    responses.add(
+        responses.POST,
+        url="https://readthedocs.org/api/v3/projects/TestProject1/subprojects/",
+        status=201,
+    )
+    _ = rtd.subproject_create("TestProject1", "testproject2", alias="")
+    body = responses.calls[0].request.body
+    assert body is not None
+    payload = json.loads(body)
+    assert payload == {"child": "testproject2", "alias": ""}
+
+
+@responses.activate
 def test_subproject_delete():
     responses.add(
         responses.DELETE,
