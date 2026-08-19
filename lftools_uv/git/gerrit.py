@@ -81,9 +81,10 @@ class Gerrit:
         commit_msg_hook_path = f"{local_hooks_path}/commit-msg"
 
         try:
-            os.mkdir(local_hooks_path)
-        except FileExistsError:
-            log.debug(f"Directory {local_hooks_path} already exists")
+            os.makedirs(local_hooks_path, exist_ok=True)
+        except OSError as exc:
+            log.error("Could not create hooks directory %s: %s", local_hooks_path, exc)
+            raise
         with requests.get(hook_url) as hook:
             hook.raise_for_status()
             with open(commit_msg_hook_path, "w") as file:
@@ -93,11 +94,8 @@ class Gerrit:
     def add_file(self, filepath: str, content: str) -> None:
         """Add a file to the current git repo."""
         if filepath.find("/") >= 0:
-            try:
-                log.debug(f"Making directories for {filepath[0]}")
-                os.makedirs(os.path.split(filepath)[0])
-            except FileExistsError:
-                log.debug("Directories already exist, skipping")
+            log.debug(f"Making directories for {filepath[0]}")
+            os.makedirs(os.path.split(filepath)[0], exist_ok=True)
         with open(filepath, "w") as newfile:
             newfile.write(content)
         self.repo.git.add(filepath)
