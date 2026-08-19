@@ -158,9 +158,12 @@ def cost(os_cloud: str, stack_name: str, timeout: int = 60) -> None:
             total_cost += get_server_cost(server)
         print("total: " + str(total_cost))
     except Exception:
-        log.exception("Error calculating stack cost")
-        log.warning("Returning 0 total cost due to error")
-        print("total: 0.0")
+        # The per-server pricing lookup above already falls back to 0.0 on a
+        # flaky pricing API, so reaching here means stack enumeration itself
+        # failed and no total can be derived. Reporting 0.0 would be
+        # indistinguishable from a genuinely idle stack, so fail instead.
+        log.exception("Unable to calculate cost for stack %s", stack_name)
+        sys.exit(1)
 
 
 def delete(os_cloud: str, name_or_id: str, force: bool = False, timeout: int = 900) -> bool | None:
