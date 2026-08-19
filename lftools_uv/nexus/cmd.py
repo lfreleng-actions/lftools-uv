@@ -161,13 +161,11 @@ def create_repos(config_file: str, settings_file: str | None, url: str) -> None:
     ) -> None:
         if extra_privs is None:
             extra_privs = []
-        # Create target
         try:
             target_id = _nexus.get_target(name)
         except LookupError:
             target_id = _nexus.create_target(name, targets)
 
-        # Create privileges
         privs_set = [
             "create",
             "delete",
@@ -183,14 +181,12 @@ def create_repos(config_file: str, settings_file: str | None, url: str) -> None:
             except LookupError:
                 privs[priv] = _nexus.create_priv(name, target_id, priv)
 
-        # Create Role
         try:
             role_id = _nexus.get_role(name)
             log.info(f"Role {role_id} already exists.")
         except LookupError:
             role_id = _nexus.create_role(name, list(privs.values()))
 
-        # Create user
         try:
             _nexus.get_user(name)
             log.info(f"User {name} already exists.")
@@ -459,7 +455,6 @@ def release_staging_repos(repos: tuple[str, ...], verify: bool, nexus_url: str =
         is_repo_closed = []
 
         for act in activities:
-            # Check for failures
             act_text = "".join(act.itertext())
             if re.search("ruleFailed", act_text):
                 failures2.append(get_activity_text(act))
@@ -481,7 +476,6 @@ def release_staging_repos(repos: tuple[str, ...], verify: bool, nexus_url: str =
                 if add_str_if_not_exist(message, failures2):
                     failures.append(msg_text)
 
-        # Start check result
         if len(failures) != 0 or len(failures2) != 0:
             log.info("\n".join(map(str, failures2)))
             log.info("\n".join(map(str, failures)))

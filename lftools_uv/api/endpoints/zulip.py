@@ -1413,7 +1413,6 @@ def create_channel(
             "Private channels require at least one --subscribe user or a non-Nobody --allow-group to prevent lockout."
         )
 
-    # Build subscription payload
     subscription: dict[str, Any] = {"name": name}
     if description:
         subscription["description"] = description

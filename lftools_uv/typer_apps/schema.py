@@ -18,7 +18,6 @@ from lftools_uv.schema import check_schema_file
 
 log = logging.getLogger(__name__)
 
-# Create the schema subcommand group
 schema_app = typer.Typer(
     name="schema",
     help="Verify YAML Schema",

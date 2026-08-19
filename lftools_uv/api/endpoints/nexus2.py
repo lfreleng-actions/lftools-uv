@@ -264,7 +264,6 @@ class Nexus2(client.RestApi):
             role: dict[str, object] = self._as_dict(raw_role)
             if not role:
                 continue
-            # Build multiline strings for tabulate display
             roles_string: str = ""
             privs_string: str = ""
             roles_obj: object = role.get("roles")

@@ -23,7 +23,6 @@ from lftools_uv.lfidapi import (
 
 log = logging.getLogger(__name__)
 
-# Create the lfidapi subcommand group
 lfidapi_app = typer.Typer(
     name="lfidapi",
     help="LFID API tools for managing groups and members",

@@ -24,7 +24,6 @@ _HELP_GERRIT_PROJECT = "Gerrit project name"
 
 log = logging.getLogger(__name__)
 
-# Create the Typer app for gerrit commands
 gerrit_app = typer.Typer(help="GERRIT TOOLS.")
 
 

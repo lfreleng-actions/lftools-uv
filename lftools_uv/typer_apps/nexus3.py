@@ -19,10 +19,8 @@ from lftools_uv.api.endpoints import nexus3
 
 log = logging.getLogger(__name__)
 
-# Create the main Typer app for nexus3 commands
 nexus3_app = typer.Typer(help="The Nexus3 API Interface.")
 
-# Create sub-apps for command groups
 asset_app = typer.Typer(help="Asset primary interface.")
 privilege_app = typer.Typer(help="Privilege primary interface.")
 repository_app = typer.Typer(help="Repository primary interface.")

@@ -21,7 +21,6 @@ _MSG_VERSION_NOT_FOUND_LONG = "Error: 'version' command not found in PATH. Pleas
 
 log = logging.getLogger(__name__)
 
-# Create the version subcommand group
 version_app = typer.Typer(
     name="version",
     help="Version bump script for Maven based projects",
@@ -144,7 +143,6 @@ def patch(
         lftools-uv version patch "Lithium-SR1" /path/to/patches
         lftools-uv version patch "1.2.3" /path/to/patches --project "MyProject"
     """
-    # Validate patch directory exists
     if not os.path.isdir(patch_dir):
         log.error(f"{patch_dir} is not a valid directory.")
         typer.echo(f"Error: {patch_dir} is not a valid directory.", err=True)

@@ -18,10 +18,8 @@ from lftools_uv.api.endpoints import nexus2
 
 log = logging.getLogger(__name__)
 
-# Create the main Typer app for nexus2 commands
 nexus2_app = typer.Typer(help="The Nexus2 API Interface.")
 
-# Create sub-apps for command groups
 privilege_app = typer.Typer(help="Privilege primary interface.")
 repo_app = typer.Typer(help="Repository primary interface.")
 role_app = typer.Typer(help="Role primary interface.")

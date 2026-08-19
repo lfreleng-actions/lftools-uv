@@ -716,12 +716,10 @@ def channel_create(
 
     options = ctx.obj or {}
 
-    # Validate channel type
     if channel_type not in ("public", "private", "web-public"):
         emit_error(f"Invalid channel type: {channel_type!r}. Valid types: public, private, web-public")
         raise typer.Exit(code=1)
 
-    # Validate announce mutex
     if announce and no_announce:
         emit_error("--announce and --no-announce are mutually exclusive")
         raise typer.Exit(code=1)
@@ -731,7 +729,6 @@ def channel_create(
         emit_error(f"Invalid --topic-policy value: {topic_policy!r}. Valid values: allow, deny, follow-default")
         raise typer.Exit(code=1)
 
-    # Validate id mode flags
     id_mode = _validate_id_mode_flags(by_email, by_id, by_name, subscribe)
 
     # Determine announce value

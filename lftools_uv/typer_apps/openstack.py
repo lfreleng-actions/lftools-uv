@@ -20,14 +20,12 @@ from lftools_uv.openstack import server as os_server
 from lftools_uv.openstack import stack as os_stack
 from lftools_uv.openstack import volume as os_volume
 
-# Create the main OpenStack app
 openstack_app = typer.Typer(
     name="openstack",
     help="Provide an interface to OpenStack.",
     rich_markup_mode="markdown",
 )
 
-# Create sub-apps for each command group
 image_app = typer.Typer(name="image", help="Command for manipulating images.")
 object_app = typer.Typer(name="object", help="Command for manipulating objects.")
 server_app = typer.Typer(name="server", help="Command for manipulating servers.")

@@ -25,10 +25,8 @@ log = logging.getLogger(__name__)
 
 _MSG_CREDS_NOT_SET = "Username or password not set."
 
-# Create the main Typer app for jenkins commands
 jenkins_app = typer.Typer(help="Query information about the Jenkins Server.")
 
-# Create sub-apps for command groups
 builds_app = typer.Typer(help="Information regarding current builds and the queue.")
 jobs_app = typer.Typer(help="Command to update Jenkins Jobs.")
 nodes_app = typer.Typer(help="Find information about builders connected to Jenkins Master.")
@@ -64,7 +62,6 @@ def jenkins_callback(
         return
 
     try:
-        # Initialize the Jenkins object and pass it to sub-commands
         jenkins_client = Jenkins(server, user, password, config_file=conf)
         if ctx.obj is None:
             ctx.obj = {}
@@ -301,7 +298,6 @@ for (node in Jenkins.instance.computers) {
         raise typer.Exit(1) from None
 
 
-# Builds subcommands
 @builds_app.command("running")
 def builds_running(ctx: typer.Context) -> None:
     """Show all the currently running builds."""
@@ -550,7 +546,6 @@ def plugins_sec(ctx: typer.Context) -> None:
         r = requests.get("http://updates.jenkins-ci.org/update-center.actual.json")
         warn = r.json()["warnings"]
 
-        # create a dict of relevant info from jenkins update center
         secdict = {}
         for w in warn:
             name = w["name"]
@@ -561,7 +556,6 @@ def plugins_sec(ctx: typer.Context) -> None:
             nv = {name: lastversion}
             secdict.update(nv)
 
-        # create a dict of our active plugins
         activedict = {}
         jenkins = ctx.obj["jenkins"]
         plugins = jenkins.server.get_plugins()
@@ -583,7 +577,6 @@ def plugins_sec(ctx: typer.Context) -> None:
             t1 = (ourversion,)
             t2 = (theirversion,)
             if t1 <= t2:
-                # Print Vulnerable Version\t Installed Version\t Link
                 for w in warn:
                     name = w["name"]
                     url = w["url"]
@@ -591,6 +584,8 @@ def plugins_sec(ctx: typer.Context) -> None:
                     for version in w["versions"]:
                         lastversion = version.get("lastVersion")
                     if name == key and secdict[key] == lastversion:
+                        # Tab-separated columns: vulnerable version,
+                        # installed version, then the advisory URL.
                         log.info("%s:%s\t%s:%s\t%s", key, secdict[key], key, activedict[key], url)
     except Exception:
         log.exception("Failed to check plugin security")

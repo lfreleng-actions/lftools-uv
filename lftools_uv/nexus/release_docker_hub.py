@@ -662,7 +662,6 @@ def get_nexus3_catalog(
         split_catalog = raw_catalog.split(":")
         TmpCatalog = split_catalog[1].split(",")
         for word in TmpCatalog:
-            # Remove all projects that do not start with org_name
             use_this_repo = False
             project: list[str] = []
             if repo_is_filename and repo_is_in_file(word, find_pattern):

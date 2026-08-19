@@ -42,7 +42,6 @@ def main():
         print(f"  - {venv_location}", file=sys.stderr)
         sys.exit(1)
 
-    # Execute the shell script with all command line arguments
     cmd = [str(shell_script)] + sys.argv[1:]
     try:
         result = subprocess.run(cmd, check=False)

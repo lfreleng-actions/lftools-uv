@@ -22,7 +22,6 @@ _MSG_REQUIRES_LEGACY_CLI = "Note: This command requires the original lftools CLI
 
 log = logging.getLogger(__name__)
 
-# Create the infofile subcommand group
 infofile_app = typer.Typer(
     name="infofile",
     help="INFO.yaml file management tools",

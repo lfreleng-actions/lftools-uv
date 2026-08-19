@@ -54,7 +54,6 @@ def version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
-# Create the main Typer app
 app = typer.Typer(
     name="lftools-uv",
     help="Linux Foundation Release Engineering Tools (Typer-based)",
@@ -83,12 +82,10 @@ def main(
     This is the Typer-based version of lftools-uv. Enable it by setting
     the environment variable LFTOOLS_CLI_V2=1.
     """
-    # Configure debug logging
     if debug:
         logging.getLogger("").setLevel(logging.DEBUG)
         log.debug("DEBUG mode enabled.")
 
-    # Initialize application state
     if ctx.obj is None:
         ctx.obj = {}
 
@@ -100,7 +97,6 @@ def main(
     # Legacy compatibility - maintain the old context structure
     ctx.obj["DEBUG"] = debug
 
-    # Handle credentials
     if username is None:
         if interactive:
             username = typer.prompt("Username")
@@ -121,7 +117,6 @@ def main(
             except (configparser.NoOptionError, configparser.NoSectionError):
                 password = None
 
-    # Update state with credentials
     state.update_credentials(username, password)
 
     # Legacy compatibility - maintain old context keys
