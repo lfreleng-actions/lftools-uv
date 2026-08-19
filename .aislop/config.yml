@@ -1,0 +1,44 @@
+---
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 The Linux Foundation
+
+# Configuration for the aislop code-quality audit (https://scanaislop.com).
+#
+# The complexity limits below are the ones this project endorses, and they are
+# deliberately looser than the tool defaults of 400 lines per file and 80 per
+# function. lftools-uv is a collection of API clients and CLI command modules:
+# a single cohesive endpoint wrapper, such as the Gerrit or Nexus3 client, runs
+# to roughly 550 lines once its docstrings are counted, and splitting it purely
+# to satisfy a line count would scatter one API surface across several files
+# for no benefit.
+#
+# 600 keeps that natural unit intact while still reporting the modules that
+# have genuinely outgrown themselves. 100 lines of function body, counted
+# excluding docstrings and decorator blocks, is past the point where a function
+# is doing one thing.
+#
+# Raising these values to silence a report is not the intent. When a file or a
+# function exceeds them, split it.
+
+version: 1
+
+quality:
+  maxFileLoc: 600
+  maxFunctionLoc: 100
+  maxNesting: 5
+  maxParams: 6
+
+# Keep scans reproducible: without these, results depend on which build and
+# virtualenv directories happen to exist in the working tree.
+exclude:
+  - .git
+  - .mypy_cache
+  - .pytest_cache
+  - .ruff_cache
+  - .tox
+  - .venv
+  - build
+  - coverage
+  - dist
+  - htmlcov
+  - node_modules
