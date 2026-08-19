@@ -123,6 +123,38 @@ def test_fetch_jenkins_builds_http_error():
     assert len(builds) == 0
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"computer": None},
+        {"computer": [{"executors": None, "oneOffExecutors": []}]},
+        {"computer": [{"executors": [{"currentExecutable": {"url": 42}}], "oneOffExecutors": []}]},
+        ["not", "an", "object"],
+    ],
+    ids=["null-computer", "null-executors", "non-string-url", "top-level-list"],
+)
+@responses.activate
+def test_fetch_jenkins_builds_malformed_shape(payload, capsys):
+    """A valid JSON body with an unexpected shape yields no builds.
+
+    Cluster cleanup treats an unusable Jenkins as having no active builds, so
+    a surprising response shape must report the problem and carry on rather
+    than aborting the whole cleanup run.
+    """
+    jenkins_url = "https://jenkins.example.org"
+    responses.add(
+        responses.GET,
+        f"{jenkins_url}/computer/api/json",
+        json=payload,
+        status=200,
+    )
+
+    builds = os_cluster._fetch_jenkins_builds([jenkins_url])
+
+    assert builds == []
+    assert "ERROR" in capsys.readouterr().out
+
+
 @responses.activate
 def test_fetch_jenkins_builds_timeout(capsys):
     """Test handling of timeout when fetching Jenkins builds."""

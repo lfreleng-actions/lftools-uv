@@ -89,7 +89,14 @@ def _fetch_builds_from(jenkins: str) -> list[str]:
         return []
 
     silo = _silo_name(jenkins)
-    return [build for url in _executable_urls(data) if (build := _build_id(silo, url)) is not None]
+    try:
+        return [build for url in _executable_urls(data) if (build := _build_id(silo, url)) is not None]
+    except (AttributeError, TypeError) as e:
+        # A syntactically valid reply can still have an unexpected shape, for
+        # example {"computer": null}. Keep the documented fallback of treating
+        # such a server as having no active builds.
+        print(f"ERROR: Unexpected response shape from {jenkins_url}: {e}")
+        return []
 
 
 def _fetch_jenkins_builds(jenkins_urls: list[str]) -> list[str]:

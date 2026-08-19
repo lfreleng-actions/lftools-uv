@@ -151,10 +151,9 @@ def maven_file(
 ) -> None:
     """Deploy a file to a Nexus maven2 repository.
 
-    As this script uses mvn to deploy. The server configuration should be
-    configured in your local settings.xml. By default the script uses the
-    mvn default "~/.m2/settings.xml" for the configuration but this can be
-    overridden in the following order:
+    Deployment runs through mvn, so the server credentials come from your
+    settings.xml rather than from this command. The Maven default of
+    "~/.m2/settings.xml" applies unless overridden, in the following order:
 
         1. Passed through CLI option "-s" ("-gs" for global-settings)
         2. Environment variable "$SETTINGS_FILE" ("$GLOBAL_SETTINGS_FILE"
