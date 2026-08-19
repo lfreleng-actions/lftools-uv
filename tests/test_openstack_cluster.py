@@ -135,7 +135,7 @@ def test_fetch_jenkins_builds_http_error():
     ids=["null-computer", "null-executors", "non-string-url", "top-level-list"],
 )
 @responses.activate
-def test_fetch_jenkins_builds_malformed_shape(payload, capsys):
+def test_fetch_jenkins_builds_malformed_shape(payload, caplog):
     """A valid JSON body with an unexpected shape yields no builds.
 
     Cluster cleanup treats an unusable Jenkins as having no active builds, so
@@ -153,7 +153,7 @@ def test_fetch_jenkins_builds_malformed_shape(payload, capsys):
     builds = os_cluster._fetch_jenkins_builds([jenkins_url])
 
     assert builds == []
-    assert "ERROR" in capsys.readouterr().out
+    assert any(record.levelno >= logging.ERROR for record in caplog.records)
 
 
 @responses.activate

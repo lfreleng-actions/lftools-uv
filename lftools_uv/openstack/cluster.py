@@ -100,7 +100,7 @@ def _fetch_builds_from(jenkins: str) -> list[str]:
         # A syntactically valid reply can still have an unexpected shape, for
         # example {"computer": null}. Keep the documented fallback of treating
         # such a server as having no active builds.
-        print(f"ERROR: Unexpected response shape from {jenkins_url}: {e}")
+        log.error("Unexpected response shape from %s: %s", jenkins_url, e)
         return []
 
 
