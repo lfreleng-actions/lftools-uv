@@ -31,7 +31,6 @@ def check_schema_file(yamlfile: str, schemafile: str) -> None:
     with open(schemafile) as _:
         schema_file: dict[str, Any] = yaml.safe_load(_)  # pyright: ignore[reportExplicitAny,reportAny]
 
-    # Load the schema
     validation: jsonschema.Draft4Validator = jsonschema.Draft4Validator(
         schema_file, format_checker=jsonschema.FormatChecker()
     )

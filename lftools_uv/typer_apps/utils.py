@@ -21,7 +21,6 @@ from lftools_uv import helpers
 
 log = logging.getLogger(__name__)
 
-# Create the utils subcommand group
 utils_app = typer.Typer(
     name="utils",
     help="Tools to make life easier",

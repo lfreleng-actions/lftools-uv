@@ -77,11 +77,6 @@ zulip_app = typer.Typer(
 )
 
 
-# ---------------------------------------------------------------------------
-# Shared option callbacks and helpers
-# ---------------------------------------------------------------------------
-
-
 def zuliprc_callback(value: Path | None) -> Path | None:
     """Validate the ``--zuliprc`` flag value.
 
@@ -192,11 +187,6 @@ def bulk_mutation_result(
     }
 
 
-# ---------------------------------------------------------------------------
-# Top-level callback (optional-dependency guard, FR-022)
-# ---------------------------------------------------------------------------
-
-
 @zulip_app.callback()
 def zulip_callback(
     ctx: typer.Context,
@@ -235,19 +225,6 @@ def zulip_callback(
         typer.echo(MISSING_EXTRA_MESSAGE, err=True)
         raise typer.Exit(code=1)
 
-
-# ---------------------------------------------------------------------------
-# US1 — channel list (T023)
-# ---------------------------------------------------------------------------
-#
-# NOTE: The ``channel`` sub-app is shared across the channel-scoped
-# user-story slices: US1 (channel list), US4 (channel create), US5
-# (channel subscribe), US6 (channel unsubscribe), and the remaining
-# US7-US10 channel commands. The first PR to land that touches a
-# channel command also lands this sub-app instantiation. If two PRs
-# instantiate the sub-app independently, the trivial merge conflict
-# on the ``channel_app = typer.Typer(...)`` line should be resolved
-# by keeping a single instance.
 
 channel_app = typer.Typer(
     name="channel",
@@ -629,11 +606,6 @@ def channel_subscribers(
     emit_table(rows, headers=("Full Name", "Email", "User ID"))
 
 
-# ---------------------------------------------------------------------------
-# US4 — channel create (T035)
-# ---------------------------------------------------------------------------
-
-
 def _validate_id_mode_flags(
     by_email: bool,
     by_id: bool,
@@ -744,12 +716,10 @@ def channel_create(
 
     options = ctx.obj or {}
 
-    # Validate channel type
     if channel_type not in ("public", "private", "web-public"):
         emit_error(f"Invalid channel type: {channel_type!r}. Valid types: public, private, web-public")
         raise typer.Exit(code=1)
 
-    # Validate announce mutex
     if announce and no_announce:
         emit_error("--announce and --no-announce are mutually exclusive")
         raise typer.Exit(code=1)
@@ -759,7 +729,6 @@ def channel_create(
         emit_error(f"Invalid --topic-policy value: {topic_policy!r}. Valid values: allow, deny, follow-default")
         raise typer.Exit(code=1)
 
-    # Validate id mode flags
     id_mode = _validate_id_mode_flags(by_email, by_id, by_name, subscribe)
 
     # Determine announce value
@@ -839,11 +808,6 @@ def channel_create(
         raise typer.Exit(code=1)
 
 
-# ---------------------------------------------------------------------------
-# US2 — user list (T024)
-# ---------------------------------------------------------------------------
-
-
 user_app = typer.Typer(
     name="user",
     help="Inspect Zulip users.",
@@ -906,11 +870,6 @@ def user_list(
             row.append("yes" if not user["is_active"] else "no")
         rows.append(row)
     emit_table(rows, headers)
-
-
-# ---------------------------------------------------------------------------
-# `zulip group` sub-app (US3)
-# ---------------------------------------------------------------------------
 
 
 group_app = typer.Typer(
@@ -986,10 +945,6 @@ def group_list(
         for group in groups
     ]
     emit_table(rows, headers=headers)
-
-
-# T036 — `channel subscribe` CLI (US5)
-# ---------------------------------------------------------------------------
 
 
 def _resolve_id_mode(by_email: bool, by_id: bool, by_name: bool) -> Literal["email", "id", "name"]:
@@ -1176,10 +1131,6 @@ def channel_subscribe(
         raise typer.Exit(code=1)
 
 
-# `zulip channel unsubscribe` (US6 / T043)
-# ---------------------------------------------------------------------------
-
-
 @channel_app.command("unsubscribe")
 def channel_unsubscribe(
     ctx: typer.Context,
@@ -1364,11 +1315,6 @@ def channel_unsubscribe(
     # produce a non-zero exit code alongside ``error``.
     if payload["status"] in ("error", "partial"):
         raise typer.Exit(code=1)
-
-
-# ---------------------------------------------------------------------------
-# Channel update (US8)
-# ---------------------------------------------------------------------------
 
 
 def _validate_single_channel_target(
@@ -1572,11 +1518,6 @@ def channel_update(  # noqa: PLR0913 - CLI parity with contract
         emit_json(result)
     else:
         typer.echo(f"Updated channel '{result['channel_name']}' (id={result['channel_id']})")
-
-
-# ---------------------------------------------------------------------------
-# Topic policy convenience command (FR-021)
-# ---------------------------------------------------------------------------
 
 
 @channel_app.command("topic-policy")

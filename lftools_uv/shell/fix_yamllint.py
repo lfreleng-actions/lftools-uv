@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: EPL-1.0
 ##############################################################################
 # Copyright (c) 2017, 2023 The Linux Foundation and others.
@@ -43,7 +42,6 @@ def main():
         print(f"  - {venv_location}", file=sys.stderr)
         sys.exit(1)
 
-    # Execute the shell script with all command line arguments
     cmd = [str(shell_script)] + sys.argv[1:]
     try:
         result = subprocess.run(cmd, check=False)

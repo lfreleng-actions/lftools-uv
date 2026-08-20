@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: EPL-1.0
 ##############################################################################
 # Copyright (c) 2018 The Linux Foundation and others.
@@ -25,7 +24,6 @@ _HELP_GERRIT_PROJECT = "Gerrit project name"
 
 log = logging.getLogger(__name__)
 
-# Create the Typer app for gerrit commands
 gerrit_app = typer.Typer(help="GERRIT TOOLS.")
 
 

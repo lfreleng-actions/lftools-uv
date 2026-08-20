@@ -18,7 +18,6 @@ from lftools_uv.license import check_license, check_license_directory
 
 log = logging.getLogger(__name__)
 
-# Create the license subcommand group
 license_app = typer.Typer(
     name="license",
     help="Scan code for license headers",

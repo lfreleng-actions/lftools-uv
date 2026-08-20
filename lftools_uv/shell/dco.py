@@ -47,7 +47,8 @@ def get_branches(path=getcwd(), invert=False):
             )
             hashlist = hashlist + hashes
         if hashlist:
-            # remove a trailing blank list entry
+            # ``git log`` terminates its output with a newline, so the
+            # ``split`` above leaves an empty final element.
             hashlist.pop()
             return hashlist
         else:
@@ -76,7 +77,6 @@ def check(path=getcwd(), signoffs_dir="dco_signoffs"):
             # de-dupe the commit list
             missing_list = list(dict.fromkeys(missing))
 
-            # Check for dco_signoffs file
             if os.path.isdir(signoffs_dir):
                 missing_list = [
                     commit

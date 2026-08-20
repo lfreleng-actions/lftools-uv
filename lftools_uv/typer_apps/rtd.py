@@ -43,11 +43,6 @@ rtd_app = typer.Typer(
 )
 
 
-# ---------------------------------------------------------------------------
-# Shared output helpers
-# ---------------------------------------------------------------------------
-
-
 def emit_error(message: str) -> None:
     """Write an error message to stderr.
 
@@ -122,11 +117,6 @@ def rtd_callback(
         **(ctx.obj or {}),
         "json_output": json_output,
     }
-
-
-# ---------------------------------------------------------------------------
-# Projects
-# ---------------------------------------------------------------------------
 
 
 @rtd_app.command("project-list")
@@ -264,11 +254,6 @@ def project_update(
     typer.echo(f"Updated project '{project_slug}'")
 
 
-# ---------------------------------------------------------------------------
-# Versions
-# ---------------------------------------------------------------------------
-
-
 @rtd_app.command("project-version-list")
 def project_version_list(
     ctx: typer.Context,
@@ -366,11 +351,6 @@ def project_version_update(
         return
     state = "active" if active else "inactive"
     typer.echo(f"Marked version '{result['version']}' of '{project_slug}' as {state}")
-
-
-# ---------------------------------------------------------------------------
-# Builds
-# ---------------------------------------------------------------------------
 
 
 @rtd_app.command("project-build-list")
@@ -474,11 +454,6 @@ def project_build_trigger(
     build = result.get("build")
     build_id = build.get("id", "") if isinstance(build, dict) else ""
     typer.echo(f"Triggered build {build_id} for '{project_slug}'")
-
-
-# ---------------------------------------------------------------------------
-# Subprojects
-# ---------------------------------------------------------------------------
 
 
 @rtd_app.command("subproject-list")

@@ -21,7 +21,6 @@ _MSG_SIGN_NOT_FOUND_LONG = "Error: 'sign' command not found in PATH. Please ensu
 
 log = logging.getLogger(__name__)
 
-# Create the sign subcommand group
 sign_app = typer.Typer(
     name="sign",
     help="GPG or Sigul sign files",
