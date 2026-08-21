@@ -354,8 +354,13 @@ class DockerTagClass(TagClass):
                         still_more = True
                     else:
                         still_more = False
-                except Exception:
-                    log.debug(f"Issue fetching tags for {combined_repo_name}")
+                except Exception as exc:
+                    # Leaving still_more and docker_tag_url unchanged here would
+                    # re-fetch the same page forever, re-adding tags each time.
+                    log.error("Malformed tag response for %s: %s", combined_repo_name, exc)
+                    raise requests.HTTPError(
+                        f"Malformed tag response from Docker Hub for {combined_repo_name}"
+                    ) from exc
             else:
                 self.repository_exist = False
                 return

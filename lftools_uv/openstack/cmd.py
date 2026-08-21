@@ -15,6 +15,7 @@ __author__ = "Thanh Ha"
 
 import re
 import subprocess
+import sys
 
 import click
 
@@ -99,7 +100,7 @@ def upload(ctx, image, name, disk_format):
         print(f"PASS Image format matches {disk_format}")
     else:
         print(f"ERROR Image is not in {disk_format} format")
-        exit(1)
+        sys.exit(1)
 
     os_image.upload(ctx.obj["os_cloud"], image, name, disk_format)
 

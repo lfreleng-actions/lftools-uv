@@ -46,8 +46,8 @@ def main():
     try:
         result = subprocess.run(cmd, check=False)
         sys.exit(result.returncode)
-    except FileNotFoundError:
-        print(f"Error: Could not execute shell script at {shell_script}", file=sys.stderr)
+    except FileNotFoundError as exc:
+        print(f"Error: Could not execute shell script at {shell_script}: {exc}", file=sys.stderr)
         sys.exit(1)
     except KeyboardInterrupt:
         sys.exit(130)

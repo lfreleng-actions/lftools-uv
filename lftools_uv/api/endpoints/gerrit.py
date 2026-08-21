@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
 import time
 from typing import cast
 from urllib.parse import quote
@@ -332,9 +333,9 @@ class Gerrit(client.RestApi):
             try:
                 response: ApiResponse = self.get(access_str)
                 result = self._json_body(response)
-            except Exception:
-                log.info("Not found %s", access_str)
-                exit(1)
+            except Exception as exc:
+                log.exception("Failed to query %s: %s", access_str, exc)
+                sys.exit(1)
             log.info("found %s %s", access_str, mylist)
         return result
 
@@ -383,7 +384,7 @@ class Gerrit(client.RestApi):
         if resp.status_code == 409:
             log.info(edit_result)
             log.info("Conflict detected exiting")
-            exit(0)
+            sys.exit(0)
 
         else:
             access_str = f"changes/{changeid}/edit:publish"
@@ -488,17 +489,19 @@ class Gerrit(client.RestApi):
         results_dict: object = None
         try:
             results_dict = json.loads(json_text)  # pyright: ignore[reportAny]
-        except json.decoder.JSONDecodeError:
+        except json.decoder.JSONDecodeError as exc:
             log.info(resp)
-            log.info("A problem was encountered while querying the Gerrit API.")
+            log.error("A problem was encountered while querying the Gerrit API: %s", exc)
             log.debug(resp.text)
-            exit(resp.status_code)
+            # Not resp.status_code: an unparsable body can arrive with any
+            # status, and an HTTP code is not a meaningful process exit code.
+            sys.exit(1)
 
         if results_dict:
             log.info("Project already exists")
-            exit(1)
+            sys.exit(1)
         if check:
-            exit(0)
+            sys.exit(0)
 
         saml_group: str = f"saml/{ldap_group}"
         log.info("SAML group name: %s", saml_group)

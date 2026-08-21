@@ -77,6 +77,8 @@ from functools import wraps
 from types import ModuleType
 from typing import TYPE_CHECKING, ParamSpec, TypeVar
 
+from .state import AppState  # noqa: F401
+
 # Optional import guarded to avoid hard dependency on Click
 click: ModuleType | None
 try:
@@ -227,15 +229,8 @@ def handle_errors(
 # Convenience alias with default behavior
 error_handler = handle_errors()
 
-
 __all__: list[str] = [
     "handle_errors",
     "error_handler",
-    "AppState",  # re-export optional for convenience if imported after state
+    "AppState",
 ]
-
-# Optional re-export if state module already loaded (avoid circular import)
-try:  # pragma: no cover - optional convenience
-    from .state import AppState  # noqa: F401
-except Exception:  # pragma: no cover
-    pass

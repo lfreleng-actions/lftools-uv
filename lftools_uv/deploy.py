@@ -99,14 +99,14 @@ def _request_post(url: str, data: str, headers: dict[str, str]) -> requests.Resp
     resp: requests.Response | None = None
     try:
         resp = requests.post(url, data=data, headers=headers, timeout=30)
-    except requests.exceptions.MissingSchema:
-        log.debug("in _request_post. MissingSchema")
+    except requests.exceptions.MissingSchema as exc:
+        log.debug("POST to %s failed with a missing URL scheme: %s", url, exc)
         _log_error_and_exit(f"Not valid URL: {url}")
-    except requests.exceptions.ConnectionError:
-        log.debug("in _request_post. ConnectionError")
+    except requests.exceptions.ConnectionError as exc:
+        log.debug("POST to %s could not connect: %s", url, exc)
         _log_error_and_exit(f"Could not connect to URL: {url}")
-    except requests.exceptions.InvalidURL:
-        log.debug("in _request_post. InvalidURL")
+    except requests.exceptions.InvalidURL as exc:
+        log.debug("POST to %s used an invalid URL: %s", url, exc)
         _log_error_and_exit(f"Invalid URL: {url}")
     assert resp is not None  # noqa: S101
     return resp
