@@ -22,6 +22,7 @@ from github.Organization import Organization
 from github.Team import Team
 
 from lftools_uv import config
+from lftools_uv.output import echo
 
 if TYPE_CHECKING:
     from github.PaginatedList import PaginatedList
@@ -66,7 +67,7 @@ def helper_list(  # noqa: C901, PLR0912
 
     # Extend this to check if a repo exists
     if repos:
-        print("All repos for organization: ", organization)  # noqa: T201
+        echo(f"All repos for organization:  {organization}")
         all_repos = org.get_repos()
         for repo in all_repos:
             log.info(repo.name)
@@ -212,8 +213,7 @@ def helper_user_github(  # noqa: C901, PLR0912
         log.debug("User object retrieved successfully")
     except GithubException as ghe:
         log.error(ghe)
-        # Use print() for user-facing output to avoid logging PII
-        print("User not found")  # noqa: T201
+        echo("User not found")
         sys.exit(1)
 
     if not isinstance(user_raw, NamedUser):
@@ -225,8 +225,7 @@ def helper_user_github(  # noqa: C901, PLR0912
     is_member: bool = False
     try:
         is_member = org.has_in_members(user_object)
-        # Use print() for user-facing output to avoid logging PII
-        print(f"User membership status: {is_member}")  # noqa: T201
+        echo(f"User membership status: {is_member}")
     except GithubException as ghe:
         log.error(ghe)
 
@@ -251,11 +250,9 @@ def helper_user_github(  # noqa: C901, PLR0912
                 team_obj.remove_membership(user_object)
             except GithubException as ghe:
                 log.error(ghe)
-            # Use print() for user-facing output to avoid logging PII
-            print("Removing user from team")  # noqa: T201
+            echo("Removing user from team")
         else:
-            # Use print() for user-facing output to avoid logging PII
-            print("User is not a member of org, cannot delete")  # noqa: T201
+            echo("User is not a member of org, cannot delete")
             log.info("Code does not handle revoking invitations.")
 
     if user and not delete:
@@ -273,8 +270,7 @@ def helper_user_github(  # noqa: C901, PLR0912
                 )
             except GithubException as ghe:
                 log.error(ghe)
-            # Use print() for user-facing output to avoid logging PII
-            print("Sending Admin invite to user for team")  # noqa: T201
+            echo("Sending Admin invite to user for team")
 
         if not admin and is_member:
             try:
@@ -290,5 +286,4 @@ def helper_user_github(  # noqa: C901, PLR0912
                 )
             except GithubException as ghe:
                 log.error(ghe)
-            # Use print() for user-facing output to avoid logging PII
-            print("Sending invite to user for team")  # noqa: T201
+            echo("Sending invite to user for team")

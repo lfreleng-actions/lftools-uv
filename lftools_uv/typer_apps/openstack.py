@@ -9,6 +9,7 @@
 ##############################################################################
 """Typer CLI configuration for openstack command."""
 
+import logging
 import re
 import subprocess
 
@@ -19,6 +20,8 @@ from lftools_uv.openstack import object as os_object
 from lftools_uv.openstack import server as os_server
 from lftools_uv.openstack import stack as os_stack
 from lftools_uv.openstack import volume as os_volume
+
+log = logging.getLogger(__name__)
 
 openstack_app = typer.Typer(
     name="openstack",
@@ -108,9 +111,9 @@ def image_upload(
     pattern = disk_format
     result = re.search(pattern, disktype)
     if result:
-        print(f"PASS Image format matches {disk_format}")
+        log.info("PASS Image format matches %s", disk_format)
     else:
-        print(f"ERROR Image is not in {disk_format} format")
+        log.error("Image is not in %s format", disk_format)
         raise typer.Exit(1)
 
     os_image.upload(state.os_cloud, image, name_str, disk_format)

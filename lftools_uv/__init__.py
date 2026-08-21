@@ -45,7 +45,11 @@ class LogFormatter(logging.Formatter):
             return self.default_fmt.format(record)
 
 
-console_handler = logging.StreamHandler(sys.stdout)
+# Diagnostics go to stderr so that a caller may parse stdout without a warning
+# corrupting the stream. Command results are written to stdout by
+# lftools_uv.output.echo. See Principle VI of the project constitution and the
+# machine-readable output contract in docs/commands/rtd.rst.
+console_handler = logging.StreamHandler(sys.stderr)
 console_handler.setFormatter(LogFormatter())
 logging.getLogger("").setLevel(logging.INFO)
 logging.getLogger("").addHandler(console_handler)

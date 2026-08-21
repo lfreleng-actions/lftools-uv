@@ -9,6 +9,7 @@
 ##############################################################################
 """Test OpenStack cluster operations."""
 
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -134,7 +135,7 @@ def test_fetch_jenkins_builds_http_error():
     ids=["null-computer", "null-executors", "non-string-url", "top-level-list"],
 )
 @responses.activate
-def test_fetch_jenkins_builds_malformed_shape(payload, capsys):
+def test_fetch_jenkins_builds_malformed_shape(payload, caplog):
     """A valid JSON body with an unexpected shape yields no builds.
 
     Cluster cleanup treats an unusable Jenkins as having no active builds, so
@@ -152,11 +153,11 @@ def test_fetch_jenkins_builds_malformed_shape(payload, capsys):
     builds = os_cluster._fetch_jenkins_builds([jenkins_url])
 
     assert builds == []
-    assert "ERROR" in capsys.readouterr().out
+    assert any(record.levelno >= logging.ERROR for record in caplog.records)
 
 
 @responses.activate
-def test_fetch_jenkins_builds_timeout(capsys):
+def test_fetch_jenkins_builds_timeout(caplog):
     """Test handling of timeout when fetching Jenkins builds."""
     jenkins_url = "https://jenkins.example.org"
     api_url = f"{jenkins_url}/computer/api/json"
@@ -170,12 +171,11 @@ def test_fetch_jenkins_builds_timeout(capsys):
     builds = os_cluster._fetch_jenkins_builds([jenkins_url])
 
     assert len(builds) == 0
-    captured = capsys.readouterr()
-    assert "ERROR" in captured.out
+    assert any(record.levelno >= logging.ERROR for record in caplog.records)
 
 
 @responses.activate
-def test_fetch_jenkins_builds_invalid_json(capsys):
+def test_fetch_jenkins_builds_invalid_json(caplog):
     """Test handling of invalid JSON response."""
     jenkins_url = "https://jenkins.example.org"
     api_url = f"{jenkins_url}/computer/api/json"
@@ -190,8 +190,7 @@ def test_fetch_jenkins_builds_invalid_json(capsys):
     builds = os_cluster._fetch_jenkins_builds([jenkins_url])
 
     assert len(builds) == 0
-    captured = capsys.readouterr()
-    assert "ERROR" in captured.out
+    assert any(record.levelno >= logging.ERROR for record in caplog.records)
 
 
 @responses.activate
@@ -277,7 +276,7 @@ def test_list_clusters(mock_from_config, capsys):
 
 
 @patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
-def test_list_clusters_error(mock_from_config, capsys):
+def test_list_clusters_error(mock_from_config, caplog):
     """Test handling errors when listing clusters."""
     from openstack.cloud.exc import OpenStackCloudException
 
@@ -289,13 +288,12 @@ def test_list_clusters_error(mock_from_config, capsys):
         os_cluster.list_clusters("test-cloud")
 
     assert exc_info.value.code == 1
-    captured = capsys.readouterr()
-    assert "ERROR" in captured.out
-    assert "Failed to list clusters" in captured.out
+    assert any(record.levelno >= logging.ERROR for record in caplog.records)
+    assert "Failed to list clusters" in caplog.text
 
 
 @patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
-def test_list_clusters_not_supported(mock_from_config, capsys):
+def test_list_clusters_not_supported(mock_from_config, caplog):
     """Test handling when COE operations are not supported."""
     mock_cloud = MagicMock()
     mock_from_config.return_value = mock_cloud
@@ -305,20 +303,18 @@ def test_list_clusters_not_supported(mock_from_config, capsys):
         os_cluster.list_clusters("test-cloud")
 
     assert exc_info.value.code == 1
-    captured = capsys.readouterr()
-    assert "ERROR" in captured.out
-    assert "not supported" in captured.out
+    assert any(record.levelno >= logging.ERROR for record in caplog.records)
+    assert "not supported" in caplog.text
 
 
 @patch("lftools_uv.openstack.cluster._fetch_jenkins_builds")
 @patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
-def test_cleanup_no_jenkins_urls(mock_from_config, mock_fetch_builds, capsys):
+def test_cleanup_no_jenkins_urls(mock_from_config, mock_fetch_builds, caplog):
     """Test cleanup with no Jenkins URLs provided."""
     os_cluster.cleanup("test-cloud", jenkins_urls=None)
 
-    captured = capsys.readouterr()
-    assert "WARN" in captured.out
-    assert "No Jenkins URLs provided" in captured.out
+    assert any(record.levelno >= logging.WARNING for record in caplog.records)
+    assert "No Jenkins URLs provided" in caplog.text
 
     # Should not attempt to fetch builds or connect to OpenStack
     mock_fetch_builds.assert_not_called()
@@ -327,13 +323,12 @@ def test_cleanup_no_jenkins_urls(mock_from_config, mock_fetch_builds, capsys):
 
 @patch("lftools_uv.openstack.cluster._fetch_jenkins_builds")
 @patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
-def test_cleanup_empty_jenkins_urls(mock_from_config, mock_fetch_builds, capsys):
+def test_cleanup_empty_jenkins_urls(mock_from_config, mock_fetch_builds, caplog):
     """Test cleanup with empty Jenkins URLs string."""
     os_cluster.cleanup("test-cloud", jenkins_urls="   ")
 
-    captured = capsys.readouterr()
-    assert "WARN" in captured.out
-    assert "No Jenkins URLs provided" in captured.out
+    assert any(record.levelno >= logging.WARNING for record in caplog.records)
+    assert "No Jenkins URLs provided" in caplog.text
 
     mock_fetch_builds.assert_not_called()
     mock_from_config.assert_not_called()
@@ -341,8 +336,10 @@ def test_cleanup_empty_jenkins_urls(mock_from_config, mock_fetch_builds, capsys)
 
 @patch("lftools_uv.openstack.cluster._fetch_jenkins_builds")
 @patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
-def test_cleanup_orphaned_clusters(mock_from_config, mock_fetch_builds, capsys):
+def test_cleanup_orphaned_clusters(mock_from_config, mock_fetch_builds, caplog):
     """Test cleanup of orphaned clusters."""
+    caplog.set_level(logging.INFO)
+
     # Mock Jenkins builds
     mock_fetch_builds.return_value = ["production-active-job-123"]
 
@@ -364,11 +361,10 @@ def test_cleanup_orphaned_clusters(mock_from_config, mock_fetch_builds, capsys):
     os_cluster.cleanup("test-cloud", jenkins_urls="https://jenkins.example.org")
 
     # Verify orphaned clusters were deleted but active one was not
-    captured = capsys.readouterr()
-    assert "Deleting orphaned k8s cluster: orphaned-cluster-1" in captured.out
-    assert "Deleting orphaned k8s cluster: orphaned-cluster-2" in captured.out
-    assert "Cluster active-job-123 is in use by active build" in captured.out
-    assert "Deleted 2 orphaned cluster(s)" in captured.out
+    assert "Deleting orphaned k8s cluster: orphaned-cluster-1" in caplog.text
+    assert "Deleting orphaned k8s cluster: orphaned-cluster-2" in caplog.text
+    assert "Cluster active-job-123 is in use by active build" in caplog.text
+    assert "Deleted 2 orphaned cluster(s)" in caplog.text
 
     # Verify delete was called for orphaned clusters
     assert mock_cloud.delete_coe_cluster.call_count == 2
@@ -378,8 +374,10 @@ def test_cleanup_orphaned_clusters(mock_from_config, mock_fetch_builds, capsys):
 
 @patch("lftools_uv.openstack.cluster._fetch_jenkins_builds")
 @patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
-def test_cleanup_preserves_managed_clusters(mock_from_config, mock_fetch_builds, capsys):
+def test_cleanup_preserves_managed_clusters(mock_from_config, mock_fetch_builds, caplog):
     """Test that managed clusters are preserved during cleanup."""
+    caplog.set_level(logging.INFO)
+
     # Mock Jenkins builds (empty - no active builds)
     mock_fetch_builds.return_value = []
 
@@ -401,11 +399,10 @@ def test_cleanup_preserves_managed_clusters(mock_from_config, mock_fetch_builds,
     os_cluster.cleanup("test-cloud", jenkins_urls="https://jenkins.example.org")
 
     # Verify managed clusters were skipped
-    captured = capsys.readouterr()
-    assert "Skipping managed cluster: project-managed-prod-k8s-cluster" in captured.out
-    assert "Skipping managed cluster: project-managed-test-k8s-cluster" in captured.out
-    assert "Deleting orphaned k8s cluster: orphaned-cluster" in captured.out
-    assert "Deleted 1 orphaned cluster(s)" in captured.out
+    assert "Skipping managed cluster: project-managed-prod-k8s-cluster" in caplog.text
+    assert "Skipping managed cluster: project-managed-test-k8s-cluster" in caplog.text
+    assert "Deleting orphaned k8s cluster: orphaned-cluster" in caplog.text
+    assert "Deleted 1 orphaned cluster(s)" in caplog.text
 
     # Verify delete was only called once
     mock_cloud.delete_coe_cluster.assert_called_once_with("orphaned-cluster")
@@ -413,9 +410,11 @@ def test_cleanup_preserves_managed_clusters(mock_from_config, mock_fetch_builds,
 
 @patch("lftools_uv.openstack.cluster._fetch_jenkins_builds")
 @patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
-def test_cleanup_delete_error(mock_from_config, mock_fetch_builds, capsys):
+def test_cleanup_delete_error(mock_from_config, mock_fetch_builds, caplog):
     """Test handling of errors when deleting clusters."""
     from openstack.cloud.exc import OpenStackCloudException
+
+    caplog.set_level(logging.INFO)
 
     # Mock Jenkins builds
     mock_fetch_builds.return_value = []
@@ -435,15 +434,17 @@ def test_cleanup_delete_error(mock_from_config, mock_fetch_builds, capsys):
     # Call cleanup - should not exit, just log error
     os_cluster.cleanup("test-cloud", jenkins_urls="https://jenkins.example.org")
 
-    captured = capsys.readouterr()
-    assert "ERROR: Failed to delete cluster orphaned-cluster" in captured.out
-    assert "Deleted 0 orphaned cluster(s)" in captured.out
+    assert "Failed to delete cluster orphaned-cluster" in caplog.text
+    assert any(record.levelno >= logging.ERROR for record in caplog.records)
+    assert "Deleted 0 orphaned cluster(s)" in caplog.text
 
 
 @patch("lftools_uv.openstack.cluster._fetch_jenkins_builds")
 @patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
-def test_cleanup_multiple_jenkins_urls(mock_from_config, mock_fetch_builds, capsys):
+def test_cleanup_multiple_jenkins_urls(mock_from_config, mock_fetch_builds, caplog):
     """Test cleanup with multiple Jenkins URLs."""
+    caplog.set_level(logging.INFO)
+
     # Mock Jenkins builds
     mock_fetch_builds.return_value = ["production-job-1", "sandbox-job-2"]
 
@@ -457,20 +458,18 @@ def test_cleanup_multiple_jenkins_urls(mock_from_config, mock_fetch_builds, caps
     os_cluster.cleanup("test-cloud", jenkins_urls=jenkins_urls)
 
     # Verify both URLs were processed
-    captured = capsys.readouterr()
-    # Check for the full INFO message to avoid CodeQL's incomplete URL substring sanitization warning
+    # Check for the full message to avoid CodeQL's incomplete URL substring sanitization warning
     # These are test assertions verifying output format, not security-related URL validation
     expected_info_line = (
-        "INFO: Checking Jenkins URLs for active builds: "
-        "https://jenkins1.example.org https://jenkins2.example.com/sandbox"
+        "Checking Jenkins URLs for active builds: https://jenkins1.example.org https://jenkins2.example.com/sandbox"
     )
-    assert expected_info_line in captured.out
-    assert "Found 2 active builds in Jenkins" in captured.out
+    assert expected_info_line in caplog.text
+    assert "Found 2 active builds in Jenkins" in caplog.text
 
 
 @patch("lftools_uv.openstack.cluster._fetch_jenkins_builds")
 @patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
-def test_cleanup_list_clusters_error(mock_from_config, mock_fetch_builds, capsys):
+def test_cleanup_list_clusters_error(mock_from_config, mock_fetch_builds, caplog):
     """Test handling of errors when listing clusters during cleanup."""
     from openstack.cloud.exc import OpenStackCloudException
 
@@ -487,5 +486,5 @@ def test_cleanup_list_clusters_error(mock_from_config, mock_fetch_builds, capsys
         os_cluster.cleanup("test-cloud", jenkins_urls="https://jenkins.example.org")
 
     assert exc_info.value.code == 1
-    captured = capsys.readouterr()
-    assert "ERROR: Failed to list clusters" in captured.out
+    assert "Failed to list clusters" in caplog.text
+    assert any(record.levelno >= logging.ERROR for record in caplog.records)

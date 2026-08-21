@@ -13,6 +13,7 @@
 __author__ = "Thanh Ha"
 
 
+import logging
 import re
 import subprocess
 import sys
@@ -25,6 +26,8 @@ from lftools_uv.openstack import object as os_object
 from lftools_uv.openstack import server as os_server
 from lftools_uv.openstack import stack as os_stack
 from lftools_uv.openstack import volume as os_volume
+
+log = logging.getLogger(__name__)
 
 
 @click.group()
@@ -97,9 +100,9 @@ def upload(ctx, image, name, disk_format):
     pattern = disk_format
     result = re.search(pattern, disktype)
     if result:
-        print(f"PASS Image format matches {disk_format}")
+        log.info("PASS Image format matches %s", disk_format)
     else:
-        print(f"ERROR Image is not in {disk_format} format")
+        log.error("Image is not in %s format", disk_format)
         sys.exit(1)
 
     os_image.upload(ctx.obj["os_cloud"], image, name, disk_format)
