@@ -121,6 +121,7 @@ def project_version_details(ctx, project_slug, version_slug):
 @click.argument("programming-language")
 @click.argument("language")
 @click.pass_context
+# aislop-ignore-next-line too-many-params -- Click binds one parameter per CLI option
 def project_create(ctx, project_name, repository_url, repository_type, homepage, programming_language, language):
     """Create a new project."""
     r = readthedocs.ReadTheDocs()

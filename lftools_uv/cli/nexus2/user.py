@@ -44,6 +44,7 @@ def user_list(ctx):
 @click.argument("roles")
 @click.argument("password", required=False)
 @click.pass_context
+# aislop-ignore-next-line too-many-params -- Click binds one parameter per CLI option
 def user_create(ctx, username, firstname, lastname, email, roles, password):
     """Add a new user."""
     r = ctx.obj["nexus2"]

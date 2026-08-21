@@ -50,6 +50,7 @@ def _get_token(organization: str) -> str:
     return config.get_setting(section, "token")
 
 
+# aislop-ignore-next-line too-many-params -- mirrors the option set of the `github` commands
 def helper_list(  # noqa: C901, PLR0912
     _ctx: object,
     organization: str,
@@ -189,6 +190,7 @@ def prvotes(organization: str, repo: str, pr: int) -> list[str]:
     return approval_list
 
 
+# aislop-ignore-next-line too-many-params -- mirrors the option set of the `github` commands
 def helper_user_github(  # noqa: C901, PLR0912
     _ctx: object,
     organization: str,

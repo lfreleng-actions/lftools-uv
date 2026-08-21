@@ -228,6 +228,7 @@ def release(ctx, repos, verify, server):
     + r" ^\d+.\d+.\d+$                                                 ",
 )
 @click.pass_context
+# aislop-ignore-next-line too-many-params -- Click binds one parameter per CLI option
 def copy_from_nexus3_to_dockerhub(ctx, org, repo, exact, summary, verbose, copy, progbar, repofile, version_regexp):
     """Find missing repos in Docker Hub, Copy from Nexus3.
 

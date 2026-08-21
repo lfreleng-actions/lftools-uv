@@ -84,6 +84,7 @@ def votes(ctx, organization, repo, pr):
 @click.option("--team", type=str, required=False, help="List members of a team")
 @click.option("--repofeatures", is_flag=True, required=False, help="List enabled features for repos in an org")
 @click.pass_context
+# aislop-ignore-next-line too-many-params -- Click binds one parameter per CLI option
 def list(ctx, organization, repos, audit, full, teams, team, repofeatures):
     """List options for github org repos."""
     helper_list(ctx, organization, repos, audit, full, teams, team, repofeatures)
@@ -97,6 +98,7 @@ def list(ctx, organization, repos, audit, full, teams, team, repofeatures):
 @click.option("--has_projects", is_flag=True, required=False, help="Repo should have projects")
 @click.option("--has_wiki", is_flag=True, required=False, help="Repo should have wiki")
 @click.pass_context
+# aislop-ignore-next-line too-many-params -- Click binds one parameter per CLI option
 def createrepo(ctx, organization, repository, description, has_issues, has_projects, has_wiki):
     """Create a Github repo within an Organization.
 
@@ -148,6 +150,7 @@ def createrepo(ctx, organization, repository, description, has_issues, has_proje
 @click.option("--add_team", type=str, required=False, help="Add team to repo")
 @click.option("--remove_team", type=str, required=False, help="remove team from repo")
 @click.pass_context
+# aislop-ignore-next-line too-many-params -- Click binds one parameter per CLI option
 def updaterepo(ctx, organization, repository, has_issues, has_projects, has_wiki, add_team, remove_team):
     """Update a Github repo within an Organization.
 
