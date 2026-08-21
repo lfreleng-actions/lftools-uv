@@ -12,6 +12,7 @@
 __author__ = "Thanh Ha"
 
 import logging
+import subprocess  # noqa: S404
 
 import typer
 from requests.exceptions import HTTPError
@@ -72,9 +73,7 @@ def copy_archives(
         pattern: Space-separated list of Unix style glob patterns of files to
                  copy for archiving.
     """
-    # TODO: Implement copy_archives functionality
-    typer.echo(f"Copy archives from {workspace} with pattern {pattern}")
-    typer.echo("Note: This functionality needs to be implemented")
+    deploy_sys.copy_archives(workspace, pattern if pattern else None)
 
 
 @deploy_app.command(name="file")
@@ -132,7 +131,7 @@ def s3(
 @deploy_app.command(name="maven-file")
 def maven_file(
     nexus_url: str = typer.Argument(..., envvar="NEXUS_URL", help=_HELP_NEXUS_URL),
-    repo_id: str = typer.Argument(..., envvar="REPO_ID", help="Repository ID"),
+    repo_id: str = typer.Argument(..., envvar="REPO_ID", help="Server ID as defined in settings.xml"),
     file_name: str = typer.Argument(..., envvar="FILE_NAME", help="File name to deploy"),
     # Maven Config
     maven_bin: str | None = typer.Option(None, "-b", "--maven-bin", envvar="MAVEN_BIN", help="Path of maven binary."),
@@ -145,29 +144,59 @@ def maven_file(
     ),
     # Maven Artifact GAV
     artifact_id: str | None = typer.Option(None, "-a", "--artifact-id", help="Maven Artifact ID."),
-    classifier: str | None = typer.Option(None, "-c", "--classifier", help="Maven Artifact classifier."),
+    classifier: str | None = typer.Option(None, "-c", "--classifier", help="File classifier."),
+    pom_file: str | None = typer.Option(None, "-f", "--pom-file", help="Pom file to extract GAV information from."),
     group_id: str | None = typer.Option(None, "-g", "--group-id", help="Maven Group ID."),
-    packaging: str | None = typer.Option(None, "-k", "--packaging", help="Maven packaging."),
-    version: str | None = typer.Option(None, "-v", "--version", help="Maven Artifact version."),
-    # Repository Config
-    repo_url: str | None = typer.Option(None, "-r", "--repo-url", help="Maven repository URL."),
-    repository_layout: str = typer.Option("default", "-l", "--repository-layout", help="Repository layout."),
+    version: str | None = typer.Option(None, "-v", "--version", help="Maven artifact version."),
 ) -> None:
-    """Deploy a file to Nexus using Maven deploy:deploy-file.
+    """Deploy a file to a Nexus maven2 repository.
 
-    This script takes a file and deploys to a Nexus repository using Maven
-    deploy plugin.
+    Deployment runs through mvn, so the server credentials come from your
+    settings.xml rather than from this command. The Maven default of
+    "~/.m2/settings.xml" applies unless overridden, in the following order:
+
+        1. Passed through CLI option "-s" ("-gs" for global-settings)
+        2. Environment variable "$SETTINGS_FILE" ("$GLOBAL_SETTINGS_FILE"
+           for global-settings)
+        3. Maven default "~/.m2/settings.xml".
+
+    If pom-file is passed in via the "-f" option then the Maven GAV parameters
+    are not necessary. pom-file setting overrides the Maven GAV parameters.
     """
+    params: list[str] = ["deploy", "maven-file"]
+
+    # Maven Configuration. The short flags below are the ones understood by
+    # the deploy shell script, which differ from this command's own flags.
+    if maven_bin:
+        params.extend(["-b", maven_bin])
+    if global_settings:
+        params.extend(["-l", global_settings])
+    if settings:
+        params.extend(["-s", settings])
+    if maven_params:
+        params.extend(["-p", maven_params])
+
+    # Maven Artifact GAV
+    if artifact_id:
+        params.extend(["-a", artifact_id])
+    if classifier:
+        params.extend(["-c", classifier])
+    if group_id:
+        params.extend(["-g", group_id])
+    if pom_file:
+        params.extend(["-f", pom_file])
+    if version:
+        params.extend(["-v", version])
+
+    # Set required variables last as getopts gets processed first.
+    params.extend([nexus_url, repo_id, file_name])
+
     try:
-        # TODO: Implement maven file deployment functionality
-        typer.echo(f"Deploy Maven file {file_name} to {nexus_url}")
-        typer.echo("Note: This functionality needs to be implemented")
+        status = subprocess.call(params)  # noqa: S603
     except FileNotFoundError:
-        log.exception("Maven binary not found")
+        log.exception("Deploy binary not found")
         raise typer.Exit(127) from None
-    except Exception:
-        log.exception("Maven deployment failed")
-        raise typer.Exit(1) from None
+    raise typer.Exit(status)
 
 
 @deploy_app.command(name="nexus")

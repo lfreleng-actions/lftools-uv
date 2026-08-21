@@ -42,7 +42,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 from lftools_uv import config as lf_config
 
@@ -53,9 +53,6 @@ except ImportError:  # pragma: no cover - exercised when extra not installed
     _zulip_module = None
 else:
     _zulip_module = _imported_zulip
-
-if TYPE_CHECKING:  # pragma: no cover
-    import zulip as _zulip_module_type  # noqa: F401
 
 log = logging.getLogger(__name__)
 

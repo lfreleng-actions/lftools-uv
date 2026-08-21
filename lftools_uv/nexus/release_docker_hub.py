@@ -46,6 +46,7 @@ import multiprocessing
 import os
 import re
 import time
+from collections.abc import Callable
 from functools import total_ordering
 from multiprocessing.dummy import Pool as ThreadPool
 
@@ -57,6 +58,17 @@ import tqdm
 import urllib3
 
 log = logging.getLogger(__name__)
+
+# Transient Docker/network failures worth retrying, paired with the reason
+# reported in the retry progress line.
+_RETRY_REASONS: tuple[tuple[type[BaseException], str], ...] = (
+    (TimeoutError, "Socket Timeout"),
+    (requests.exceptions.ConnectionError, "Connection Error"),
+    (urllib3.exceptions.ReadTimeoutError, "Read Timeout Error"),
+    (docker.errors.APIError, "API Error"),
+)
+_RETRY_ERRORS: tuple[type[BaseException], ...] = tuple(exc for exc, _ in _RETRY_REASONS)
+_MAX_RETRY_ATTEMPTS: int = 90
 
 NexusCatalog: list[list[str]] = []
 projects: list[ProjectClass] = []
@@ -505,6 +517,66 @@ class ProjectClass:
         )
         self.docker_client.images.remove(image.id, force=True)
 
+    def _retry_stage(self, stage: str, run: Callable[[int, str], None]) -> None:
+        """Call *run* until it succeeds, retrying transient Docker failures.
+
+        *run* receives the attempt number and the reason the previous
+        attempt failed, both of which appear in the progress output.
+
+        :raises requests.HTTPError: once the retry budget is exhausted.
+        """
+        attempt = 1
+        retry_text = ""
+        while True:
+            try:
+                log.debug("stage = %s. attempt %d, reason %s", stage, attempt, retry_text)
+                run(attempt, retry_text)
+                return
+            except _RETRY_ERRORS as error:
+                retry_text = next(text for exc, text in _RETRY_REASONS if isinstance(error, exc))
+            attempt += 1
+            if attempt > _MAX_RETRY_ATTEMPTS:
+                raise requests.HTTPError(retry_text)
+
+    def _copy_tag(self, tag: str, nexus_image_str: str, progbar: bool = False) -> None:
+        """Pull one tag from Nexus3, retag it, push it, then drop the local copy.
+
+        Each stage is retried independently, so a transient failure in one
+        stage does not restart the stages that already succeeded.
+        """
+        image: docker.models.images.Image | None = None
+
+        def pull(count: int, retry_text: str) -> None:
+            nonlocal image
+            image = self._docker_pull(nexus_image_str, count, tag, retry_text, progbar)
+
+        self._retry_stage("pull", pull)
+        if image is None:
+            return
+
+        pulled = image
+        remaining: tuple[tuple[str, Callable[..., None]], ...] = (
+            ("tag", self._docker_tag),
+            ("push", self._docker_push),
+            ("cleanup", self._docker_cleanup),
+        )
+        for stage, action in remaining:
+            self._retry_stage(stage, self._image_stage(action, pulled, tag, progbar))
+
+    @staticmethod
+    def _image_stage(
+        action: Callable[..., None],
+        image: docker.models.images.Image,
+        tag: str,
+        progbar: bool,
+    ) -> Callable[[int, str], None]:
+        """Bind an image stage to everything but the per-attempt arguments."""
+
+        def run(count: int, retry_text: str) -> None:
+            action(count, image, tag, retry_text, progbar)
+
+        return run
+
     def docker_pull_tag_push(self, progbar: bool = False) -> None:
         """Copy all missing Docker Hub images from Nexus3.
 
@@ -521,42 +593,7 @@ class ProjectClass:
             org_path = _remove_http_from_url(_nexus3_base)
             nexus_image_str = f"{org_path}/{self.org_name}/{self.nexus_repo_name}:{tag}"
             log.debug(f"Nexus Image Str = {nexus_image_str}")
-            image = None
-            for stage in ["pull", "tag", "push", "cleanup"]:
-                cnt_break_loop = 1
-                retry_text = ""
-                while True:
-                    try:
-                        log.debug(f"stage = {stage}. cnt_break_loop {cnt_break_loop}, reason {retry_text}")
-                        if stage == "pull":
-                            image = self._docker_pull(nexus_image_str, cnt_break_loop, tag, retry_text, progbar)
-                            break
-
-                        if stage == "tag":
-                            if image is not None:
-                                self._docker_tag(cnt_break_loop, image, tag, retry_text, progbar)
-                            break
-
-                        if stage == "push":
-                            if image is not None:
-                                self._docker_push(cnt_break_loop, image, tag, retry_text, progbar)
-                            break
-
-                        if stage == "cleanup":
-                            if image is not None:
-                                self._docker_cleanup(cnt_break_loop, image, tag, retry_text, progbar)
-                            break
-                    except TimeoutError:
-                        retry_text = "Socket Timeout"
-                    except requests.exceptions.ConnectionError:
-                        retry_text = "Connection Error"
-                    except urllib3.exceptions.ReadTimeoutError:
-                        retry_text = "Read Timeout Error"
-                    except docker.errors.APIError:
-                        retry_text = "API Error"
-                    cnt_break_loop = cnt_break_loop + 1
-                    if cnt_break_loop > 90:
-                        raise requests.HTTPError(retry_text)
+            self._copy_tag(tag, nexus_image_str, progbar)
 
 
 def repo_is_in_file(check_repo: str = "", repo_file_name: str = "") -> bool:

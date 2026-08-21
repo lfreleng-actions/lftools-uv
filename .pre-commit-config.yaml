@@ -15,8 +15,6 @@ ci:
 
     Signed-off-by: pre-commit-ci[bot] <pre-commit-ci@users.noreply.github.com>
 
-exclude: "^docs/conf.py"
-
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
@@ -57,15 +55,20 @@ repos:
     rev: 65dbdb59d2f2d9c3bdc343c566821ad3319ddaa3  # frozen: v0.16.3
     hooks:
       - id: ruff
-        files: ^(lftools_uv|scripts|tests)/.+\.py$
+        files: ^(docs|lftools_uv|scripts|tests)/.+\.py$
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
-        files: ^(lftools_uv|scripts|tests)/.+\.py$
+        files: ^(docs|lftools_uv|scripts|tests)/.+\.py$
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: 7ff8d35ae36a7d2b968f2f90b4c723e292e594ee  # frozen: v2.3.1
     hooks:
       - id: mypy
+        # A Sphinx conf.py is executed by Sphinx against its own globals, so
+        # type checking it buys nothing. Passing it to mypy also perturbs
+        # module resolution for the rest of the tree, making the top-level
+        # `jenkins` dependency resolve to the lftools_uv.jenkins package.
+        exclude: ^docs/
         additional_dependencies:
           - types-requests
           - types-PyYAML
