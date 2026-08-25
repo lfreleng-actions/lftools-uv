@@ -68,7 +68,6 @@ log = logging.getLogger(__name__)
 
 NexusCatalog: list[list[str]] = []
 projects: list[ProjectClass] = []
-TotTagsToBeCopied: int = 0
 project_max_len_chars: int = 0
 
 
