@@ -158,7 +158,6 @@ def plugins_sec(ctx: typer.Context) -> None:
         secdict = {}
         for w in warn:
             name = w["name"]
-            url = w["url"]
             lastversion = None
             for version in w["versions"]:
                 lastversion = version.get("lastVersion")
