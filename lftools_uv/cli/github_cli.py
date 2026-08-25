@@ -243,7 +243,7 @@ def createteam(ctx, organization, name, repo, privacy):
         my_repos = [repo]
         repos = [repo for repo in get_repos() if repo.name in my_repos]
         for repo in repos:
-            echo(repo)
+            log.info(repo)
         if repos:
             log.info("repo found")
         else:

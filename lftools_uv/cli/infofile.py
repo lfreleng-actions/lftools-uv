@@ -84,7 +84,7 @@ def create_info_file(ctx, gerrit_url, gerrit_project, directory, empty, tsc_appr
         if "inherits_from" in result:
             inherits = result["inherits_from"]["id"]
             if inherits != "All-Projects":
-                echo(f"    Inherits from: {inherits}")
+                log.info("    Inherits from: %s", inherits)
                 log.warning("Better Check this unconventional inherit")
 
         try:

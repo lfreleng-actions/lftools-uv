@@ -264,4 +264,4 @@ def folder_move(
             }
         )
     else:
-        typer.echo(f"Moved folder {folder_id} {position} folder {reference_id}", err=True)
+        typer.echo(f"Moved folder {folder_id} {position} folder {reference_id}")

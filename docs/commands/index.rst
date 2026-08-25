@@ -45,8 +45,10 @@ Every command splits what it writes across two streams.
 staging repository id that ``deploy nexus-stage-repo-create`` returns all
 arrive here, with no level prefix, whatever the log level.
 
-**stderr** carries diagnostics: progress, warnings and failures. These
-carry a level and respond to ``--debug``.
+**stderr** carries diagnostics: progress, warnings and failures. A
+warning or failure announces its level, as in ``WARNING: ...``;
+informational progress renders bare, so raising the verbosity with
+``--debug`` adds detail rather than noise.
 
 The split lets a pipeline consume a result without a warning corrupting
 it:

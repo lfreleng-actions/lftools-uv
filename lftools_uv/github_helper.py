@@ -165,7 +165,13 @@ def helper_list(  # noqa: C901, PLR0912
 
 
 def prvotes(organization: str, repo: str, pr: int) -> list[str]:
-    """Get votes on a github pr."""
+    """Get votes on a github pr.
+
+    Shared by ``github votes`` and ``infofile check-votes``, so the
+    mergeability observation stays on the diagnostic stream: the two
+    commands disagree about what their result is, and only the caller
+    knows which stream a line belongs on.
+    """
     token: str = config.get_setting("github", "token")
     g: Github = Github(token)
     org: Organization = _get_org(g, organization)
@@ -176,7 +182,7 @@ def prvotes(organization: str, repo: str, pr: int) -> list[str]:
     approval_list.append(author)
 
     pr_mergable = gh_repo.get_pull(pr).mergeable
-    echo(f"MERGEABLE: {pr_mergable}")
+    log.info("MERGEABLE: %s", pr_mergable)
 
     approvals = gh_repo.get_pull(pr).get_reviews()
     for approve in approvals:
