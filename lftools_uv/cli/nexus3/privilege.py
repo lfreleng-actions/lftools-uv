@@ -12,12 +12,10 @@
 
 __author__ = "DW Talton"
 
-import logging
-
 import click
 from tabulate import tabulate
 
-log = logging.getLogger(__name__)
+from lftools_uv.output import echo
 
 
 @click.group()
@@ -33,4 +31,4 @@ def list_privileges(ctx):
     """List privileges."""
     r = ctx.obj["nexus3"]
     data = r.list_privileges()
-    log.info(tabulate(data, headers=["Type", "Name", "Description", "Read Only"]))
+    echo(tabulate(data, headers=["Type", "Name", "Description", "Read Only"]))

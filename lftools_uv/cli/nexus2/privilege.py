@@ -12,12 +12,10 @@
 
 __author__ = "DW Talton"
 
-import logging
-
 import click
 from tabulate import tabulate
 
-log = logging.getLogger(__name__)
+from lftools_uv.output import echo
 
 
 @click.group()
@@ -33,7 +31,7 @@ def list(ctx):
     """List privileges."""
     r = ctx.obj["nexus2"]
     data = r.privilege_list()
-    log.info(tabulate(data, headers=["Name", "ID"]))
+    echo(tabulate(data, headers=["Name", "ID"]))
 
 
 @privilege.command(name="create")
@@ -45,7 +43,7 @@ def create(ctx, name, description, repo):
     """Create a new privilege."""
     r = ctx.obj["nexus2"]
     data = r.privilege_create(name, description, repo)
-    log.info(data)
+    echo(data)
 
 
 @privilege.command(name="delete")
@@ -55,4 +53,4 @@ def delete(ctx, privilege_id):
     """Delete a privilege."""
     r = ctx.obj["nexus2"]
     data = r.privilege_delete(privilege_id)
-    log.info(data)
+    echo(data)

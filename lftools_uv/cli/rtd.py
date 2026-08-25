@@ -30,6 +30,7 @@ import click
 
 from lftools_uv.api.endpoints import readthedocs
 from lftools_uv.api.endpoints.readthedocs import ReadTheDocsError, ReadTheDocsNotFoundError
+from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
 
@@ -42,7 +43,7 @@ _DEPRECATION_NOTICE = (
 
 def _emit_json(data: object) -> None:
     """Print a payload as JSON, matching the historical output format."""
-    log.info(json.dumps(data, indent=2))
+    echo(json.dumps(data, indent=2))
 
 
 @click.group()
@@ -63,7 +64,7 @@ def project_list(ctx):
     """
     r = readthedocs.ReadTheDocs()
     for project in r.project_list():
-        log.info(project)
+        echo(project)
 
 
 @click.command(name="project-details")
@@ -73,7 +74,7 @@ def project_details(ctx, project_slug):
     """Retrieve project details."""
     r = readthedocs.ReadTheDocs()
     data = r.project_details(project_slug)
-    log.info(pformat(data))
+    echo(pformat(data))
 
 
 @click.command(name="project-version-list")
@@ -84,7 +85,7 @@ def project_version_list(ctx, project_slug):
     r = readthedocs.ReadTheDocs()
     data = r.project_version_list(project_slug)
     for version in data:
-        log.info(version)
+        echo(version)
 
 
 @click.command(name="project-version-update")
@@ -99,7 +100,7 @@ def project_version_update(ctx, project_slug, version_slug, active):
     """
     r = readthedocs.ReadTheDocs()
     data = r.project_version_update(project_slug, version_slug, active)
-    log.info(pformat(data))
+    echo(pformat(data))
 
 
 @click.command(name="project-version-details")
@@ -126,7 +127,7 @@ def project_create(ctx, project_name, repository_url, repository_type, homepage,
     """Create a new project."""
     r = readthedocs.ReadTheDocs()
     data = r.project_create(project_name, repository_url, repository_type, homepage, programming_language, language)
-    log.info(pformat(data))
+    echo(pformat(data))
 
 
 @click.command(
@@ -146,7 +147,7 @@ def project_update(ctx, project_name):
         key, value = item.split("=", 1)
         d[key] = value
     data = r.project_update(project_name, d)
-    log.info(pformat(data))
+    echo(pformat(data))
 
 
 @click.command(name="project-build-list")
@@ -159,7 +160,7 @@ def project_build_list(ctx, project_slug):
     if data:
         _emit_json({"count": len(data), "results": data})
     else:
-        log.info("There are no active builds.")
+        echo("There are no active builds.")
 
 
 @click.command(name="project-build-details")
@@ -195,7 +196,7 @@ def subproject_list(ctx, project_slug):
     """
     r = readthedocs.ReadTheDocs()
     for subproject in r.subproject_list(project_slug):
-        log.info(subproject)
+        echo(subproject)
 
 
 @click.command(name="subproject-details")
@@ -206,7 +207,7 @@ def subproject_details(ctx, project_slug, subproject_slug):
     """Retrieve subproject's details."""
     r = readthedocs.ReadTheDocs()
     data = r.subproject_details(project_slug, subproject_slug)
-    log.info(pformat(data))
+    echo(pformat(data))
 
 
 @click.command(name="subproject-create")
@@ -217,7 +218,7 @@ def subproject_create(ctx, project_slug, subproject_slug):
     """Create a project-subproject relationship."""
     r = readthedocs.ReadTheDocs()
     data = r.subproject_create(project_slug, subproject_slug)
-    log.info(pformat(data))
+    echo(pformat(data))
 
 
 @click.command(name="subproject-delete")

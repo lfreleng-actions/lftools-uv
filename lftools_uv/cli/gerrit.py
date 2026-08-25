@@ -16,6 +16,7 @@ import click
 
 from lftools_uv.api.endpoints import gerrit
 from lftools_uv.git.gerrit import Gerrit as git_gerrit
+from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
 
@@ -46,7 +47,7 @@ def addfile(ctx, gerrit_fqdn, gerrit_project, filename, issue_id, file_location)
     """
     g = gerrit.Gerrit(fqdn=gerrit_fqdn)
     data = g.add_file(gerrit_fqdn, gerrit_project, filename, issue_id, file_location)
-    log.info(pformat(data))
+    echo(pformat(data))
 
 
 @click.command(name="addinfojob")
@@ -117,7 +118,7 @@ def abandonchanges(ctx, gerrit_fqdn, gerrit_project):
     """
     g = gerrit.Gerrit(fqdn=gerrit_fqdn)
     data = g.abandon_changes(gerrit_fqdn, gerrit_project)
-    log.info(pformat(data))
+    echo(pformat(data))
 
 
 # Creates a gerrit project if project does not exist and adds ldap group as owner.
@@ -144,7 +145,7 @@ def createproject(ctx, gerrit_fqdn, gerrit_project, ldap_group, description, che
     """
     g = gerrit.Gerrit(fqdn=gerrit_fqdn)
     data = g.create_project(gerrit_fqdn, gerrit_project, ldap_group, description, check)
-    log.info(pformat(data))
+    echo(pformat(data))
 
 
 @click.command(name="create-saml-group")
@@ -155,7 +156,7 @@ def create_saml_group(ctx, gerrit_fqdn, ldap_group):
     """Create saml group based on ldap group."""
     g = gerrit.Gerrit(fqdn=gerrit_fqdn)
     data = g.create_saml_group(gerrit_fqdn, ldap_group)
-    log.info(pformat(data))
+    echo(pformat(data))
 
 
 @click.command(name="list-project-permissions")
@@ -167,7 +168,7 @@ def list_project_permissions(ctx, gerrit_fqdn, project):
     g = gerrit.Gerrit(fqdn=gerrit_fqdn)
     data = g.list_project_permissions(project)
     for ldap_group in data:
-        log.info(pformat(ldap_group))
+        echo(pformat(ldap_group))
 
 
 @click.command(name="list-project-inherits-from")
@@ -178,7 +179,7 @@ def list_project_inherits_from(ctx, gerrit_fqdn, gerrit_project):
     """List who a project inherits from."""
     g = gerrit.Gerrit(fqdn=gerrit_fqdn)
     data = g.list_project_inherits_from(gerrit_project)
-    log.info(data)
+    echo(data)
 
 
 @click.command(name="addmavenconfig")

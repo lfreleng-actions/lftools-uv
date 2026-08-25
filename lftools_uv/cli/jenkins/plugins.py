@@ -11,12 +11,10 @@
 
 __author__ = "Trevor Bramwell"
 
-import logging
-
 import click
 import requests
 
-log = logging.getLogger(__name__)
+from lftools_uv.output import echo
 
 
 def checkmark(truthy):
@@ -27,8 +25,8 @@ def checkmark(truthy):
 
 
 def print_plugin(plugin, namefield="longName"):
-    """Log the plugin longName and version."""
-    log.info("%s:%s", plugin[namefield], plugin["version"])
+    """Print the plugin longName and version to stdout."""
+    echo(f"{plugin[namefield]}:{plugin['version']}")
 
 
 @click.group()
@@ -180,7 +178,7 @@ def sec(ctx):
                 for version in w["versions"]:
                     lastversion = version.get("lastVersion")
                 if name == key and secdict[key] == lastversion:
-                    log.info(f"{key}:{secdict[key]}\t{key}:{activedict[key]}\t{url}")
+                    echo(f"{key}:{secdict[key]}\t{key}:{activedict[key]}\t{url}")
 
 
 plugins_init.add_command(list_plugins, name="list")

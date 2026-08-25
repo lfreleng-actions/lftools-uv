@@ -20,6 +20,7 @@ from github import Github, GithubException
 
 from lftools_uv import config
 from lftools_uv.github_helper import helper_list, helper_user_github, prvotes
+from lftools_uv.output import echo
 
 _HELP_GITHUB_ORG = "GitHub organization name"
 
@@ -54,7 +55,7 @@ def submit_pr(
         pr_mergeable = repo_obj.get_pull(pr).mergeable
 
         if pr_mergeable:
-            log.info("PR is mergeable: %s", pr_mergeable)
+            echo(f"PR is mergeable: {pr_mergeable}")
             repo_obj.get_pull(pr).merge(commit_message="Vote Completed, merging INFO file")
             log.info("PR merged successfully")
         else:
@@ -73,7 +74,7 @@ def votes(
 ) -> None:
     """Helper for votes."""
     approval_list = prvotes(organization, repo, pr)
-    log.info("Approvals: %s", approval_list)
+    echo(f"Approvals: {approval_list}")
 
 
 @github_app.command(name="list")

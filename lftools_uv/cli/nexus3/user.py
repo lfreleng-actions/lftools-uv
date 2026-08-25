@@ -12,12 +12,10 @@
 
 __author__ = "DW Talton"
 
-import logging
-
 import click
 from tabulate import tabulate
 
-log = logging.getLogger(__name__)
+from lftools_uv.output import echo
 
 
 @click.group()
@@ -34,7 +32,7 @@ def search_user(ctx, username):
     """Search users."""
     r = ctx.obj["nexus3"]
     data = r.list_user(username)
-    log.info(
+    echo(
         tabulate(
             data,
             headers=[
@@ -62,7 +60,7 @@ def user_create(ctx, username, first_name, last_name, email_address, roles, pass
     """Create a new user account."""
     r = ctx.obj["nexus3"]
     data = r.create_user(username, first_name, last_name, email_address, roles, password)
-    log.info(data)
+    echo(data)
 
 
 @user.command(name="delete")
@@ -72,4 +70,4 @@ def user_delete(ctx, username):
     """Delete a user account."""
     r = ctx.obj["nexus3"]
     data = r.delete_user(username)
-    log.info(data)
+    echo(data)

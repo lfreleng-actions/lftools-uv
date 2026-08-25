@@ -11,11 +11,9 @@
 
 __author__ = "Trevor Bramwell"
 
-import logging
-
 import click
 
-log = logging.getLogger(__name__)
+from lftools_uv.output import echo
 
 
 def offline_str(status):
@@ -40,7 +38,7 @@ def list_nodes(ctx):
     node_list = ctx.obj["nodes"]
 
     for node in node_list:
-        log.info("%s [%s]", node["name"], offline_str(node["offline"]))
+        echo(f"{node['name']} [{offline_str(node['offline'])}]")
 
 
 nodes.add_command(list_nodes, name="list")

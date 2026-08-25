@@ -11,6 +11,7 @@ import typer
 
 from lftools_uv import config as lftools_cfg
 from lftools_uv.jenkins.token import get_token
+from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ def token_change(
             log.error(_MSG_CREDS_NOT_SET)
             raise typer.Exit(1)
 
-        log.info(get_token(name, jenkins.url, username=username, password=password, change=True))
+        echo(get_token(name, jenkins.url, username=username, password=password, change=True))
     except Exception:
         log.exception("Failed to change token")
         raise typer.Exit(1) from None
@@ -102,7 +103,7 @@ def token_print(ctx: typer.Context) -> None:
             log.error(_MSG_CREDS_NOT_SET)
             raise typer.Exit(1)
 
-        log.info(get_token("token", jenkins.url, username, password))
+        echo(get_token("token", jenkins.url, username, password))
     except Exception:
         log.exception("Failed to print token")
         raise typer.Exit(1) from None
@@ -156,7 +157,7 @@ def token_reset(
             cfg_sections = config.sections()
         elif len(servers) == 1:
             key = _reset_key(config, servers[0])
-            log.info(key)
+            echo(key)
             return
         else:
             cfg_sections = list(servers)

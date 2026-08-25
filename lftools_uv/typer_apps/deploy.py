@@ -18,6 +18,7 @@ import typer
 from requests.exceptions import HTTPError
 
 import lftools_uv.deploy as deploy_sys
+from lftools_uv.output import echo
 
 _HELP_NEXUS_STAGING_ID = "Nexus staging profile ID"
 _HELP_NEXUS_URL = "Nexus server URL"
@@ -253,7 +254,7 @@ def nexus_stage_repo_create(
 ) -> None:
     """Create a Nexus staging repo."""
     staging_repo_id = deploy_sys.nexus_stage_repo_create(nexus_url, staging_profile_id)
-    log.info(staging_repo_id)
+    echo(staging_repo_id)
 
 
 @deploy_app.command(name="nexus-zip")

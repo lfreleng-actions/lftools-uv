@@ -12,11 +12,9 @@
 
 __author__ = "DW Talton"
 
-import logging
-
 import click
 
-log = logging.getLogger(__name__)
+from lftools_uv.output import echo
 
 
 @click.group()
@@ -34,7 +32,7 @@ def create_script(ctx, name, filename):
     """Create a new script."""
     r = ctx.obj["nexus3"]
     data = r.create_script(name, filename)
-    log.info(data)
+    echo(data)
 
 
 @script.command(name="delete")
@@ -44,7 +42,7 @@ def delete_script(ctx, name):
     """Delete a script."""
     r = ctx.obj["nexus3"]
     data = r.delete_script(name)
-    log.info(data)
+    echo(data)
 
 
 @script.command(name="list")
@@ -53,7 +51,7 @@ def list_scripts(ctx):
     """List all scripts."""
     r = ctx.obj["nexus3"]
     data = r.list_scripts()
-    log.info(data)
+    echo(data)
 
 
 @script.command(name="read")
@@ -63,7 +61,7 @@ def read_script(ctx, name):
     """Get script contents."""
     r = ctx.obj["nexus3"]
     data = r.read_script(name)
-    log.info(data)
+    echo(data)
 
 
 @script.command(name="run")
@@ -73,7 +71,7 @@ def run_script(ctx, name):
     """Run a script."""
     r = ctx.obj["nexus3"]
     data = r.run_script(name)
-    log.info(data)
+    echo(data)
 
 
 @script.command(name="update")
@@ -84,4 +82,4 @@ def update_script(ctx, name, content):
     """Update script contents."""
     r = ctx.obj["nexus3"]
     data = r.update_script(name, content)
-    log.info(data)
+    echo(data)

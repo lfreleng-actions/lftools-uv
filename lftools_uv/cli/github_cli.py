@@ -19,6 +19,7 @@ from github import Github, GithubException
 
 from lftools_uv import config
 from lftools_uv.github_helper import helper_list, helper_user_github, prvotes
+from lftools_uv.output import echo
 
 _GITHUB_PREFIX = "github."
 
@@ -57,7 +58,7 @@ def submit_pr(ctx, organization, repo, pr):
     pr_mergable = repo.get_pull(pr).mergeable
 
     if pr_mergable:
-        log.info(pr_mergable)
+        echo(pr_mergable)
         repo.get_pull(pr).merge(commit_message="Vote Completed, merging INFO file")
     else:
         log.error(f"PR NOT MERGEABLE {pr_mergable}")
@@ -72,7 +73,7 @@ def submit_pr(ctx, organization, repo, pr):
 def votes(ctx, organization, repo, pr):
     """Helper for votes."""
     approval_list = prvotes(organization, repo, pr)
-    log.info(f"Approvals: {approval_list}")
+    echo(f"Approvals: {approval_list}")
 
 
 @click.command(name="list")
@@ -242,7 +243,7 @@ def createteam(ctx, organization, name, repo, privacy):
         my_repos = [repo]
         repos = [repo for repo in get_repos() if repo.name in my_repos]
         for repo in repos:
-            log.info(repo)
+            echo(repo)
         if repos:
             log.info("repo found")
         else:

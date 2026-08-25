@@ -12,12 +12,11 @@
 
 __author__ = "DW Talton"
 
-import logging
 from pprint import pformat
 
 import click
 
-log = logging.getLogger(__name__)
+from lftools_uv.output import echo
 
 
 @click.group()
@@ -33,4 +32,4 @@ def list_repositories(ctx):
     """List repositories."""
     r = ctx.obj["nexus3"]
     data = r.list_repositories()
-    log.info(pformat(data))
+    echo(pformat(data))

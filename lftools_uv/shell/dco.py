@@ -19,6 +19,8 @@ import subprocess
 import sys
 from os import chdir, getcwd
 
+from lftools_uv.output import echo
+
 log = logging.getLogger(__name__)
 
 
@@ -87,7 +89,7 @@ def check(path=getcwd(), signoffs_dir="dco_signoffs"):
 
             if missing_list:
                 for commit in missing_list:
-                    log.info(f"{commit}")
+                    echo(f"{commit}")
                 sys.exit(1)
     except subprocess.CalledProcessError as e:
         log.exception(e)
@@ -133,7 +135,7 @@ def match(path=getcwd(), signoffs_dir="dco_signoffs"):
                     ):
                         continue
 
-                log.info(
+                echo(
                     f"For commit ID {commit_id}: \n\tCommitter is {commit_author_email}\n\tbut commit is signed off by {sob_results}\n"
                 )
                 exit_code = 1

@@ -11,11 +11,9 @@
 
 __author__ = "Trevor Bramwell"
 
-import logging
-
 import click
 
-log = logging.getLogger(__name__)
+from lftools_uv.output import echo
 
 
 @click.group()
@@ -33,7 +31,7 @@ def running(ctx):
     running_builds = jenkins.server.get_running_builds()
 
     for build in running_builds:
-        log.info("- %s on %s", build["name"], build["node"])
+        echo(f"- {build['name']} on {build['node']}")
 
 
 @click.command()
@@ -44,14 +42,14 @@ def queued(ctx):
     queue = jenkins.server.get_queue_info()
 
     queue_length = len(queue)
-    log.info("Build Queue (%s)", queue_length)
+    echo(f"Build Queue ({queue_length})")
     for build in queue:
         status_flags = []
         if build.get("stuck"):
             status_flags.append("[Stuck]")
         if build.get("blocked"):
             status_flags.append("[Blocked]")
-        log.info(" - %s%s", build["task"]["name"], (" " + " ".join(status_flags)) if status_flags else "")
+        echo(f" - {build['task']['name']}{(' ' + ' '.join(status_flags)) if status_flags else ''}")
 
 
 builds.add_command(running)

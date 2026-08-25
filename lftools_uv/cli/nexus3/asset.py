@@ -12,12 +12,11 @@
 
 __author__ = "DW Talton"
 
-import logging
 from pprint import pformat
 
 import click
 
-log = logging.getLogger(__name__)
+from lftools_uv.output import echo
 
 
 @click.group()
@@ -35,7 +34,7 @@ def asset_list(ctx, repository):
     r = ctx.obj["nexus3"]
     data = r.list_assets(repository)
     for item in data:
-        log.info(pformat(item))
+        echo(pformat(item))
 
 
 @asset.command(name="search")
@@ -49,7 +48,7 @@ def asset_search(ctx, query_string, repository, details):
     data = r.search_asset(query_string, repository, details)
 
     if details:
-        log.info(data)
+        echo(data)
     else:
         for item in data:
-            log.info(item)
+            echo(item)

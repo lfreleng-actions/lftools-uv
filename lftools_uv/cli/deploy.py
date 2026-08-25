@@ -20,6 +20,7 @@ import click
 from requests.exceptions import HTTPError
 
 import lftools_uv.deploy as deploy_sys
+from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
 
@@ -288,7 +289,7 @@ def nexus_stage_repo_close(ctx, nexus_url, staging_profile_id, staging_repo_id):
 def nexus_stage_repo_create(ctx, nexus_url, staging_profile_id):
     """Create a Nexus staging repo."""
     staging_repo_id = deploy_sys.nexus_stage_repo_create(nexus_url, staging_profile_id)
-    log.info(staging_repo_id)
+    echo(staging_repo_id)
 
 
 @click.command(name="nexus-zip")

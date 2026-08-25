@@ -63,6 +63,7 @@ from lftools_uv.nexus.release_docker_hub.util import (
     get_docker_name_from_file,
     repo_is_in_file,
 )
+from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
 
@@ -237,28 +238,28 @@ def copy_from_nexus_to_docker(progbar: bool = False) -> None:
 def print_nexus_docker_proj_names() -> None:
     """Print Nexus3 - Docker Hub repositories."""
     fmt_str = "{:<" + str(project_max_len_chars) + "} : "
-    log.info("")
+    echo()
     log_str = fmt_str.format(settings.nexus3_proj_name_header)
     log_str = f"{log_str}{settings.docker_proj_name_header}"
-    log.info(log_str)
-    log.info("-" * project_max_len_chars * 2)
+    echo(log_str)
+    echo("-" * project_max_len_chars * 2)
     docker_i = 0
     for proj in projects:
         log_str = fmt_str.format(proj.nexus_repo_name)
         log_str = f"{log_str}{proj.docker_repo_name}"
-        log.info(log_str)
+        echo(log_str)
         docker_i = docker_i + 1
-    log.info("")
+    echo()
 
 
 def print_tags_header(header_str: str, col_1_str: str) -> None:
     """Print simple header."""
     fmt_str = "{:<" + str(project_max_len_chars) + "} : "
-    log.info(header_str)
+    echo(header_str)
     log_str = fmt_str.format(col_1_str)
     log_str = "{}{}".format(log_str, "Tags")
-    log.info(log_str)
-    log.info("-" * project_max_len_chars * 2)
+    echo(log_str)
+    echo("-" * project_max_len_chars * 2)
 
 
 def print_tags_data(proj_name: str, tags: list[str]) -> None:
@@ -272,7 +273,7 @@ def print_tags_data(proj_name: str, tags: list[str]) -> None:
                 log_str = f"{log_str}, "
             log_str = f"{log_str}{tag}"
             tag_i = tag_i + 1
-        log.info(log_str)
+        echo(log_str)
 
 
 def print_nexus_valid_tags() -> None:
@@ -280,7 +281,7 @@ def print_nexus_valid_tags() -> None:
     print_tags_header("Nexus Valid Tags", settings.nexus3_proj_name_header)
     for proj in projects:
         print_tags_data(proj.nexus_repo_name, proj.nexus_tags.valid)
-    log.info("")
+    echo()
 
 
 def print_nexus_invalid_tags() -> None:
@@ -288,7 +289,7 @@ def print_nexus_invalid_tags() -> None:
     print_tags_header("Nexus InValid Tags", settings.nexus3_proj_name_header)
     for proj in projects:
         print_tags_data(proj.nexus_repo_name, proj.nexus_tags.invalid)
-    log.info("")
+    echo()
 
 
 def print_docker_valid_tags() -> None:
@@ -296,7 +297,7 @@ def print_docker_valid_tags() -> None:
     print_tags_header("Docker Valid Tags", settings.docker_proj_name_header)
     for proj in projects:
         print_tags_data(proj.docker_repo_name, proj.docker_tags.valid)
-    log.info("")
+    echo()
 
 
 def print_docker_invalid_tags() -> None:
@@ -304,7 +305,7 @@ def print_docker_invalid_tags() -> None:
     print_tags_header("Docker InValid Tags", settings.docker_proj_name_header)
     for proj in projects:
         print_tags_data(proj.docker_repo_name, proj.docker_tags.invalid)
-    log.info("")
+    echo()
 
 
 def print_stats() -> None:
@@ -312,40 +313,40 @@ def print_stats() -> None:
     print_tags_header("Tag statistics (V=Valid, I=InValid)", settings.nexus3_proj_name_header)
     fmt_str = "{:<" + str(project_max_len_chars) + "} : "
     for proj in projects:
-        log.info(
+        echo(
             f"{fmt_str.format(proj.nexus_repo_name)}Nexus V:{len(proj.nexus_tags.valid)} I:{len(proj.nexus_tags.invalid)} -- Docker V:{len(proj.docker_tags.valid)} I:{len(proj.docker_tags.invalid)}"
         )
-    log.info("")
+    echo()
 
 
 def print_missing_docker_proj() -> None:
     """Print missing docker repos."""
-    log.info("Missing corresponding Docker Project")
+    echo("Missing corresponding Docker Project")
     fmt_str = "{:<" + str(project_max_len_chars) + "} : "
     log_str = fmt_str.format(settings.nexus3_proj_name_header)
     log_str = f"{log_str}{settings.docker_proj_name_header}"
-    log.info(log_str)
-    log.info("-" * project_max_len_chars * 2)
+    echo(log_str)
+    echo("-" * project_max_len_chars * 2)
     all_docker_repos_found = True
     for proj in projects:
         if not proj.docker_tags.repository_exist:
             log_str = fmt_str.format(proj.nexus_repo_name)
             log_str = f"{log_str}{proj.docker_repo_name}"
-            log.info(log_str)
+            echo(log_str)
             all_docker_repos_found = False
     if all_docker_repos_found:
-        log.info("All Docker Hub repos found.")
-    log.info("")
+        echo("All Docker Hub repos found.")
+    echo()
 
 
 def print_nexus_tags_to_copy() -> None:
     """Print tags that needs to be copied."""
-    log.info("Nexus project tags to copy to docker")
+    echo("Nexus project tags to copy to docker")
     fmt_str = "{:<" + str(project_max_len_chars) + "} : "
     log_str = fmt_str.format(settings.nexus3_proj_name_header)
     log_str = "{}{}".format(log_str, "Tags to copy")
-    log.info(log_str)
-    log.info("-" * project_max_len_chars * 2)
+    echo(log_str)
+    echo("-" * project_max_len_chars * 2)
     for proj in projects:
         if len(proj.tags_2_copy.valid) > 0:
             log_str = ""
@@ -356,8 +357,8 @@ def print_nexus_tags_to_copy() -> None:
                     log_str = f"{log_str}, "
                 log_str = f"{log_str}{tag}"
                 tag_i = tag_i + 1
-            log.info(log_str)
-    log.info("")
+            echo(log_str)
+    echo()
 
 
 def print_nbr_tags_to_copy() -> None:
@@ -365,7 +366,7 @@ def print_nbr_tags_to_copy() -> None:
     _tot_tags = 0
     for proj in projects:
         _tot_tags = _tot_tags + len(proj.tags_2_copy.valid)
-    log.info(f"Summary: {_tot_tags} tags that should be copied from Nexus3 to Docker Hub.")
+    echo(f"Summary: {_tot_tags} tags that should be copied from Nexus3 to Docker Hub.")
 
 
 def start_point(

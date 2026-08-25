@@ -7,6 +7,8 @@ import logging
 import requests
 import typer
 
+from lftools_uv.output import echo
+
 log = logging.getLogger(__name__)
 
 plugins_app = typer.Typer(help="Inspect Jenkins plugins on the server.")
@@ -21,8 +23,8 @@ def checkmark(truthy):
 
 
 def print_plugin(plugin, namefield="longName"):
-    """Log the plugin longName and version."""
-    log.info("%s:%s", plugin[namefield], plugin["version"])
+    """Print the plugin longName and version to stdout."""
+    echo(f"{plugin[namefield]}:{plugin['version']}")
 
 
 @plugins_app.command("list")
@@ -194,7 +196,7 @@ def plugins_sec(ctx: typer.Context) -> None:
                     if name == key and secdict[key] == lastversion:
                         # Tab-separated columns: vulnerable version,
                         # installed version, then the advisory URL.
-                        log.info("%s:%s\t%s:%s\t%s", key, secdict[key], key, activedict[key], url)
+                        echo(f"{key}:{secdict[key]}\t{key}:{activedict[key]}\t{url}")
     except Exception:
         log.exception("Failed to check plugin security")
         raise typer.Exit(1) from None

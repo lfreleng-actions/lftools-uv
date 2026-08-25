@@ -6,6 +6,8 @@ import logging
 
 import typer
 
+from lftools_uv.output import echo
+
 log = logging.getLogger(__name__)
 
 nodes_app = typer.Typer(help="Find information about builders connected to Jenkins Master.")
@@ -27,7 +29,7 @@ def nodes_list(ctx: typer.Context) -> None:
         node_list = jenkins.server.get_nodes()
 
         for node in node_list:
-            log.info("%s [%s]", node["name"], offline_str(node["offline"]))
+            echo(f"{node['name']} [{offline_str(node['offline'])}]")
     except Exception:
         log.exception("Failed to list nodes")
         raise typer.Exit(1) from None
