@@ -18,6 +18,7 @@ import sys
 import click
 
 from lftools_uv import config
+from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
 
@@ -43,9 +44,9 @@ def get_setting(ctx, section, option):
 
     if isinstance(result, list):
         for i in result:
-            log.info(f"{i}: {config.get_setting(section, i)}")
+            echo(f"{i}: {config.get_setting(section, i)}")
     else:
-        log.info(result)
+        echo(result)
 
 
 @click.command(name="set")

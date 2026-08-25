@@ -12,12 +12,10 @@
 
 __author__ = "DW Talton"
 
-import logging
-
 import click
 from tabulate import tabulate
 
-log = logging.getLogger(__name__)
+from lftools_uv.output import echo
 
 
 @click.group()
@@ -33,7 +31,7 @@ def role_list(ctx):
     """List users."""
     r = ctx.obj["nexus2"]
     data = r.role_list()
-    log.info(tabulate(data, headers=["ID", "Name", "Roles", "Privileges"], tablefmt="grid"))
+    echo(tabulate(data, headers=["ID", "Name", "Roles", "Privileges"], tablefmt="grid"))
 
 
 @role.command(name="create")
@@ -47,7 +45,7 @@ def role_create(ctx, role_id, role_name, role_description, roles_list, privilege
     """Create a new role."""
     r = ctx.obj["nexus2"]
     data = r.role_create(role_id, role_name, role_description, roles_list, privileges_list)
-    log.info(data)
+    echo(data)
 
 
 @role.command(name="delete")
@@ -57,4 +55,4 @@ def role_delete(ctx, role_id):
     """Delete a role."""
     r = ctx.obj["nexus2"]
     data = r.role_delete(role_id)
-    log.info(data)
+    echo(data)

@@ -34,3 +34,29 @@ It supports the following commands:
 Enable debugging via ``lftools-uv --debug`` preceding any commands or via
 environment variable ``DEBUG=True``, this will print extra information if
 available.
+
+Output streams
+==============
+
+Every command splits what it writes across two streams.
+
+**stdout** carries the result: the thing you asked for. Listings, tables,
+``--json`` payloads, generated INFO.yaml documents, API tokens and the
+staging repository id that ``deploy nexus-stage-repo-create`` returns all
+arrive here, with no level prefix, whatever the log level.
+
+**stderr** carries diagnostics: progress, warnings and failures. A
+warning or failure announces its level, as in ``WARNING: ...``;
+informational progress renders bare, so raising the verbosity with
+``--debug`` adds detail rather than noise.
+
+The split lets a pipeline consume a result without a warning corrupting
+it:
+
+.. code-block:: bash
+
+   lftools-uv openstack --os-cloud vex image list | grep ubuntu
+   lftools-uv rtd project-version-details onap-cps latest --json | jq '.active'
+
+Silencing diagnostics never silences the result, and raising the
+verbosity never contaminates it.

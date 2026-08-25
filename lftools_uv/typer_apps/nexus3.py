@@ -16,6 +16,7 @@ import typer
 from tabulate import tabulate
 
 from lftools_uv.api.endpoints import nexus3
+from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
 
@@ -76,7 +77,7 @@ def asset_list(ctx: typer.Context, repository: str = typer.Argument(..., help="R
         r = ctx.obj["nexus3"]
         data = r.list_assets(repository)
         for item in data:
-            log.info(pformat(item))
+            echo(pformat(item))
     except Exception:
         log.exception("Failed to list assets")
         raise typer.Exit(1) from None
@@ -95,10 +96,10 @@ def asset_search(
         data = r.search_asset(query_string, repository, details)
 
         if details:
-            log.info(data)
+            echo(data)
         else:
             for item in data:
-                log.info(item)
+                echo(item)
     except Exception:
         log.exception("Failed to search assets")
         raise typer.Exit(1) from None
@@ -111,7 +112,7 @@ def list_privileges(ctx: typer.Context) -> None:
     try:
         r = ctx.obj["nexus3"]
         data = r.list_privileges()
-        log.info(tabulate(data, headers=["Type", "Name", "Description", "Read Only"]))
+        echo(tabulate(data, headers=["Type", "Name", "Description", "Read Only"]))
     except Exception:
         log.exception("Failed to list privileges")
         raise typer.Exit(1) from None
@@ -124,7 +125,7 @@ def list_repositories(ctx: typer.Context) -> None:
     try:
         r = ctx.obj["nexus3"]
         data = r.list_repositories()
-        log.info(pformat(data))
+        echo(pformat(data))
     except Exception:
         log.exception("Failed to list repositories")
         raise typer.Exit(1) from None
@@ -137,7 +138,7 @@ def list_roles(ctx: typer.Context) -> None:
     try:
         r = ctx.obj["nexus3"]
         data = r.list_roles()
-        log.info(tabulate(data, headers=["Roles"]))
+        echo(tabulate(data, headers=["Roles"]))
     except Exception:
         log.exception("Failed to list roles")
         raise typer.Exit(1) from None
@@ -155,7 +156,7 @@ def create_role(
     try:
         r = ctx.obj["nexus3"]
         data = r.create_role(name, description, privileges, roles)
-        log.info(pformat(data))
+        echo(pformat(data))
     except Exception:
         log.exception("Failed to create role")
         raise typer.Exit(1) from None
@@ -172,7 +173,7 @@ def create_script(
     try:
         r = ctx.obj["nexus3"]
         data = r.create_script(name, filename)
-        log.info(data)
+        echo(data)
     except Exception:
         log.exception("Failed to create script")
         raise typer.Exit(1) from None
@@ -187,7 +188,7 @@ def delete_script(
     try:
         r = ctx.obj["nexus3"]
         data = r.delete_script(name)
-        log.info(data)
+        echo(data)
     except Exception:
         log.exception("Failed to delete script")
         raise typer.Exit(1) from None
@@ -199,7 +200,7 @@ def list_scripts(ctx: typer.Context) -> None:
     try:
         r = ctx.obj["nexus3"]
         data = r.list_scripts()
-        log.info(data)
+        echo(data)
     except Exception:
         log.exception("Failed to list scripts")
         raise typer.Exit(1) from None
@@ -214,7 +215,7 @@ def read_script(
     try:
         r = ctx.obj["nexus3"]
         data = r.read_script(name)
-        log.info(data)
+        echo(data)
     except Exception:
         log.exception("Failed to read script")
         raise typer.Exit(1) from None
@@ -229,7 +230,7 @@ def run_script(
     try:
         r = ctx.obj["nexus3"]
         data = r.run_script(name)
-        log.info(data)
+        echo(data)
     except Exception:
         log.exception("Failed to run script")
         raise typer.Exit(1) from None
@@ -245,7 +246,7 @@ def update_script(
     try:
         r = ctx.obj["nexus3"]
         data = r.update_script(name, content)
-        log.info(data)
+        echo(data)
     except Exception:
         log.exception("Failed to update script")
         raise typer.Exit(1) from None
@@ -262,7 +263,7 @@ def add_tag(
     try:
         r = ctx.obj["nexus3"]
         data = r.create_tag(name, attributes)
-        log.info(pformat(data))
+        echo(pformat(data))
     except Exception:
         log.exception("Failed to add tag")
         raise typer.Exit(1) from None
@@ -277,7 +278,7 @@ def delete_tag(
     try:
         r = ctx.obj["nexus3"]
         data = r.delete_tag(name)
-        log.info(pformat(data))
+        echo(pformat(data))
     except Exception:
         log.exception("Failed to delete tag")
         raise typer.Exit(1) from None
@@ -289,7 +290,7 @@ def list_tags(ctx: typer.Context) -> None:
     try:
         r = ctx.obj["nexus3"]
         data = r.list_tags()
-        log.info(pformat(data))
+        echo(pformat(data))
     except Exception:
         log.exception("Failed to list tags")
         raise typer.Exit(1) from None
@@ -304,7 +305,7 @@ def show_tag(
     try:
         r = ctx.obj["nexus3"]
         data = r.show_tag(name)
-        log.info(pformat(data))
+        echo(pformat(data))
     except Exception:
         log.exception("Failed to show tag")
         raise typer.Exit(1) from None
@@ -317,7 +318,7 @@ def list_tasks(ctx: typer.Context) -> None:
     try:
         r = ctx.obj["nexus3"]
         data = r.list_tasks()
-        log.info(
+        echo(
             tabulate(
                 data,
                 headers=["Name", "Message", "Current State", "Last Run Result"],
@@ -338,7 +339,7 @@ def search_user(
     try:
         r = ctx.obj["nexus3"]
         data = r.list_user(username)
-        log.info(
+        echo(
             tabulate(
                 data,
                 headers=[
@@ -370,7 +371,7 @@ def user_create(
     try:
         r = ctx.obj["nexus3"]
         data = r.create_user(username, first_name, last_name, email_address, roles, password)
-        log.info(data)
+        echo(data)
     except Exception:
         log.exception("Failed to create user")
         raise typer.Exit(1) from None
@@ -385,7 +386,7 @@ def user_delete(
     try:
         r = ctx.obj["nexus3"]
         data = r.delete_user(username)
-        log.info(data)
+        echo(data)
     except Exception:
         log.exception("Failed to delete user")
         raise typer.Exit(1) from None

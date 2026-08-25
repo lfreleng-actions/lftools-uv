@@ -278,6 +278,19 @@ def test_folder_move_after_by_bare_id(monkeypatch: pytest.MonkeyPatch) -> None:
     assert client.last_order == [11, 12, 10]
 
 
+def test_folder_move_confirmation_goes_to_stdout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The table-mode confirmation shares the stream its ``--json`` twin uses.
+
+    ``folder move`` was the only mutation in the folder group writing its
+    confirmation to stderr, so a caller reading stdout saw nothing unless
+    it passed ``--json``.
+    """
+    _patched_folder_move_client(monkeypatch)
+    result = CliRunner().invoke(zulip_app, ["folder", "move", "--folder-id", "12", "--before", "Projects"])
+    assert result.exit_code == 0, result.output
+    assert "Moved folder 12 before folder 10" in result.stdout
+
+
 @pytest.mark.parametrize(
     "args",
     [

@@ -23,6 +23,7 @@ from lftools_uv.cli.jenkins.nodes import nodes
 from lftools_uv.cli.jenkins.plugins import plugins_init
 from lftools_uv.cli.jenkins.token import token
 from lftools_uv.jenkins import Jenkins
+from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
 
@@ -73,7 +74,7 @@ for (c in creds) {
 }
 """
     result = jenkins.server.run_script(groovy_script)
-    log.info(result)
+    echo(result)
 
 
 @click.command()
@@ -99,7 +100,7 @@ for (c in creds) {
 }
 """
     result = jenkins.server.run_script(groovy_script)
-    log.info(result)
+    echo(result)
 
 
 @click.command()
@@ -129,7 +130,7 @@ for (c in creds) {
 }
 """
     result = jenkins.server.run_script(groovy_script)
-    log.info(result)
+    echo(result)
 
 
 @click.command()
@@ -142,7 +143,7 @@ def groovy(ctx, groovy_file):
 
     jenkins = ctx.obj["jenkins"]
     result = jenkins.server.run_script(data)
-    log.info(result)
+    echo(result)
 
 
 @click.command()
@@ -229,7 +230,7 @@ for (node in Jenkins.instance.computers) {
         result = jenkins.server.run_script(force_script)
     else:
         result = jenkins.server.run_script(groovy_script)
-    log.info(result)
+    echo(result)
 
 
 jenkins_cli.add_command(plugins_init, name="plugins")

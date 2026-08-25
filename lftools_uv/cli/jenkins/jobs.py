@@ -11,11 +11,9 @@
 
 __author__ = "Anil Belur"
 
-import logging
-
 import click
 
-log = logging.getLogger(__name__)
+from lftools_uv.output import echo
 
 enable_disable_jobs = """
 import jenkins.*
@@ -54,7 +52,7 @@ def enable(ctx, regex):
     jenkins = ctx.obj["jenkins"]
 
     result = jenkins.server.run_script(enable_disable_jobs.format(regex, "enable"))
-    log.info(result)
+    echo(result)
 
 
 @click.command()
@@ -65,7 +63,7 @@ def disable(ctx, regex):
     jenkins = ctx.obj["jenkins"]
 
     result = jenkins.server.run_script(enable_disable_jobs.format(regex, "disable"))
-    log.info(result)
+    echo(result)
 
 
 jobs.add_command(enable)

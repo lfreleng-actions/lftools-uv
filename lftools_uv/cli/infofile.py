@@ -28,6 +28,7 @@ from lftools_uv import config
 from lftools_uv.cli.errors import error_handler
 from lftools_uv.github_helper import prvotes
 from lftools_uv.ldap_cli import helper_yaml4info
+from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
 
@@ -154,21 +155,21 @@ tsc:
       id: ''
 """
     tsc_string = inspect.cleandoc(tsc_string)
-    log.info(long_string)
-    log.info("repositories:")
-    log.info("    - %s", gerrit_project)
-    log.info("committers:")
-    log.info("    - <<: *%s_%s_ptl", umbrella, project_underscored)
+    echo(long_string)
+    echo("repositories:")
+    echo(f"    - {gerrit_project}")
+    echo("committers:")
+    echo(f"    - <<: *{umbrella}_{project_underscored}_ptl")
     if not empty:
         this = helper_yaml4info(ldap_group)
-        # This already contains formatted YAML; log without additional formatting
+        # This already contains formatted YAML; echo without additional formatting
         for line in this.splitlines():
-            log.info(line)
+            echo(line)
     else:
         for line in empty_committer.splitlines():
-            log.info(line)
+            echo(line)
     for line in tsc_string.splitlines():
-        log.info(line)
+        echo(line)
 
 
 @click.command(name="get-committers")
@@ -182,12 +183,12 @@ def get_committers(ctx, file, full, id):
     with open(file) as yaml_file:
         project = yaml.safe_load(yaml_file)
 
-    def log_committer_info(committer, full):
-        """Log committers."""
+    def echo_committer_info(committer, full):
+        """Write one committer to stdout."""
         if full:
-            log.info("    - name: %s", committer.get("name", ""))
-            log.info("      email: %s", committer.get("email", ""))
-        log.info("      id: %s", committer.get("id", ""))
+            echo(f"    - name: {committer.get('name', '')}")
+            echo(f"      email: {committer.get('email', '')}")
+        echo(f"      id: {committer.get('id', '')}")
 
     def list_committers(full, id, project):
         """List committers from the INFO.yaml file."""
@@ -195,11 +196,11 @@ def get_committers(ctx, file, full, id):
         for item in lookup:
             if id:
                 if item.get("id") == id:
-                    log_committer_info(item, full)
+                    echo_committer_info(item, full)
                     break
                 else:
                     continue
-            log_committer_info(item, full)
+            echo_committer_info(item, full)
 
     list_committers(full, id, project)
 

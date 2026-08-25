@@ -12,12 +12,11 @@
 
 __author__ = "DW Talton"
 
-import logging
 from pprint import pformat
 
 import click
 
-log = logging.getLogger(__name__)
+from lftools_uv.output import echo
 
 
 @click.group()
@@ -35,7 +34,7 @@ def add_tag(ctx, name, attributes):
     """Add a tag."""
     r = ctx.obj["nexus3"]
     data = r.create_tag(name, attributes)
-    log.info(pformat(data))
+    echo(pformat(data))
 
 
 @tag.command(name="delete")
@@ -45,7 +44,7 @@ def delete_tag(ctx, name):
     """Delete a tag."""
     r = ctx.obj["nexus3"]
     data = r.delete_tag(name)
-    log.info(pformat(data))
+    echo(pformat(data))
 
 
 @tag.command(name="list")
@@ -54,7 +53,7 @@ def list_tags(ctx):
     """List tags."""
     r = ctx.obj["nexus3"]
     data = r.list_tags()
-    log.info(pformat(data))
+    echo(pformat(data))
 
 
 @tag.command(name="show")
@@ -64,4 +63,4 @@ def show_tag(ctx, name):
     """Show tags."""
     r = ctx.obj["nexus3"]
     data = r.show_tag(name)
-    log.info(pformat(data))
+    echo(pformat(data))

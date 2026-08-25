@@ -16,6 +16,7 @@ import typer
 
 from lftools_uv.api.endpoints import gerrit
 from lftools_uv.git.gerrit import Gerrit as git_gerrit
+from lftools_uv.output import echo
 
 _HELP_ISSUE_ID = "For projects that enforce an issue id for changesets"
 _HELP_GERRIT_FQDN = "Gerrit FQDN"
@@ -47,7 +48,7 @@ def addfile(
     try:
         g = gerrit.Gerrit(fqdn=gerrit_fqdn)
         data = g.add_file(gerrit_fqdn, gerrit_project, filename, issue_id or "", file_location or "")
-        log.info(pformat(data))
+        echo(pformat(data))
     except Exception:
         log.exception("Failed to add file")
         raise typer.Exit(1) from None
@@ -133,7 +134,7 @@ def abandonchanges(
     try:
         g = gerrit.Gerrit(fqdn=gerrit_fqdn)
         data = g.abandon_changes(gerrit_fqdn, gerrit_project)
-        log.info(pformat(data))
+        echo(pformat(data))
     except Exception:
         log.exception("Failed to abandon changes")
         raise typer.Exit(1) from None
@@ -161,7 +162,7 @@ def createproject(
     try:
         g = gerrit.Gerrit(fqdn=gerrit_fqdn)
         data = g.create_project(gerrit_fqdn, gerrit_project, ldap_group, description, check)
-        log.info(pformat(data))
+        echo(pformat(data))
     except Exception:
         log.exception("Failed to create project")
         raise typer.Exit(1) from None
@@ -176,7 +177,7 @@ def create_saml_group(
     try:
         g = gerrit.Gerrit(fqdn=gerrit_fqdn)
         data = g.create_saml_group(gerrit_fqdn, ldap_group)
-        log.info(pformat(data))
+        echo(pformat(data))
     except Exception:
         log.exception("Failed to create SAML group")
         raise typer.Exit(1) from None
@@ -192,7 +193,7 @@ def list_project_permissions(
         g = gerrit.Gerrit(fqdn=gerrit_fqdn)
         data = g.list_project_permissions(project)
         for ldap_group in data:
-            log.info(pformat(ldap_group))
+            echo(pformat(ldap_group))
     except Exception:
         log.exception("Failed to list project permissions")
         raise typer.Exit(1) from None
@@ -207,7 +208,7 @@ def list_project_inherits_from(
     try:
         g = gerrit.Gerrit(fqdn=gerrit_fqdn)
         data = g.list_project_inherits_from(gerrit_project)
-        log.info(data)
+        echo(data)
     except Exception:
         log.exception("Failed to list project inheritance")
         raise typer.Exit(1) from None

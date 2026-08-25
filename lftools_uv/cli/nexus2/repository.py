@@ -12,12 +12,10 @@
 
 __author__ = "DW Talton"
 
-import logging
-
 import click
 from tabulate import tabulate
 
-log = logging.getLogger(__name__)
+from lftools_uv.output import echo
 
 
 @click.group()
@@ -33,7 +31,7 @@ def repo_list(ctx):
     """List repositories."""
     r = ctx.obj["nexus2"]
     data = r.repo_list()
-    log.info(tabulate(data, headers=["Name", "Type", "Provider", "ID"]))
+    echo(tabulate(data, headers=["Name", "Type", "Provider", "ID"]))
 
 
 @repo.command(name="create")
@@ -49,7 +47,7 @@ def create(ctx, repo_type, repo_id, repo_name, repo_provider, repo_policy, repo_
     """Create a new repository."""
     r = ctx.obj["nexus2"]
     data = r.repo_create(repo_type, repo_id, repo_name, repo_provider, repo_policy, repo_upstream_url)
-    log.info(data)
+    echo(data)
 
 
 @repo.command(name="delete")
@@ -59,4 +57,4 @@ def delete(ctx, repo_id):
     """Permanently delete a repo."""
     r = ctx.obj["nexus2"]
     data = r.repo_delete(repo_id)
-    log.info(data)
+    echo(data)

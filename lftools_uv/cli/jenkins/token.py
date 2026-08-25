@@ -21,6 +21,7 @@ import requests
 
 from lftools_uv import config as lftools_cfg
 from lftools_uv.jenkins.token import get_token
+from lftools_uv.output import echo
 
 _MSG_CREDS_NOT_SET = "Username or password not set."
 
@@ -47,7 +48,7 @@ def change(ctx, name):
         log.error(_MSG_CREDS_NOT_SET)
         sys.exit(1)
 
-    log.info(get_token(name=name, url=jenkins.url, change=True, username=username, password=password))
+    echo(get_token(name=name, url=jenkins.url, change=True, username=username, password=password))
 
 
 @click.command()
@@ -96,7 +97,7 @@ def print_token(ctx):
         log.error(_MSG_CREDS_NOT_SET)
         sys.exit(1)
 
-    log.info(get_token(name="token-created-by-lftools", url=jenkins.url, username=username, password=password))
+    echo(get_token(name="token-created-by-lftools", url=jenkins.url, username=username, password=password))
 
 
 @click.command()
@@ -147,7 +148,7 @@ def reset(ctx, servers):
         cfg_sections = config.sections()
     elif len(servers) == 1:
         key = _reset_key(config, servers[0])
-        log.info(key)
+        echo(key)
         return
     else:
         cfg_sections = list(servers)

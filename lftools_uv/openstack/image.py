@@ -28,6 +28,8 @@ import openstack
 import openstack.connection
 from openstack.cloud.exc import OpenStackCloudException
 
+from lftools_uv.output import echo
+
 log = logging.getLogger(__name__)
 
 
@@ -62,7 +64,7 @@ def list(os_cloud, days=0, hide_public=False, ci_managed=True):
 
     filtered_images = _filter_images(images, days, hide_public, ci_managed)
     for image in filtered_images:
-        log.info(image.name)
+        echo(image.name)
 
 
 def cleanup(os_cloud, days=0, hide_public=False, ci_managed=True, clouds=None):

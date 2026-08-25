@@ -12,13 +12,12 @@
 
 __author__ = "DW Talton"
 
-import logging
 from pprint import pformat
 
 import click
 from tabulate import tabulate
 
-log = logging.getLogger(__name__)
+from lftools_uv.output import echo
 
 
 @click.group()
@@ -34,7 +33,7 @@ def list_roles(ctx):
     """List roles."""
     r = ctx.obj["nexus3"]
     data = r.list_roles()
-    log.info(tabulate(data, headers=["Roles"]))
+    echo(tabulate(data, headers=["Roles"]))
 
 
 @role.command(name="create")
@@ -47,4 +46,4 @@ def create_role(ctx, name, description, privileges, roles):
     """Create roles."""
     r = ctx.obj["nexus3"]
     data = r.create_role(name, description, privileges, roles)
-    log.info(pformat(data))
+    echo(pformat(data))

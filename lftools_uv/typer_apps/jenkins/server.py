@@ -8,6 +8,7 @@ from urllib.error import HTTPError
 import typer
 
 from lftools_uv.jenkins import Jenkins
+from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
 
@@ -78,7 +79,7 @@ for (c in creds) {
 }
 """
         result = jenkins.server.run_script(groovy_script)
-        log.info(result)
+        echo(result)
     except Exception:
         log.exception("Failed to get credentials")
         raise typer.Exit(1) from None
@@ -107,7 +108,7 @@ for (c in creds) {
 }
 """
         result = jenkins.server.run_script(groovy_script)
-        log.info(result)
+        echo(result)
     except Exception:
         log.exception("Failed to get secrets")
         raise typer.Exit(1) from None
@@ -140,7 +141,7 @@ for (c in creds) {
 }
 """
         result = jenkins.server.run_script(groovy_script)
-        log.info(result)
+        echo(result)
     except Exception:
         log.exception("Failed to get private keys")
         raise typer.Exit(1) from None
@@ -155,7 +156,7 @@ def groovy(ctx: typer.Context, groovy_file: str = typer.Argument(..., help="Path
 
         jenkins = ctx.obj["jenkins"]
         result = jenkins.server.run_script(data)
-        log.info(result)
+        echo(result)
     except FileNotFoundError:
         log.error(f"Groovy file not found: {groovy_file}")
         raise typer.Exit(1) from None
@@ -264,7 +265,7 @@ for (node in Jenkins.instance.computers) {
             result = jenkins.server.run_script(force_script)
         else:
             result = jenkins.server.run_script(groovy_script)
-        log.info(result)
+        echo(result)
     except Exception:
         log.exception("Failed to remove offline nodes")
         raise typer.Exit(1) from None

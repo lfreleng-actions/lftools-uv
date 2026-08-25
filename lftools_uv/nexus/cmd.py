@@ -26,6 +26,7 @@ import yaml
 
 from lftools_uv import config
 from lftools_uv.nexus import Nexus, util
+from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
 
@@ -366,7 +367,7 @@ def output_images(images: list[dict[str, Any]], csv_path: str | None = None) -> 
                 dw.writerow({k: v for k, v in image.items() if k in included_keys})
 
     for image in images:
-        log.info("Name: {}\nVersion: {}\nID: {}\n\n".format(image["name"], image["version"], image["id"]))
+        echo("Name: {}\nVersion: {}\nID: {}\n\n".format(image["name"], image["version"], image["id"]))
     log.info(f"Found {count} images matching the query")
 
 

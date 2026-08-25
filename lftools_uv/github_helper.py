@@ -71,43 +71,38 @@ def helper_list(  # noqa: C901, PLR0912
         echo(f"All repos for organization:  {organization}")
         all_repos = org.get_repos()
         for repo in all_repos:
-            log.info(repo.name)
+            echo(repo.name)
 
     if audit:
-        log.info("%s members without 2fa:", organization)
+        echo(f"{organization} members without 2fa:")
         try:
             members: PaginatedList[NamedUser] = org.get_members(filter_="2fa_disabled")
         except GithubException as ghe:
             log.error(ghe)
             sys.exit(1)
         for member in members:
-            log.info(member.login)
-        log.info("%s outside collaborators without 2fa:", organization)
+            echo(member.login)
+        echo(f"{organization} outside collaborators without 2fa:")
         try:
             collaborators: PaginatedList[NamedUser] = org.get_outside_collaborators(filter_="2fa_disabled")
         except GithubException as ghe:
             log.error(ghe)
             sys.exit(1)
         for collaborator in collaborators:
-            log.info(collaborator.login)
+            echo(collaborator.login)
 
     if repofeatures:
         feat_repos = org.get_repos()
         for repo in feat_repos:
-            log.info(
-                "%s wiki:%s issues:%s",
-                repo.name,
-                repo.has_wiki,
-                repo.has_issues,
-            )
+            echo(f"{repo.name} wiki:{repo.has_wiki} issues:{repo.has_issues}")
             issues = repo.get_issues
             for issue in issues():
-                log.info("%s", issue)
+                echo(issue)
 
     if full:
-        log.info("---")
-        log.info("#  All owners for %s:", organization)
-        log.info("%s-owners:", organization)
+        echo("---")
+        echo(f"#  All owners for {organization}:")
+        echo(f"{organization}-owners:")
 
         try:
             admin_members: PaginatedList[NamedUser] = org.get_members(role="admin")
@@ -115,9 +110,9 @@ def helper_list(  # noqa: C901, PLR0912
             log.error(ghe)
             sys.exit(1)
         for member in admin_members:
-            log.info(_YAML_LIST_ITEM_FMT, member.login)
-        log.info("#  All members for %s", organization)
-        log.info("%s-members:", organization)
+            echo(_YAML_LIST_ITEM_FMT % member.login)
+        echo(f"#  All members for {organization}")
+        echo(f"{organization}-members:")
 
         try:
             all_members: PaginatedList[NamedUser] = org.get_members()
@@ -125,8 +120,8 @@ def helper_list(  # noqa: C901, PLR0912
             log.error(ghe)
             sys.exit(1)
         for member in all_members:
-            log.info(_YAML_LIST_ITEM_FMT, member.login)
-        log.info("#  All members and all teams for %s", organization)
+            echo(_YAML_LIST_ITEM_FMT % member.login)
+        echo(f"#  All members and all teams for {organization}")
 
         try:
             get_teams_fn = org.get_teams
@@ -134,10 +129,10 @@ def helper_list(  # noqa: C901, PLR0912
             log.error(ghe)
             sys.exit(1)
         for org_team in get_teams_fn():
-            log.info("%s:", org_team.name)
+            echo(f"{org_team.name}:")
             for user in org_team.get_members():
-                log.info(_YAML_LIST_ITEM_FMT, user.login)
-            log.info("")
+                echo(_YAML_LIST_ITEM_FMT % user.login)
+            echo()
 
     if teams:
         try:
@@ -146,7 +141,7 @@ def helper_list(  # noqa: C901, PLR0912
             log.error(ghe)
             sys.exit(1)
         for org_team in get_teams_fn2():
-            log.info("%s", org_team.name)
+            echo(org_team.name)
 
     if team:
         try:
@@ -159,10 +154,10 @@ def helper_list(  # noqa: C901, PLR0912
 
         for t in get_teams_fn3():
             if t.name == team:
-                log.info("%s", t.name)
+                echo(t.name)
                 for user in t.get_members():
                     team_members.append(user.login)
-                    log.info(_YAML_LIST_ITEM_FMT, user.login)
+                    echo(_YAML_LIST_ITEM_FMT % user.login)
 
         return team_members
 
@@ -170,7 +165,13 @@ def helper_list(  # noqa: C901, PLR0912
 
 
 def prvotes(organization: str, repo: str, pr: int) -> list[str]:
-    """Get votes on a github pr."""
+    """Get votes on a github pr.
+
+    Shared by ``github votes`` and ``infofile check-votes``, so the
+    mergeability observation stays on the diagnostic stream: the two
+    commands disagree about what their result is, and only the caller
+    knows which stream a line belongs on.
+    """
     token: str = config.get_setting("github", "token")
     g: Github = Github(token)
     org: Organization = _get_org(g, organization)

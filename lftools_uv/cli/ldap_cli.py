@@ -21,6 +21,8 @@ import sys
 import click
 import ldap  # pyright: ignore[reportMissingImports]
 
+from lftools_uv.output import echo
+
 log = logging.getLogger(__name__)
 
 
@@ -173,7 +175,7 @@ def csv(ctx, ldap_server, ldap_group_base, ldap_user_base, groups):
                     user = user.decode("utf-8")
                     user_info = ldap_query(ldap_obj, ldap_user_base, user, ["uid", "cn", "mail"])
                     try:
-                        log.info("%s,%s", group_name, user_to_csv(user_info))
+                        echo(f"{group_name},{user_to_csv(user_info)}")
                     except Exception:
                         log.error("Error parsing user: %s", user)
                         continue

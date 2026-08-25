@@ -6,6 +6,8 @@ import logging
 
 import typer
 
+from lftools_uv.output import echo
+
 log = logging.getLogger(__name__)
 
 jobs_app = typer.Typer(help="Command to update Jenkins Jobs.")
@@ -41,7 +43,7 @@ def jobs_enable(ctx: typer.Context, regex: str = typer.Argument(..., help="Regex
     try:
         jenkins = ctx.obj["jenkins"]
         result = jenkins.server.run_script(enable_disable_jobs.format(regex, "enable"))
-        log.info(result)
+        echo(result)
     except Exception:
         log.exception("Failed to enable jobs")
         raise typer.Exit(1) from None
@@ -53,7 +55,7 @@ def jobs_disable(ctx: typer.Context, regex: str = typer.Argument(..., help="Rege
     try:
         jenkins = ctx.obj["jenkins"]
         result = jenkins.server.run_script(enable_disable_jobs.format(regex, "disable"))
-        log.info(result)
+        echo(result)
     except Exception:
         log.exception("Failed to disable jobs")
         raise typer.Exit(1) from None

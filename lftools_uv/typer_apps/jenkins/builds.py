@@ -6,6 +6,8 @@ import logging
 
 import typer
 
+from lftools_uv.output import echo
+
 log = logging.getLogger(__name__)
 
 builds_app = typer.Typer(help="Information regarding current builds and the queue.")
@@ -19,7 +21,7 @@ def builds_running(ctx: typer.Context) -> None:
         running_builds = jenkins.server.get_running_builds()
 
         for build in running_builds:
-            log.info("- %s on %s", build["name"], build["node"])
+            echo(f"- {build['name']} on {build['node']}")
     except Exception:
         log.exception("Failed to get running builds")
         raise typer.Exit(1) from None
@@ -33,14 +35,14 @@ def builds_queued(ctx: typer.Context) -> None:
         queue = jenkins.server.get_queue_info()
 
         queue_length = len(queue)
-        log.info("Build Queue (%s)", queue_length)
+        echo(f"Build Queue ({queue_length})")
         for build in queue:
             status_flags = []
             if build.get("stuck"):
                 status_flags.append("[Stuck]")
             if build.get("blocked"):
                 status_flags.append("[Blocked]")
-            log.info(" - %s%s", build["task"]["name"], (" " + " ".join(status_flags)) if status_flags else "")
+            echo(f" - {build['task']['name']}{(' ' + ' '.join(status_flags)) if status_flags else ''}")
     except Exception:
         log.exception("Failed to get queued builds")
         raise typer.Exit(1) from None

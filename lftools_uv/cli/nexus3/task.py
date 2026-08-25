@@ -12,12 +12,10 @@
 
 __author__ = "DW Talton"
 
-import logging
-
 import click
 from tabulate import tabulate
 
-log = logging.getLogger(__name__)
+from lftools_uv.output import echo
 
 
 @click.group()
@@ -33,7 +31,7 @@ def list_tasks(ctx):
     """List tasks."""
     r = ctx.obj["nexus3"]
     data = r.list_tasks()
-    log.info(
+    echo(
         tabulate(
             data,
             headers=["Name", "Message", "Current State", "Last Run Result"],
