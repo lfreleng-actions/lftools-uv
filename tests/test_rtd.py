@@ -424,7 +424,7 @@ def test_subproject_create_omits_absent_alias():
     )
     _ = rtd.subproject_create("TestProject1", "testproject2")
     body = responses.calls[0].request.body
-    assert body is not None
+    assert isinstance(body, (str, bytes))
     payload = json.loads(body)
     assert payload == {"child": "testproject2"}
     assert "alias" not in payload
@@ -440,7 +440,7 @@ def test_subproject_create_sends_supplied_alias():
     )
     _ = rtd.subproject_create("TestProject1", "testproject2", alias="docs")
     body = responses.calls[0].request.body
-    assert body is not None
+    assert isinstance(body, (str, bytes))
     payload = json.loads(body)
     assert payload == {"child": "testproject2", "alias": "docs"}
 
@@ -455,7 +455,7 @@ def test_subproject_create_sends_empty_alias():
     )
     _ = rtd.subproject_create("TestProject1", "testproject2", alias="")
     body = responses.calls[0].request.body
-    assert body is not None
+    assert isinstance(body, (str, bytes))
     payload = json.loads(body)
     assert payload == {"child": "testproject2", "alias": ""}
 
