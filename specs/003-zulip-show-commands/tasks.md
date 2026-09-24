@@ -39,7 +39,7 @@ and settable status so the four commands behave consistently.
 - [ ] T002 [S1] Define the channel settable registry in `detail.py`, using `via --flag` plus setter metadata for exposed flags, clear-only `--folder-id 0`, `via command` archive/unarchive, and `not exposed` for all unexposed permission fields (FR-042, FR-043)
 - [ ] T003 [S1] Define group, user, and folder settable registries in `detail.py`, marking current write flags, command-based setters, and server-settable-but-unexposed fields (FR-045, FR-049, FR-053)
 - [ ] T004 [S1] Add `lftools_uv/typer_apps/zulip/detail.py` with ASCII table rendering helpers for `Field`, `Value`, `Settable`, and `Notes` rows (FR-058)
-- [ ] T005 [P] [S1] Add unit tests for annotation lookup defaults and stable JSON annotation shape in `tests/unit/test_zulip_api.py` (FR-057, FR-058)
+- [ ] T005 [P] [S1] Add unit tests for annotation lookup defaults and stable JSON annotation shape, including required `status`, `setter`, and `notes` keys, in `tests/unit/test_zulip_api.py` (FR-057, FR-058)
 
 **Checkpoint**: All show commands can share one annotation and rendering model.
 
@@ -81,7 +81,7 @@ one shared switch.
 
 - [ ] T016 [S4] Implement `get_group_detail()` in `lftools_uv/api/endpoints/zulip/detail.py` using raw `_fetch_groups()` objects and existing group filter behavior (FR-044, FR-045)
 - [ ] T017 [S4] Add positional group-name targeting and exactly-one validation across positional group, `--group-name`, and `--group-id` in `lftools_uv/typer_apps/zulip/groups.py` (FR-044)
-- [ ] T018 [S4] Resolve group members to Full Name, Email, and User ID rows by default; render raw IDs with `--no-resolve` (FR-046)
+- [ ] T018 [S4] Resolve group members and `creator_id` to user displays by default; render raw IDs with `--no-resolve` (FR-046, FR-047)
 - [ ] T019 [S4] Resolve `direct_subgroup_ids` to direct subgroup display names only; do not recurse (FR-047)
 - [ ] T020 [P] [S4] Add API tests for custom group, system group, deactivated group, missing group, secondary resolver failures, permissions, members, direct subgroups, and ambiguity in `tests/unit/test_zulip_api.py` (FR-045 through FR-047)
 - [ ] T021 [P] [S4] Add CLI tests for group show positional, `--group-name`, `--group-id`, no target, positional-plus-flag conflicts, numeric-looking positional-as-name, table output, JSON, missing group, secondary resolver failure, and `--no-resolve` skipping secondary lookups in `tests/unit/test_zulip_cli.py` (FR-044, FR-057)
@@ -97,9 +97,9 @@ one shared switch.
 - [ ] T022 [S5] Implement raw user detail fetching in `lftools_uv/api/endpoints/zulip/detail.py`, requesting custom profile fields where supported (FR-048, FR-049)
 - [ ] T023 [S5] Reuse `_resolve_single_user()` semantics for email, ID, and full-name targeting, including ambiguity errors (FR-048)
 - [ ] T024 [S5] Add role label derivation for Zulip role values 100, 200, 300, 400, and 600, using `administrator` for role 200 (FR-050)
-- [ ] T025 [S5] Add derived group membership by scanning raw groups for the user ID when resolution is enabled; skip with `--no-resolve` (FR-051, FR-056)
+- [ ] T025 [S5] Add derived group membership and `bot_owner_id` resolution when resolution is enabled; skip both with `--no-resolve` (FR-051, FR-056)
 - [ ] T026 [S5] Add `user show` to `lftools_uv/typer_apps/zulip/users.py` with `--by-email`, `--by-id`, `--by-name`, `--no-resolve`, and hidden `--json` (FR-048, FR-057)
-- [ ] T027 [P] [S5] Add API tests for missing users, role labels, bot fields, profile fields, deleted/imported-stub markers, membership, secondary group resolver failures, and `--no-resolve` in `tests/unit/test_zulip_api.py` (FR-049 through FR-051)
+- [ ] T027 [P] [S5] Add API tests for missing users, role labels, bot fields, bot-owner resolution, profile fields, deleted/imported-stub markers, membership, secondary group resolver failures, and `--no-resolve` in `tests/unit/test_zulip_api.py` (FR-049 through FR-051)
 - [ ] T028 [P] [S5] Add CLI tests for user show by email, by ID, by name, missing user, ambiguous name, table output, JSON, secondary resolver failure, and `--no-resolve` skipping group lookup in `tests/unit/test_zulip_cli.py` (FR-048, FR-057)
 
 **Checkpoint**: `lftools-uv zulip user show` works independently.
@@ -110,11 +110,11 @@ one shared switch.
 
 **Purpose**: Expose full channel-folder inspection.
 
-- [ ] T029 [S6] Implement `get_folder_detail()` in `lftools_uv/api/endpoints/zulip/detail.py` using raw channel-folder objects and a show-specific folder resolver that treats `none` as an ordinary name, accepts `id:N`, and treats bare numeric tokens as names (FR-052, FR-053)
+- [ ] T029 [S6] Implement `get_folder_detail()` in `lftools_uv/api/endpoints/zulip/detail.py` using raw channel-folder objects from an all-folders lookup, including archived folders, and a show-specific folder resolver that treats `none` as an ordinary name, accepts `id:N`, and treats bare numeric tokens as names (FR-052, FR-053)
 - [ ] T030 [S6] Resolve `creator_id` to a user display by default and preserve raw ID in JSON (FR-053, FR-055)
 - [ ] T031 [S6] Enumerate assigned channels by listing streams and filtering on raw `folder_id`; skip enumeration with `--no-resolve` (FR-054, FR-056)
 - [ ] T032 [S6] Add `folder show` to `lftools_uv/typer_apps/zulip/folders.py` with folder token, `--no-resolve`, and hidden `--json` (FR-052, FR-057)
-- [ ] T033 [P] [S6] Add API tests for folder name, `id:N`, numeric-name hint, `none` not being special, missing folders, secondary resolver failures, creator resolution, assigned-channel filtering, FL 414 `order` absence, and `--no-resolve` in `tests/unit/test_zulip_folders.py` (FR-052 through FR-056)
+- [ ] T033 [P] [S6] Add API tests for folder name, `id:N`, numeric-name hint, archived folder targets, `none` not being special, missing folders, secondary resolver failures, creator resolution, assigned-channel filtering, FL 414 `order` absence, and `--no-resolve` in `tests/unit/test_zulip_folders.py` (FR-052 through FR-056)
 - [ ] T034 [P] [S6] Add CLI tests for folder show table, JSON, missing folder errors, `none` as a normal name, ambiguity, secondary resolver failure, and `--no-resolve` skipping creator/channel lookups in `tests/unit/test_zulip_folders.py` (FR-052, FR-057)
 
 **Checkpoint**: `lftools-uv zulip folder show` works independently.
