@@ -245,8 +245,12 @@ Group-membership table headers when resolution is enabled: `Name`, `Group ID`,
     ]
   },
   "annotations": {
-    "full_name": {"status": "no", "setter": null},
-    "profile_data": {"status": "no", "setter": null}
+    "full_name": {"status": "not exposed", "setter": null},
+    "email": {"status": "not exposed", "setter": null, "notes": "server setter new_email"},
+    "delivery_email": {"status": "not exposed", "setter": null, "notes": "server setter new_email"},
+    "role": {"status": "not exposed", "setter": null},
+    "is_active": {"status": "not exposed", "setter": null},
+    "profile_data": {"status": "not exposed", "setter": null}
   }
 }
 ```

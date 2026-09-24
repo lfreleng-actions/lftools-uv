@@ -134,8 +134,8 @@ membership.
 | --- | --- | --- | --- |
 | `user_id` | `int` | Raw user ID | no |
 | `full_name` | `str` | Display name | not exposed |
-| `email` | `str` | API email address | not exposed; setter `new_email` |
-| `delivery_email` | `str \| null` | Real email, if visible | not exposed; setter `new_email` |
+| `email` | `str` | API email address; server setter `new_email` | not exposed |
+| `delivery_email` | `str \| null` | Real email, if visible; server setter `new_email` | not exposed |
 | `role` | `int` | Raw Zulip role value | not exposed |
 | `role_label` | `str` | owner/administrator/moderator/member/guest | no |
 | `is_owner` | `bool` | Owner marker | not exposed; derived from role |
