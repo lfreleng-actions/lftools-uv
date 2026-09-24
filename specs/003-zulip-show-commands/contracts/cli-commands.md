@@ -61,9 +61,13 @@ Required derived rows when raw data exists:
 - `type`: `public`, `private`, or `web-public`
 - `folder`: resolved folder name and ID, or raw `folder_id` with
   `--no-resolve`
-- permission group rows for `can_subscribe_group`,
-  `can_remove_subscribers_group`, `can_add_subscribers_group`,
-  `can_administer_channel_group`, and `can_send_message_group`
+- permission group rows for every returned channel group-setting permission:
+  `can_subscribe_group`, `can_remove_subscribers_group`,
+  `can_add_subscribers_group`, `can_administer_channel_group`,
+  `can_send_message_group`, `can_delete_any_message_group`,
+  `can_delete_own_message_group`, `can_move_messages_out_of_channel_group`,
+  `can_move_messages_within_channel_group`, `can_resolve_topics_group`, and
+  `can_create_topic_group`
 - all other raw stream fields returned by the server
 
 **JSON Output**:

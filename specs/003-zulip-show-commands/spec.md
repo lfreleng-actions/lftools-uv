@@ -193,9 +193,10 @@ assigned channels by default, and skips channel enumeration with `--no-resolve`.
 - **FR-041**: Channel show MUST derive a human `type` value from
   `is_web_public` and `invite_only` while preserving those raw fields in JSON.
 - **FR-042**: Channel show MUST annotate every displayed field with a settable
-  status: `via --flag`, `not exposed`, or `no`. Existing channel update flags
-  MUST be shown for `name`, `description`, `type`, `topics_policy`,
-  `can_subscribe_group`, `can_remove_subscribers_group`, and `folder_id`.
+  status: `via --flag`, `via command`, `not exposed`, or `no`. Existing
+  channel update flags MUST be shown as setters for `name`, `description`,
+  `type`, `topics_policy`, `can_subscribe_group`,
+  `can_remove_subscribers_group`, and `folder_id`.
 - **FR-043**: Channel show MUST mark server-settable but currently unexposed
   channel fields distinctly, including all returned channel group-setting
   permission fields without current write flags. This includes

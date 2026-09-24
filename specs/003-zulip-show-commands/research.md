@@ -56,14 +56,14 @@ it keeps only `stream_id`, `name`, `description`, derived `type`,
 
 | Field | Annotation |
 | --- | --- |
-| `name` | via `--name` |
-| `description` | via `--description` |
-| `type`, `invite_only`, `is_web_public` | via `--type` |
-| `topics_policy` | via `--topic-policy` |
-| `can_subscribe_group` | via `--allow-group` |
-| `can_remove_subscribers_group` | via `--can-remove-subscribers-group` |
-| `folder_id` | via `--folder` |
-| `is_archived` | via `channel archive` / `channel unarchive` |
+| `name` | via --flag; setter `--name` |
+| `description` | via --flag; setter `--description` |
+| `type`, `invite_only`, `is_web_public` | via --flag; setter `--type` |
+| `topics_policy` | via --flag; setter `--topic-policy` |
+| `can_subscribe_group` | via --flag; setter `--allow-group` |
+| `can_remove_subscribers_group` | via --flag; setter `--can-remove-subscribers-group` |
+| `folder_id` | via --flag; setter `--folder`; clear via `--folder-id 0` |
+| `is_archived` | via command; setters `channel archive` / `channel unarchive` |
 | `can_add_subscribers_group` | not exposed; API settable at FL 342 |
 | `can_administer_channel_group` | not exposed; API settable at FL 325 |
 | `can_send_message_group` | not exposed; API settable at FL 333 |
@@ -73,6 +73,10 @@ it keeps only `stream_id`, `name`, `description`, derived `type`,
 | `can_move_messages_within_channel_group` | not exposed; API settable at FL 396 |
 | `can_resolve_topics_group` | not exposed; API settable at FL 402 |
 | `can_create_topic_group` | not exposed; API settable at FL 441 |
+| `message_retention_days` | not exposed; server-settable retention policy |
+| `history_public_to_subscribers` | not exposed; server-settable shared-history setting |
+| `default_push_notifications` | not exposed; server-settable default notification setting |
+| `is_default` / `is_default_stream` | not exposed; server-settable default channel status |
 | other server fields | no, unless future implementation exposes them |
 
 ## Field Inventory: Groups

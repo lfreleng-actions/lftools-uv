@@ -105,8 +105,8 @@ Human output includes a `Settable` column:
 
 ```text
 Field                  Value        Settable             Notes
-name                   general      via --name
-folder_id              10           via --folder
+name                   general      via --flag           setter --name
+folder_id              10           via --flag           setter --folder
 is_archived            false        via command          channel archive/unarchive
 can_send_message_group Members      not exposed          server-settable FL 333
 subscriber_count       125          no

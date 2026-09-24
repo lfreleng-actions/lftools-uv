@@ -60,17 +60,17 @@ Represents a raw Zulip stream object plus derived and resolved details.
 | Field | Type | Description | Settable status |
 | --- | --- | --- | --- |
 | `stream_id` | `int` | Channel ID | no |
-| `name` | `str` | Channel name | via `--name` |
-| `description` | `str` | Markdown channel description | via `--description` |
+| `name` | `str` | Channel name | via --flag; setter `--name` |
+| `description` | `str` | Markdown channel description | via --flag; setter `--description` |
 | `rendered_description` | `str` | HTML-rendered description, if returned | no |
-| `type` | `str` | Derived `public`, `private`, or `web-public` | via `--type` |
-| `invite_only` | `bool` | Raw private-channel flag | via `--type` |
-| `is_web_public` | `bool` | Raw web-public flag | via `--type` |
+| `type` | `str` | Derived `public`, `private`, or `web-public` | via --flag; setter `--type` |
+| `invite_only` | `bool` | Raw private-channel flag | via --flag; setter `--type` |
+| `is_web_public` | `bool` | Raw web-public flag | via --flag; setter `--type` |
 | `is_archived` | `bool` | Archived state | via command |
-| `folder_id` | `int \| null` | Channel folder assignment | via `--folder`; clear via `--folder-id 0` |
-| `topics_policy` | `str` | Raw Zulip topic policy | via `--topic-policy` |
-| `can_subscribe_group` | `GroupSettingDisplay` | Who can self-subscribe | via `--allow-group` |
-| `can_remove_subscribers_group` | `GroupSettingDisplay` | Who can remove subscribers | via `--can-remove-subscribers-group` |
+| `folder_id` | `int \| null` | Channel folder assignment | via --flag; setter `--folder`, clear via `--folder-id 0` |
+| `topics_policy` | `str` | Raw Zulip topic policy | via --flag; setter `--topic-policy` |
+| `can_subscribe_group` | `GroupSettingDisplay` | Who can self-subscribe | via --flag; setter `--allow-group` |
+| `can_remove_subscribers_group` | `GroupSettingDisplay` | Who can remove subscribers | via --flag; setter `--can-remove-subscribers-group` |
 | `can_add_subscribers_group` | `GroupSettingDisplay` | Who can add subscribers | not exposed |
 | `can_administer_channel_group` | `GroupSettingDisplay` | Who can administer channel | not exposed |
 | `can_send_message_group` | `GroupSettingDisplay` | Who can post messages | not exposed |
@@ -104,7 +104,7 @@ Represents a raw Zulip user-group object plus member and permission displays.
 | --- | --- | --- | --- |
 | `id` | `int` | Raw Zulip group ID | no |
 | `group_id` | `int` | Alias used by existing CLI JSON | no |
-| `name` | `str` | Raw API name | no |
+| `name` | `str` | Raw API name | not exposed; custom groups only |
 | `display_name` | `str` | System-role display name or custom name | no |
 | `description` | `str` | Human description | not exposed |
 | `is_system_group` | `bool` | Built-in role group marker | no |
@@ -133,25 +133,25 @@ membership.
 | Field | Type | Description | Settable status |
 | --- | --- | --- | --- |
 | `user_id` | `int` | Raw user ID | no |
-| `full_name` | `str` | Display name | no |
-| `email` | `str` | API email address | no |
-| `delivery_email` | `str \| null` | Real email, if visible | no |
-| `role` | `int` | Raw Zulip role value | no |
-| `role_label` | `str` | owner/admin/moderator/member/guest | no |
-| `is_owner` | `bool` | Owner marker | no |
-| `is_admin` | `bool` | Administrator marker | no |
-| `is_guest` | `bool` | Guest marker | no |
+| `full_name` | `str` | Display name | not exposed |
+| `email` | `str` | API email address | not exposed; setter `new_email` |
+| `delivery_email` | `str \| null` | Real email, if visible | not exposed; setter `new_email` |
+| `role` | `int` | Raw Zulip role value | not exposed |
+| `role_label` | `str` | owner/administrator/moderator/member/guest | no |
+| `is_owner` | `bool` | Owner marker | not exposed; derived from role |
+| `is_admin` | `bool` | Administrator marker | not exposed; derived from role |
+| `is_guest` | `bool` | Guest marker | not exposed; derived from role |
 | `is_bot` | `bool` | Bot marker | no |
 | `bot_type` | `int \| null` | Bot type enum | no |
 | `bot_owner_id` | `int \| null` | Bot owner user ID | no |
-| `is_active` | `bool` | Active account marker | no |
+| `is_active` | `bool` | Active account marker | not exposed |
 | `is_deleted` | `bool` | Deleted account marker, when present | no |
 | `date_joined` | `str` | Account join timestamp | no |
 | `timezone` | `str` | IANA time zone | no |
 | `avatar_url` | `str \| null` | Avatar URL | no |
 | `avatar_version` | `int` | Avatar cache-busting version | no |
 | `is_imported_stub` | `bool` | Imported stub marker | no |
-| `profile_data` | `object` | Custom profile fields | no |
+| `profile_data` | `object` | Custom profile fields | not exposed |
 | `groups` | `list[GroupRef]` | Derived membership when resolved | no |
 
 Role mapping uses Zulip's documented values: 100 owner, 200 administrator,
@@ -165,8 +165,8 @@ channels.
 | Field | Type | Description | Settable status |
 | --- | --- | --- | --- |
 | `id` | `int` | Folder ID | no |
-| `name` | `str` | Folder name | via `--name` |
-| `description` | `str` | Markdown description | via `--description` |
+| `name` | `str` | Folder name | via --flag; setter `--name` |
+| `description` | `str` | Markdown description | via --flag; setter `--description` |
 | `rendered_description` | `str` | HTML-rendered description | no |
 | `order` | `int \| null` | Folder order; FL 414+ | via command `folder move` |
 | `is_archived` | `bool` | Archived marker | via command |
