@@ -27,7 +27,10 @@ Section-specific columns, for example Full Name | Email | User ID
 Settable values are ASCII-safe:
 
 - `via --flag` for fields writable by the current CLI
-- `not exposed` for server-settable fields without a current write flag
+- `via command` for fields writable by an existing subcommand rather than a
+  single flag
+- `not exposed` for server-settable fields without a current write flag or
+  command
 - `no` for read-only or derived fields
 
 `--no-resolve` help text MUST state: "Skip extra lookup calls and render raw
@@ -87,15 +90,17 @@ Required derived rows when raw data exists:
     "groups": {
       "can_subscribe_group": {
         "raw": 22,
-        "display": "Members",
-        "groups": [{"group_id": 22, "name": "Members"}],
-        "members": []
+        "direct_members": [],
+        "direct_subgroups": [22],
+        "resolved_members": [],
+        "resolved_groups": [{"group_id": 22, "name": "Members"}],
+        "display": "Members"
       }
     }
   },
   "annotations": {
-    "description": {"status": "via --flag", "flag": "--description"},
-    "can_add_subscribers_group": {"status": "not exposed", "flag": null}
+    "description": {"status": "via --flag", "setter": "--description"},
+    "can_add_subscribers_group": {"status": "not exposed", "setter": null}
   }
 }
 ```
@@ -171,8 +176,8 @@ Direct subgroup table headers with `--no-resolve`: `Group ID`.
     ]
   },
   "annotations": {
-    "members": {"status": "not exposed", "flag": null},
-    "can_manage_group": {"status": "not exposed", "flag": null}
+    "members": {"status": "not exposed", "setter": null},
+    "can_manage_group": {"status": "not exposed", "setter": null}
   }
 }
 ```
@@ -236,8 +241,8 @@ Group-membership table headers when resolution is enabled: `Name`, `Group ID`,
     ]
   },
   "annotations": {
-    "full_name": {"status": "no", "flag": null},
-    "profile_data": {"status": "no", "flag": null}
+    "full_name": {"status": "no", "setter": null},
+    "profile_data": {"status": "no", "setter": null}
   }
 }
 ```
@@ -296,8 +301,8 @@ Assigned-channel table headers when resolution is enabled: `Name`, `Channel ID`,
     ]
   },
   "annotations": {
-    "name": {"status": "via --flag", "flag": "--name"},
-    "order": {"status": "via --flag", "flag": "folder move"}
+    "name": {"status": "via --flag", "setter": "--name"},
+    "order": {"status": "via command", "setter": "folder move"}
   }
 }
 ```

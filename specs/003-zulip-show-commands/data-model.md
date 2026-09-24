@@ -15,15 +15,17 @@ Every human detail row includes a settable marker.
 | Field | Type | Description |
 | --- | --- | --- |
 | `field` | `str` | Raw Zulip field name or derived field name |
-| `status` | `str` | `via --flag`, `not exposed`, or `no` |
-| `flag` | `str \| null` | CLI flag that writes this field, when exposed |
+| `status` | `str` | `via --flag`, `via command`, `not exposed`, or `no` |
+| `setter` | `str \| null` | CLI flag or command that writes this field, when exposed |
 | `notes` | `str \| null` | Feature-level or implementation notes |
 
 **Rules**:
 
 - `via --flag` means the current lftools-uv CLI can set the field.
-- `not exposed` means the Zulip API can set the field but no CLI write flag is
-  currently available.
+- `via command` means the current lftools-uv CLI can set the field through a
+  subcommand rather than a single option flag.
+- `not exposed` means the Zulip API can set the field but no CLI write flag or
+  command is currently available.
 - `no` means the field is server-derived, read-only, or not in scope for this
   CLI.
 - JSON output preserves annotations as an object keyed by field name.
@@ -64,14 +66,20 @@ Represents a raw Zulip stream object plus derived and resolved details.
 | `type` | `str` | Derived `public`, `private`, or `web-public` | via `--type` |
 | `invite_only` | `bool` | Raw private-channel flag | via `--type` |
 | `is_web_public` | `bool` | Raw web-public flag | via `--type` |
-| `is_archived` | `bool` | Archived state | via archive/unarchive commands |
-| `folder_id` | `int \| null` | Channel folder assignment | via `--folder` |
+| `is_archived` | `bool` | Archived state | via command |
+| `folder_id` | `int \| null` | Channel folder assignment | via `--folder`; clear via `--folder-id 0` |
 | `topics_policy` | `str` | Raw Zulip topic policy | via `--topic-policy` |
 | `can_subscribe_group` | `GroupSettingDisplay` | Who can self-subscribe | via `--allow-group` |
 | `can_remove_subscribers_group` | `GroupSettingDisplay` | Who can remove subscribers | via `--can-remove-subscribers-group` |
 | `can_add_subscribers_group` | `GroupSettingDisplay` | Who can add subscribers | not exposed |
 | `can_administer_channel_group` | `GroupSettingDisplay` | Who can administer channel | not exposed |
 | `can_send_message_group` | `GroupSettingDisplay` | Who can post messages | not exposed |
+| `can_delete_any_message_group` | `GroupSettingDisplay` | Who can delete any message | not exposed |
+| `can_delete_own_message_group` | `GroupSettingDisplay` | Who can delete own messages | not exposed |
+| `can_move_messages_out_of_channel_group` | `GroupSettingDisplay` | Who can move messages out | not exposed |
+| `can_move_messages_within_channel_group` | `GroupSettingDisplay` | Who can move messages within | not exposed |
+| `can_resolve_topics_group` | `GroupSettingDisplay` | Who can resolve topics | not exposed |
+| `can_create_topic_group` | `GroupSettingDisplay` | Who can create topics | not exposed |
 | `message_retention_days` | `int \| null` | Retention policy | not exposed |
 | `history_public_to_subscribers` | `bool` | Shared-history behavior | not exposed |
 | `date_created` | `int` | Creation timestamp | no |
@@ -160,8 +168,8 @@ channels.
 | `name` | `str` | Folder name | via `--name` |
 | `description` | `str` | Markdown description | via `--description` |
 | `rendered_description` | `str` | HTML-rendered description | no |
-| `order` | `int \| null` | Folder order; FL 414+ | via `folder move` |
-| `is_archived` | `bool` | Archived marker | via archive/unarchive commands |
+| `order` | `int \| null` | Folder order; FL 414+ | via command `folder move` |
+| `is_archived` | `bool` | Archived marker | via command |
 | `date_created` | `int \| null` | Creation timestamp | no |
 | `creator_id` | `int \| null` | Creator user ID | no |
 | `channels` | `list[ChannelRef]` | Derived assigned channels | no |

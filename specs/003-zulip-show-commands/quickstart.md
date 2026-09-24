@@ -107,12 +107,14 @@ Human output includes a `Settable` column:
 Field                  Value        Settable             Notes
 name                   general      via --name
 folder_id              10           via --folder
+is_archived            false        via command          channel archive/unarchive
 can_send_message_group Members      not exposed          server-settable FL 333
 subscriber_count       125          no
 ```
 
-`not exposed` means Zulip has an API setting but lftools-uv does not yet expose
-a write flag. This specification does not add those write flags.
+`via command` identifies an existing subcommand-based setter. `not exposed`
+means Zulip has an API setting but lftools-uv does not yet expose a write flag
+or command. This specification does not add those write flags.
 
 ## Error Handling
 

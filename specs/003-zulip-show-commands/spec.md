@@ -197,9 +197,12 @@ assigned channels by default, and skips channel enumeration with `--no-resolve`.
   MUST be shown for `name`, `description`, `type`, `topics_policy`,
   `can_subscribe_group`, `can_remove_subscribers_group`, and `folder_id`.
 - **FR-043**: Channel show MUST mark server-settable but currently unexposed
-  channel fields distinctly, including `can_add_subscribers_group` (FL 342),
-  `can_administer_channel_group` (FL 325), and `can_send_message_group`
-  (FL 333). The feature MUST NOT add write flags for these fields.
+  channel fields distinctly, including all returned channel group-setting
+  permission fields without current write flags. This includes
+  `can_add_subscribers_group` (FL 342), `can_administer_channel_group`
+  (FL 325), `can_send_message_group` (FL 333), delete-message, move-message,
+  resolve-topic, and create-topic permission fields. The feature MUST NOT add
+  write flags for these fields.
 - **FR-044**: System MUST provide `lftools-uv zulip group show [group]` with
   optional `--group-name`, `--group-id`, `--no-resolve`, and `--json`. The
   positional group argument is shorthand for `--group-name`; exactly one target
@@ -245,7 +248,8 @@ assigned channels by default, and skips channel enumeration with `--no-resolve`.
   include the raw object, settable annotations, and any derived or resolved
   sections without losing raw IDs.
 - **FR-058**: Human output MUST use stable ASCII-safe table headings. The
-  settable marker MUST be textual, using `via --flag`, `not exposed`, or `no`.
+  settable marker MUST be textual, using `via --flag`, `via command`,
+  `not exposed`, or `no`.
 - **FR-059**: Implementation MUST add API and CLI tests covering success, JSON,
   not-found, ambiguity, `--no-resolve`, settable annotations, and feature-level
   omitted fields for all four commands.
