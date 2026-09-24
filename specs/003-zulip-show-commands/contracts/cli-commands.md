@@ -231,6 +231,7 @@ Group-membership table headers when resolution is enabled: `Name`, `Group ID`,
     "email": "alice@example.com",
     "delivery_email": "alice@example.com",
     "role": 100,
+    "timezone": "America/Los_Angeles",
     "is_bot": false,
     "profile_data": {
       "1": {"value": "Release Engineering"}
@@ -249,6 +250,7 @@ Group-membership table headers when resolution is enabled: `Name`, `Group ID`,
     "email": {"status": "not exposed", "setter": null, "notes": "server setter new_email"},
     "delivery_email": {"status": "not exposed", "setter": null, "notes": "server setter new_email"},
     "role": {"status": "not exposed", "setter": null},
+    "timezone": {"status": "not exposed", "setter": null, "notes": "server setter timezone"},
     "is_active": {"status": "not exposed", "setter": null},
     "profile_data": {"status": "not exposed", "setter": null}
   }

@@ -147,7 +147,7 @@ membership.
 | `is_active` | `bool` | Active account marker | not exposed |
 | `is_deleted` | `bool` | Deleted account marker, when present | no |
 | `date_joined` | `str` | Account join timestamp | no |
-| `timezone` | `str` | IANA time zone | no |
+| `timezone` | `str` | IANA time zone; server setter `timezone` | not exposed |
 | `avatar_url` | `str \| null` | Avatar URL | no |
 | `avatar_version` | `int` | Avatar cache-busting version | no |
 | `is_imported_stub` | `bool` | Imported stub marker | no |
