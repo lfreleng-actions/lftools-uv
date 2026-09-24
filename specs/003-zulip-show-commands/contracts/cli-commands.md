@@ -103,14 +103,14 @@ Required derived rows when raw data exists:
     }
   },
   "annotations": {
-    "description": {"status": "via --flag", "setter": "--description"},
-    "can_add_subscribers_group": {"status": "not exposed", "setter": null}
+    "description": {"status": "via --flag", "setter": "--description", "notes": null},
+    "can_add_subscribers_group": {"status": "not exposed", "setter": null, "notes": null}
   }
 }
 ```
 
-With `--no-resolve`, `resolved` MAY be `{}` or contain only data available from
-the raw target object.
+With `--no-resolve`, `resolved` MUST be `{}` for channel show. Raw IDs remain
+available in `channel`.
 
 **Errors**:
 
@@ -177,11 +177,12 @@ Direct subgroup table headers with `--no-resolve`: `Group ID`.
     ],
     "direct_subgroups": [
       {"group_id": 20, "name": "Members", "type": "system"}
-    ]
+    ],
+    "creator": {"user_id": 5, "full_name": "Alice Admin"}
   },
   "annotations": {
-    "members": {"status": "not exposed", "setter": null},
-    "can_manage_group": {"status": "not exposed", "setter": null}
+    "members": {"status": "not exposed", "setter": null, "notes": null},
+    "can_manage_group": {"status": "not exposed", "setter": null, "notes": null}
   }
 }
 ```
@@ -243,16 +244,17 @@ Group-membership table headers when resolution is enabled: `Name`, `Group ID`,
   "resolved": {
     "groups": [
       {"group_id": 10, "name": "Engineering", "type": "custom"}
-    ]
+    ],
+    "bot_owner": null
   },
   "annotations": {
-    "full_name": {"status": "not exposed", "setter": null},
+    "full_name": {"status": "not exposed", "setter": null, "notes": null},
     "email": {"status": "not exposed", "setter": null, "notes": "server setter new_email"},
     "delivery_email": {"status": "not exposed", "setter": null, "notes": "server setter new_email"},
-    "role": {"status": "not exposed", "setter": null},
+    "role": {"status": "not exposed", "setter": null, "notes": null},
     "timezone": {"status": "not exposed", "setter": null, "notes": "server setter timezone"},
-    "is_active": {"status": "not exposed", "setter": null},
-    "profile_data": {"status": "not exposed", "setter": null}
+    "is_active": {"status": "not exposed", "setter": null, "notes": null},
+    "profile_data": {"status": "not exposed", "setter": null, "notes": null}
   }
 }
 ```
@@ -311,8 +313,8 @@ Assigned-channel table headers when resolution is enabled: `Name`, `Channel ID`,
     ]
   },
   "annotations": {
-    "name": {"status": "via --flag", "setter": "--name"},
-    "order": {"status": "via command", "setter": "folder move"}
+    "name": {"status": "via --flag", "setter": "--name", "notes": null},
+    "order": {"status": "via command", "setter": "folder move", "notes": null}
   }
 }
 ```
@@ -333,7 +335,9 @@ Error: Channel folder name 'Projects' matched 2 folders; use the id:NUM prefix t
 ## Resolution Call Expectations
 
 The implementation MAY reuse cached list responses within one command
-invocation, but the observable behavior must match this contract.
+invocation, but the observable behavior must match this contract. When
+`--no-resolve` is supplied, each command's `resolved` object MUST be `{}` and
+raw IDs remain available in the raw target object.
 
 | Command | Default extra calls | Skipped by `--no-resolve` |
 | --- | --- | --- |

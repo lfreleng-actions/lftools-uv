@@ -14,7 +14,6 @@ Every human detail row includes a settable marker.
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `field` | `str` | Raw Zulip field name or derived field name |
 | `status` | `str` | `via --flag`, `via command`, `not exposed`, or `no` |
 | `setter` | `str \| null` | CLI flag or command that writes this field, when exposed |
 | `notes` | `str \| null` | Feature-level or implementation notes |
@@ -28,7 +27,10 @@ Every human detail row includes a settable marker.
   command is currently available.
 - `no` means the field is server-derived, read-only, or not in scope for this
   CLI.
-- JSON output preserves annotations as an object keyed by field name.
+- JSON output preserves annotations as an object keyed by field name. The
+  annotation value MUST include exactly `status`, `setter`, and `notes`; it
+  MUST NOT repeat the field name because the object key already carries it.
+  `setter` and `notes` are emitted as `null` when absent.
 
 ### GroupSettingDisplay
 
@@ -112,6 +114,7 @@ Represents a raw Zulip user-group object plus member and permission displays.
 | `deactivated` | `bool` | Group deactivation status | not exposed |
 | `date_created` | `int \| null` | Creation timestamp | no |
 | `creator_id` | `int \| null` | Creator user ID | no |
+| `creator` | `UserRef \| null` | Derived creator display when resolved | no |
 | `members` | `list[int]` | Direct member user IDs | not exposed |
 | `direct_subgroup_ids` | `list[int]` | Direct subgroup IDs | not exposed |
 | `can_manage_group` | `GroupSettingDisplay` | Who can manage group | not exposed |
@@ -144,6 +147,7 @@ membership.
 | `is_bot` | `bool` | Bot marker | no |
 | `bot_type` | `int \| null` | Bot type enum | no |
 | `bot_owner_id` | `int \| null` | Bot owner user ID | no |
+| `bot_owner` | `UserRef \| null` | Derived bot owner display when resolved | no |
 | `is_active` | `bool` | Active account marker | not exposed |
 | `is_deleted` | `bool` | Deleted account marker, when present | no |
 | `date_joined` | `str` | Account join timestamp | no |
@@ -183,8 +187,10 @@ resolution is enabled. It is omitted with `--no-resolve`.
 ChannelDetail ── folder_id ──▶ FolderDetail
 ChannelDetail ── creator_id ─▶ UserDetail
 ChannelDetail ── group settings ─▶ GroupDetail/UserDetail refs
+GroupDetail ─── creator_id ─▶ UserDetail refs
 GroupDetail ─── members ─────▶ UserDetail refs
 GroupDetail ─── direct_subgroup_ids ─▶ GroupDetail refs
+UserDetail ─── bot_owner_id ─▶ UserDetail refs
 UserDetail ─── derived membership ─▶ GroupDetail refs
 FolderDetail ─ channels ─────▶ ChannelDetail refs
 ```

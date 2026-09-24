@@ -216,7 +216,8 @@ assigned channels by default, and skips channel enumeration with `--no-resolve`.
   Name, Email, and User ID by default. With `--no-resolve`, it MUST render raw
   member user IDs only and skip the users API call.
 - **FR-047**: Group show MUST render direct subgroup IDs as group display names
-  by default. Recursive subgroup expansion is out of scope.
+  by default and MUST resolve `creator_id` to a user display when present.
+  Recursive subgroup expansion is out of scope.
 - **FR-048**: System MUST provide `lftools-uv zulip user show USER` requiring
   exactly one of `--by-email`, `--by-id`, or `--by-name`, plus `--no-resolve`
   and `--json`.
@@ -228,10 +229,12 @@ assigned channels by default, and skips channel enumeration with `--no-resolve`.
   owner, administrator, moderator, member, or guest, while preserving the raw
   role value in JSON.
 - **FR-051**: User show MUST list groups containing the user when resolution is
-  enabled. With `--no-resolve`, it MUST skip the groups API call and omit that
-  derived membership section.
+  enabled and MUST resolve `bot_owner_id` when present. With `--no-resolve`, it
+  MUST skip those derived lookup sections.
 - **FR-052**: System MUST provide `lftools-uv zulip folder show FOLDER` where
   `FOLDER` is a folder name or `id:N`, plus `--no-resolve` and `--json`.
+  Folder show MUST search both active and archived folders so archived folders
+  remain inspectable without an additional flag.
 - **FR-053**: Folder show MUST display every field present in the raw channel
   folder object returned by Zulip: `id`, `name`, `description`,
   `rendered_description`, optional `order`, `is_archived`, `date_created`, and
@@ -241,7 +244,8 @@ assigned channels by default, and skips channel enumeration with `--no-resolve`.
   skip that channel enumeration.
 - **FR-055**: All show commands MUST resolve IDs to names by default where a
   resolver exists: users, groups, channel folders, channel creators, folder
-  creators, group members, subgroup IDs, and channel permission group settings.
+  creators, group creators, bot owners, group members, subgroup IDs, and
+  channel permission group settings.
 - **FR-056**: All show commands MUST document that default resolution can make
   extra Zulip API calls, and `--no-resolve` MUST avoid those nonessential
   calls while preserving target resolution needed to find the object.
