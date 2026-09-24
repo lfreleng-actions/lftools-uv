@@ -36,8 +36,8 @@ completed in atomic commits while preserving feature traceability.
 and settable status so the four commands behave consistently.
 
 - [ ] T001 [S1] Add `lftools_uv/api/endpoints/zulip/detail.py` with `SettableAnnotation`, detail row, and JSON annotation helpers (FR-042, FR-057, FR-058)
-- [ ] T002 [S1] Define the channel settable registry in `detail.py`, including `via --name`, `via --description`, `via --type`, `via --topic-policy`, `via --allow-group`, `via --can-remove-subscribers-group`, `via --folder`, archive/unarchive, and `not exposed` permission fields (FR-042, FR-043)
-- [ ] T003 [S1] Define group, user, and folder settable registries in `detail.py`, marking current write flags and server-settable-but-unexposed fields (FR-045, FR-049, FR-053)
+- [ ] T002 [S1] Define the channel settable registry in `detail.py`, including `via --name`, `via --description`, `via --type`, `via --topic-policy`, `via --allow-group`, `via --can-remove-subscribers-group`, `via --folder`, clear-only `--folder-id 0`, `via command` archive/unarchive, and `not exposed` permission fields (FR-042, FR-043)
+- [ ] T003 [S1] Define group, user, and folder settable registries in `detail.py`, marking current write flags, command-based setters, and server-settable-but-unexposed fields (FR-045, FR-049, FR-053)
 - [ ] T004 [S1] Add `lftools_uv/typer_apps/zulip/detail.py` with ASCII table rendering helpers for `Field`, `Value`, `Settable`, and `Notes` rows (FR-058)
 - [ ] T005 [P] [S1] Add unit tests for annotation lookup defaults and stable JSON annotation shape in `tests/unit/test_zulip_api.py` (FR-057, FR-058)
 
@@ -68,8 +68,8 @@ one shared switch.
 - [ ] T011 [S3] Implement `get_channel_detail()` in `lftools_uv/api/endpoints/zulip/detail.py` using `resolve_channel()` raw stream data and derived `type` (FR-039, FR-040, FR-041)
 - [ ] T012 [S3] Resolve channel `folder_id`, `creator_id`, and permission group-setting values by default and preserve raw values in JSON (FR-040, FR-055)
 - [ ] T013 [S3] Add `channel show` to `lftools_uv/typer_apps/zulip/channel_read.py` with positional channel or `--channel-id`, `--include-archived`, `--no-resolve`, and hidden `--json` (FR-039, FR-056, FR-057)
-- [ ] T014 [P] [S3] Add API tests for all returned raw stream fields, feature-level-gated omissions, derived type, and settable annotations in `tests/unit/test_zulip_api.py` (FR-040 through FR-043)
-- [ ] T015 [P] [S3] Add CLI tests for channel show table, JSON, channel ID targeting, archived target handling, and `--no-resolve` in `tests/unit/test_zulip_cli.py` (FR-039, FR-056, FR-057)
+- [ ] T014 [P] [S3] Add API tests for all returned raw stream fields, feature-level-gated omissions, missing channels, derived type, group-setting JSON shape, and settable annotations in `tests/unit/test_zulip_api.py` (FR-040 through FR-043)
+- [ ] T015 [P] [S3] Add CLI tests for channel show table, JSON, channel ID targeting, missing channel errors, archived target handling, and `--no-resolve` in `tests/unit/test_zulip_cli.py` (FR-039, FR-056, FR-057)
 
 **Checkpoint**: `lftools-uv zulip channel show` works independently.
 
@@ -80,11 +80,11 @@ one shared switch.
 **Purpose**: Expose full user-group inspection, including members.
 
 - [ ] T016 [S4] Implement `get_group_detail()` in `lftools_uv/api/endpoints/zulip/detail.py` using raw `_fetch_groups()` objects and existing group filter behavior (FR-044, FR-045)
-- [ ] T017 [S4] Add positional group-name targeting while preserving `--group-name` and `--group-id` mutual exclusion in `lftools_uv/typer_apps/zulip/groups.py` (FR-044)
+- [ ] T017 [S4] Add positional group-name targeting and exactly-one validation across positional group, `--group-name`, and `--group-id` in `lftools_uv/typer_apps/zulip/groups.py` (FR-044)
 - [ ] T018 [S4] Resolve group members to Full Name, Email, and User ID rows by default; render raw IDs with `--no-resolve` (FR-046)
 - [ ] T019 [S4] Resolve `direct_subgroup_ids` to direct subgroup display names only; do not recurse (FR-047)
-- [ ] T020 [P] [S4] Add API tests for custom group, system group, deactivated group, permissions, members, direct subgroups, and ambiguity in `tests/unit/test_zulip_api.py` (FR-045 through FR-047)
-- [ ] T021 [P] [S4] Add CLI tests for group show positional, `--group-name`, `--group-id`, table output, JSON, and `--no-resolve` in `tests/unit/test_zulip_cli.py` (FR-044, FR-057)
+- [ ] T020 [P] [S4] Add API tests for custom group, system group, deactivated group, missing group, permissions, members, direct subgroups, and ambiguity in `tests/unit/test_zulip_api.py` (FR-045 through FR-047)
+- [ ] T021 [P] [S4] Add CLI tests for group show positional, `--group-name`, `--group-id`, no target, positional-plus-flag conflicts, numeric-looking positional-as-name, table output, JSON, missing group, and `--no-resolve` in `tests/unit/test_zulip_cli.py` (FR-044, FR-057)
 
 **Checkpoint**: `lftools-uv zulip group show` works independently.
 
@@ -99,8 +99,8 @@ one shared switch.
 - [ ] T024 [S5] Add role label derivation for Zulip role values 100, 200, 300, 400, and 600 (FR-050)
 - [ ] T025 [S5] Add derived group membership by scanning raw groups for the user ID when resolution is enabled; skip with `--no-resolve` (FR-051, FR-056)
 - [ ] T026 [S5] Add `user show` to `lftools_uv/typer_apps/zulip/users.py` with `--by-email`, `--by-id`, `--by-name`, `--no-resolve`, and hidden `--json` (FR-048, FR-057)
-- [ ] T027 [P] [S5] Add API tests for role labels, bot fields, profile fields, deleted/imported-stub markers, membership, and `--no-resolve` in `tests/unit/test_zulip_api.py` (FR-049 through FR-051)
-- [ ] T028 [P] [S5] Add CLI tests for user show by email, by ID, by name, ambiguous name, table output, JSON, and `--no-resolve` in `tests/unit/test_zulip_cli.py` (FR-048, FR-057)
+- [ ] T027 [P] [S5] Add API tests for missing users, role labels, bot fields, profile fields, deleted/imported-stub markers, membership, and `--no-resolve` in `tests/unit/test_zulip_api.py` (FR-049 through FR-051)
+- [ ] T028 [P] [S5] Add CLI tests for user show by email, by ID, by name, missing user, ambiguous name, table output, JSON, and `--no-resolve` in `tests/unit/test_zulip_cli.py` (FR-048, FR-057)
 
 **Checkpoint**: `lftools-uv zulip user show` works independently.
 
@@ -110,12 +110,12 @@ one shared switch.
 
 **Purpose**: Expose full channel-folder inspection.
 
-- [ ] T029 [S6] Implement `get_folder_detail()` in `lftools_uv/api/endpoints/zulip/detail.py` using raw channel-folder objects and `resolve_channel_folder_token()` targeting semantics (FR-052, FR-053)
+- [ ] T029 [S6] Implement `get_folder_detail()` in `lftools_uv/api/endpoints/zulip/detail.py` using raw channel-folder objects and a show-specific folder resolver that treats `none` as an ordinary name, accepts `id:N`, and treats bare numeric tokens as names (FR-052, FR-053)
 - [ ] T030 [S6] Resolve `creator_id` to a user display by default and preserve raw ID in JSON (FR-053, FR-055)
 - [ ] T031 [S6] Enumerate assigned channels by listing streams and filtering on raw `folder_id`; skip enumeration with `--no-resolve` (FR-054, FR-056)
 - [ ] T032 [S6] Add `folder show` to `lftools_uv/typer_apps/zulip/folders.py` with folder token, `--no-resolve`, and hidden `--json` (FR-052, FR-057)
-- [ ] T033 [P] [S6] Add API tests for folder name, `id:N`, numeric-name hint, creator resolution, assigned-channel filtering, FL 414 `order` absence, and `--no-resolve` in `tests/unit/test_zulip_folders.py` (FR-052 through FR-056)
-- [ ] T034 [P] [S6] Add CLI tests for folder show table, JSON, missing folder errors, ambiguity, and `--no-resolve` in `tests/unit/test_zulip_folders.py` (FR-052, FR-057)
+- [ ] T033 [P] [S6] Add API tests for folder name, `id:N`, numeric-name hint, `none` not being special, missing folders, creator resolution, assigned-channel filtering, FL 414 `order` absence, and `--no-resolve` in `tests/unit/test_zulip_folders.py` (FR-052 through FR-056)
+- [ ] T034 [P] [S6] Add CLI tests for folder show table, JSON, missing folder errors, `none` as a normal name, ambiguity, and `--no-resolve` in `tests/unit/test_zulip_folders.py` (FR-052, FR-057)
 
 **Checkpoint**: `lftools-uv zulip folder show` works independently.
 
@@ -126,7 +126,7 @@ one shared switch.
 **Purpose**: Ensure all show commands are covered together and do not regress
 existing list or mutation behavior.
 
-- [ ] T035 [S7] Add cross-command JSON schema tests ensuring raw objects, derived sections, resolved sections, and annotations are stable for all four commands (FR-057)
+- [ ] T035 [S7] Add cross-command JSON schema tests ensuring raw objects, derived sections, resolved sections, group-setting display shape, and annotations are stable for all four commands (FR-057)
 - [ ] T036 [S7] Add tests that existing `channel list`, `group list`, `user list`, and `folder list` output remains unchanged (FR-059)
 - [ ] T037 [S7] Run `uv run pytest tests/unit/test_zulip_api.py tests/unit/test_zulip_cli.py tests/unit/test_zulip_folders.py` and fix failures (FR-059)
 - [ ] T038 [S7] Run `uv run ruff check .` and `uv run mypy lftools_uv` and fix failures (FR-059)
