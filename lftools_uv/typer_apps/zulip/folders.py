@@ -30,7 +30,7 @@ from lftools_uv.typer_apps.zulip.helpers import (
 @folder_app.command("show")
 def folder_show(
     ctx: typer.Context,
-    folder: str = typer.Argument(..., help="Folder name or id:NUM. Bare numeric values are names."),
+    folder: str | None = typer.Argument(None, help="Folder name or id:NUM. Bare numeric values are names."),
     no_resolve: bool = typer.Option(
         False,
         "--no-resolve",
@@ -44,6 +44,9 @@ def folder_show(
     ),
 ) -> None:
     """Show complete details for one channel folder."""
+    if folder is None:
+        emit_error("FOLDER is required")
+        raise typer.Exit(code=1)
     options = {**(ctx.obj or {})}
     if json_output:
         options["json_output"] = True

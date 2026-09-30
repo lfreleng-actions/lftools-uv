@@ -18,7 +18,7 @@ from .channels import _fetch_streams, resolve_channel
 from .errors import ZulipAmbiguityError, ZulipNotFoundError, ZulipValidationError
 from .features import FEATURE_LEVELS, check_feature_level
 from .folders import _fetch_channel_folders, _resolve_single_channel_folder_token
-from .groups import SYSTEM_ROLE_DISPLAY_NAMES, SYSTEM_ROLE_GROUPS, _fetch_groups
+from .groups import SYSTEM_ROLE_DISPLAY_NAMES, _fetch_groups
 from .users import IdMode, _fetch_users, _resolve_single_user
 
 SettableStatus = Literal["via --flag", "via command", "not exposed", "no"]
@@ -310,22 +310,16 @@ def _resolve_group_by_show_target(
                 return group
         raise ZulipNotFoundError(f"No user group with id {group_id}")
     assert group_name is not None
-    api_name = SYSTEM_ROLE_GROUPS.get(group_name.casefold())
-    if api_name is not None:
-        for group in groups:
-            if group.get("name") == api_name:
-                return group
-        raise ZulipNotFoundError(f"System role group {group_name!r} not found on server")
     target = group_name.casefold()
     matches = [
         group
         for group in groups
-        if str(group.get("name", "")).casefold() == target and not group.get("is_system_group", False)
+        if group_display_name(group).casefold() == target or str(group.get("name", "")).casefold() == target
     ]
     if len(matches) > 1:
         raise ZulipAmbiguityError(
             f"Group name {group_name!r} matched {len(matches)} groups; use --group-id to disambiguate",
-            matches=[{"group_id": group.get("id"), "name": group.get("name")} for group in matches],
+            matches=[{"group_id": group.get("id"), "name": group_display_name(group)} for group in matches],
         )
     if matches:
         return matches[0]
@@ -380,8 +374,7 @@ def get_channel_detail(
             )
     else:
         for field in group_fields:
-            rendered = group_setting_display(stream[field])
-            display_fields[field] = rendered["display"]
+            display_fields[field] = stream[field]
 
     fields = ["type", *list(stream.keys())]
     return {
@@ -438,12 +431,14 @@ def get_group_detail(
             )
     for field in GROUP_SETTING_FIELDS:
         if field in group:
-            if groups_by_id is None and resolve and _group_setting_has_group_refs(group[field]):
-                groups_by_id = _group_index(groups)
-            rendered = group_setting_display(group[field], users_by_id=users_by_id, groups_by_id=groups_by_id)
-            display_fields[field] = rendered["display"]
             if resolve:
+                if groups_by_id is None and _group_setting_has_group_refs(group[field]):
+                    groups_by_id = _group_index(groups)
+                rendered = group_setting_display(group[field], users_by_id=users_by_id, groups_by_id=groups_by_id)
+                display_fields[field] = rendered["display"]
                 resolved.setdefault("groups", {})[field] = rendered
+            else:
+                display_fields[field] = group[field]
 
     fields = [*list(group.keys()), "display_name", "type"]
     return {

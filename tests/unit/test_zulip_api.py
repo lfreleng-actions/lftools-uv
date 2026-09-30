@@ -3357,3 +3357,34 @@ def test_group_detail_permission_direct_members_resolve_without_members() -> Non
     setting = detail["resolved"]["groups"]["can_manage_group"]
     assert setting["resolved_members"] == [{"user_id": 101, "full_name": "Build Bot", "email": "bot@example.com"}]
     assert setting["display"] == "Build Bot (id=101)"
+
+
+def test_show_no_resolve_keeps_group_setting_structures_raw() -> None:
+    """No-resolve display fields keep object-form group settings intact."""
+    from lftools_uv.api.endpoints.zulip import get_channel_detail, get_group_detail
+
+    channel_detail = get_channel_detail(_detail_client(), name="general", resolve=False)
+    assert channel_detail["_display_fields"]["can_send_message_group"] == {
+        "direct_members": [101],
+        "direct_subgroups": [20],
+    }
+
+    group_detail = get_group_detail(_detail_client(), group_name="engineering", resolve=False)
+    assert group_detail["_display_fields"]["can_manage_group"] == {"direct_members": [], "direct_subgroups": [20]}
+
+
+def test_group_show_name_ambiguity_includes_system_display_collision() -> None:
+    """System display names collide with custom group names for show lookup."""
+    from lftools_uv.api.endpoints.zulip import get_group_detail
+
+    client = mock.MagicMock()
+    client.call_endpoint.return_value = {
+        "result": "success",
+        "user_groups": [
+            {"id": 20, "name": "role:members", "members": [], "is_system_group": True},
+            {"id": 99, "name": "Members", "members": [], "is_system_group": False},
+        ],
+    }
+    with pytest.raises(ZulipAmbiguityError) as exc_info:
+        get_group_detail(client, group_name="Members")
+    assert {match["group_id"] for match in exc_info.value.matches} == {20, 99}

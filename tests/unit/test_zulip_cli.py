@@ -2944,3 +2944,6 @@ def test_user_show_cli_modes_json_and_no_resolve(monkeypatch: pytest.MonkeyPatch
 
     assert runner.invoke(zulip_app, ["user", "show", "Alice"]).exit_code == 1
     assert runner.invoke(zulip_app, ["user", "show", "Alice", "--by-id", "--by-name"]).exit_code == 1
+    missing = runner.invoke(zulip_app, ["user", "show", "--by-id"])
+    assert missing.exit_code == 1
+    assert "USER is required" in (missing.stdout + missing.stderr)

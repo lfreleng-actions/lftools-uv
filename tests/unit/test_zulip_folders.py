@@ -435,3 +435,11 @@ def test_folder_show_feature_gate_api_and_cli(monkeypatch: pytest.MonkeyPatch) -
     result = CliRunner().invoke(zulip_app, ["folder", "show", "Projects"])
     assert result.exit_code == 1
     assert "feature level 389" in (result.stdout + result.stderr)
+
+
+def test_folder_show_missing_target_exits_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Folder show reports a missing target with the show error contract."""
+    _patch_cli_client(monkeypatch, mock.MagicMock())
+    result = CliRunner().invoke(zulip_app, ["folder", "show"])
+    assert result.exit_code == 1
+    assert "FOLDER is required" in (result.stdout + result.stderr)

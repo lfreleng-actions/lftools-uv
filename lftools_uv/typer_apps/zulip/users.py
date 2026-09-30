@@ -19,7 +19,7 @@ from lftools_uv.api.endpoints.zulip import ZulipError
 from lftools_uv.typer_apps import zulip as zulip_cli
 from lftools_uv.typer_apps.zulip.apps import user_app
 from lftools_uv.typer_apps.zulip.detail import render_detail_fields, render_user_sections
-from lftools_uv.typer_apps.zulip.helpers import _resolve_id_mode, emit_json, emit_table, handle_zulip_error
+from lftools_uv.typer_apps.zulip.helpers import _resolve_id_mode, emit_error, emit_json, emit_table, handle_zulip_error
 
 
 @user_app.command("list")
@@ -81,7 +81,7 @@ def user_list(
 @user_app.command("show")
 def user_show(
     ctx: typer.Context,
-    user: str = typer.Argument(..., help="Email, user ID, or full name according to the selected mode."),
+    user: str | None = typer.Argument(None, help="Email, user ID, or full name according to the selected mode."),
     by_email: bool = typer.Option(False, "--by-email", help="Resolve USER by email."),
     by_id: bool = typer.Option(False, "--by-id", help="Resolve USER by numeric user ID."),
     by_name: bool = typer.Option(False, "--by-name", help="Resolve USER by full name."),
@@ -98,6 +98,9 @@ def user_show(
     ),
 ) -> None:
     """Show complete details for one user account."""
+    if user is None:
+        emit_error("USER is required")
+        raise typer.Exit(code=1)
     mode = _resolve_id_mode(by_email, by_id, by_name)
     options = {**(ctx.obj or {})}
     if json_output:
