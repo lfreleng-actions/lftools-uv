@@ -3096,3 +3096,215 @@ def test_set_topic_policy_checks_feature_level_first() -> None:
     with pytest.raises(ZulipFeatureLevelError):
         set_topic_policy(client, "general", "deny")
     client.call_endpoint.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Zulip show detail helpers
+# ---------------------------------------------------------------------------
+
+
+DETAIL_STREAMS = [
+    {
+        "stream_id": 42,
+        "name": "general",
+        "description": "General discussion",
+        "invite_only": False,
+        "is_web_public": False,
+        "is_archived": False,
+        "folder_id": 10,
+        "creator_id": 100,
+        "topics_policy": "inherit",
+        "can_subscribe_group": 22,
+        "can_send_message_group": {"direct_members": [101], "direct_subgroups": [20]},
+        "subscriber_count": 7,
+    }
+]
+DETAIL_FOLDERS = [
+    {
+        "id": 10,
+        "name": "Projects",
+        "description": "Project channels",
+        "rendered_description": "<p>Project channels</p>",
+        "order": 1,
+        "is_archived": False,
+        "date_created": 1761955200,
+        "creator_id": 100,
+    }
+]
+DETAIL_GROUPS = [
+    {
+        "id": 20,
+        "name": "role:administrators",
+        "description": "Admins",
+        "members": [100],
+        "is_system_group": True,
+        "direct_subgroup_ids": [],
+    },
+    {
+        "id": 22,
+        "name": "role:members",
+        "description": "Members",
+        "members": [100, 101],
+        "is_system_group": True,
+        "direct_subgroup_ids": [],
+    },
+    {
+        "id": 30,
+        "name": "engineering",
+        "description": "Engineering team",
+        "members": [100],
+        "is_system_group": False,
+        "direct_subgroup_ids": [20],
+        "creator_id": 100,
+        "can_manage_group": {"direct_members": [], "direct_subgroups": [20]},
+        "deactivated": False,
+    },
+]
+DETAIL_USERS = [
+    {
+        "user_id": 100,
+        "full_name": "Alice Admin",
+        "email": "alice@example.com",
+        "delivery_email": "alice@example.com",
+        "role": 200,
+        "is_bot": False,
+        "is_active": True,
+        "timezone": "UTC",
+        "profile_data": {"1": {"value": "Release Engineering"}},
+    },
+    {
+        "user_id": 101,
+        "full_name": "Build Bot",
+        "email": "bot@example.com",
+        "delivery_email": "bot@example.com",
+        "role": 400,
+        "is_bot": True,
+        "bot_owner_id": 100,
+        "is_active": True,
+    },
+]
+
+
+def _detail_client() -> mock.MagicMock:
+    """Return a mock client serving raw objects for show-detail tests."""
+    client = mock.MagicMock()
+    client.calls = []
+    client.get_server_settings.return_value = {"result": "success", "zulip_feature_level": 500}
+    client.get_members.return_value = {"result": "success", "members": DETAIL_USERS}
+
+    def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> dict[str, Any]:
+        client.calls.append({"url": url, "method": method, "request": request})
+        if url == "streams" and method == "GET":
+            return {"result": "success", "streams": DETAIL_STREAMS}
+        if url == "user_groups" and method == "GET":
+            return {"result": "success", "user_groups": DETAIL_GROUPS}
+        if url == "channel_folders" and method == "GET":
+            return {"result": "success", "channel_folders": DETAIL_FOLDERS}
+        raise AssertionError(f"unexpected endpoint: {method} {url}")
+
+    client.call_endpoint.side_effect = call_endpoint
+    return client
+
+
+def test_show_annotations_and_group_setting_shapes() -> None:
+    """Annotation JSON and group-setting displays are stable."""
+    from lftools_uv.api.endpoints.zulip import (
+        CHANNEL_ANNOTATIONS,
+        annotation_for,
+        group_setting_display,
+        json_annotations,
+    )
+
+    assert annotation_for("name", CHANNEL_ANNOTATIONS).as_json() == {
+        "status": "via --flag",
+        "setter": "--name",
+        "notes": None,
+    }
+    assert json_annotations(["unknown"], {}) == {"unknown": {"status": "no", "setter": None, "notes": None}}
+    simple = group_setting_display(22, groups_by_id={22: DETAIL_GROUPS[1]})
+    assert simple["direct_subgroups"] == [22]
+    assert simple["display"] == "Members (id=22)"
+    complex_value = {"direct_members": [101], "direct_subgroups": [20]}
+    complex_display = group_setting_display(
+        complex_value,
+        users_by_id={101: DETAIL_USERS[1]},
+        groups_by_id={20: DETAIL_GROUPS[0]},
+    )
+    assert complex_display["direct_members"] == [101]
+    assert complex_display["direct_subgroups"] == [20]
+    assert "Build Bot" in complex_display["display"]
+    assert "Administrators" in complex_display["display"]
+
+
+def test_get_channel_detail_resolves_and_no_resolve_skips_calls() -> None:
+    """Channel show keeps raw stream data and honors --no-resolve."""
+    from lftools_uv.api.endpoints.zulip import get_channel_detail
+
+    client = _detail_client()
+    detail = get_channel_detail(client, name="general")
+    assert detail["channel"]["can_send_message_group"] == {"direct_members": [101], "direct_subgroups": [20]}
+    assert detail["derived"] == {"type": "public"}
+    assert detail["resolved"]["folder"] == {"id": 10, "name": "Projects"}
+    assert detail["resolved"]["creator"]["full_name"] == "Alice Admin"
+    assert detail["resolved"]["groups"]["can_subscribe_group"]["display"] == "Members (id=22)"
+    assert detail["annotations"]["can_send_message_group"]["status"] == "not exposed"
+
+    client = _detail_client()
+    raw_detail = get_channel_detail(client, name="general", resolve=False)
+    assert raw_detail["resolved"] == {}
+    assert client.get_members.call_count == 0
+    assert not any(call["url"] in {"user_groups", "channel_folders"} for call in client.calls)
+
+
+def test_get_group_detail_resolves_members_and_subgroups() -> None:
+    """Group show preserves members and resolves direct refs by default."""
+    from lftools_uv.api.endpoints.zulip import get_group_detail
+
+    client = _detail_client()
+    detail = get_group_detail(client, group_name="engineering")
+    assert detail["group"]["members"] == [100]
+    assert detail["derived"]["member_count"] == 1
+    assert detail["resolved"]["members"][0]["email"] == "alice@example.com"
+    assert detail["resolved"]["direct_subgroups"][0]["name"] == "Administrators"
+    assert detail["resolved"]["groups"]["can_manage_group"]["display"] == "Administrators (id=20)"
+
+    client = _detail_client()
+    raw_detail = get_group_detail(client, group_name="engineering", resolve=False)
+    assert raw_detail["resolved"] == {}
+    client.get_members.assert_not_called()
+
+
+def test_get_user_detail_roles_membership_and_no_resolve() -> None:
+    """User show resolves target modes, role labels, bot owners, and groups."""
+    from lftools_uv.api.endpoints.zulip import get_user_detail
+
+    client = _detail_client()
+    detail = get_user_detail(client, "101", mode="id")
+    assert detail["derived"]["role_label"] == "member"
+    assert detail["resolved"]["bot_owner"]["full_name"] == "Alice Admin"
+    assert {group["name"] for group in detail["resolved"]["groups"]} == {"Members"}
+
+    client = _detail_client()
+    raw_detail = get_user_detail(client, "101", mode="id", resolve=False)
+    assert raw_detail["resolved"] == {}
+    assert not any(call["url"] == "user_groups" for call in client.calls)
+    client.get_members.assert_called_once_with({"include_custom_profile_fields": True})
+
+
+def test_get_folder_detail_includes_archived_lookup_and_channels() -> None:
+    """Folder show resolves id:N targets and assigned channels by default."""
+    from lftools_uv.api.endpoints.zulip import get_folder_detail
+
+    client = _detail_client()
+    detail = get_folder_detail(client, "id:10")
+    assert detail["folder"]["name"] == "Projects"
+    assert detail["resolved"]["creator"]["full_name"] == "Alice Admin"
+    assert detail["resolved"]["channels"] == [
+        {"stream_id": 42, "name": "general", "type": "public", "is_archived": False}
+    ]
+
+    client = _detail_client()
+    raw_detail = get_folder_detail(client, "Projects", resolve=False)
+    assert raw_detail["resolved"] == {}
+    client.get_members.assert_not_called()
+    assert not any(call["url"] == "streams" for call in client.calls)

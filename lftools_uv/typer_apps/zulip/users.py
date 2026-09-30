@@ -18,7 +18,8 @@ import typer
 from lftools_uv.api.endpoints.zulip import ZulipError
 from lftools_uv.typer_apps import zulip as zulip_cli
 from lftools_uv.typer_apps.zulip.apps import user_app
-from lftools_uv.typer_apps.zulip.helpers import emit_json, emit_table, handle_zulip_error
+from lftools_uv.typer_apps.zulip.detail import render_detail_fields, render_user_sections
+from lftools_uv.typer_apps.zulip.helpers import _resolve_id_mode, emit_json, emit_table, handle_zulip_error
 
 
 @user_app.command("list")
@@ -75,3 +76,39 @@ def user_list(
             row.append("yes" if not user["is_active"] else "no")
         rows.append(row)
     emit_table(rows, headers)
+
+
+@user_app.command("show")
+def user_show(
+    ctx: typer.Context,
+    user: str = typer.Argument(..., help="Email, user ID, or full name according to the selected mode."),
+    by_email: bool = typer.Option(False, "--by-email", help="Resolve USER by email."),
+    by_id: bool = typer.Option(False, "--by-id", help="Resolve USER by numeric user ID."),
+    by_name: bool = typer.Option(False, "--by-name", help="Resolve USER by full name."),
+    no_resolve: bool = typer.Option(
+        False,
+        "--no-resolve",
+        help="Skip extra lookup calls and render raw IDs where possible. Target lookup still runs as needed.",
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit machine-readable JSON instead of a table.",
+        hidden=True,
+    ),
+) -> None:
+    """Show complete details for one user account."""
+    mode = _resolve_id_mode(by_email, by_id, by_name)
+    options = {**(ctx.obj or {})}
+    if json_output:
+        options["json_output"] = True
+    try:
+        client = zulip_cli.get_client(zuliprc=options.get("zuliprc"))
+        detail = zulip_cli.get_user_detail(client, user, mode=mode, resolve=not no_resolve)
+    except ZulipError as exc:
+        raise handle_zulip_error(exc) from exc
+    if options.get("json_output"):
+        emit_json(zulip_cli.public_detail_payload(detail))
+        return
+    render_detail_fields(detail, "user")
+    render_user_sections(detail, resolve=not no_resolve)
