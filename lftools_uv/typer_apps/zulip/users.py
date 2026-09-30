@@ -15,7 +15,7 @@ from typing import Any
 
 import typer
 
-from lftools_uv.api.endpoints.zulip import ZulipError
+from lftools_uv.api.endpoints.zulip import ZulipAmbiguityError, ZulipError
 from lftools_uv.typer_apps import zulip as zulip_cli
 from lftools_uv.typer_apps.zulip.apps import user_app
 from lftools_uv.typer_apps.zulip.detail import render_detail_fields, render_user_sections
@@ -108,6 +108,15 @@ def user_show(
     try:
         client = zulip_cli.get_client(zuliprc=options.get("zuliprc"))
         detail = zulip_cli.get_user_detail(client, user, mode=mode, resolve=not no_resolve)
+    except ZulipAmbiguityError as exc:
+        emit_error(str(exc))
+        for match in exc.matches:
+            typer.echo(
+                f"  - {match.get('full_name', '<unknown>')} "
+                f"(user_id={match.get('user_id')}, email={match.get('email', '')})",
+                err=True,
+            )
+        raise typer.Exit(code=1) from exc
     except ZulipError as exc:
         raise handle_zulip_error(exc) from exc
     if options.get("json_output"):

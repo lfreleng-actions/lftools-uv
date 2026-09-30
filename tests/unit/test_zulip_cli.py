@@ -2947,3 +2947,16 @@ def test_user_show_cli_modes_json_and_no_resolve(monkeypatch: pytest.MonkeyPatch
     missing = runner.invoke(zulip_app, ["user", "show", "--by-id"])
     assert missing.exit_code == 1
     assert "USER is required" in (missing.stdout + missing.stderr)
+
+    show_mock.side_effect = ZulipAmbiguityError(
+        "User name 'Alice' matched 2 users; use --by-email or --by-id to disambiguate",
+        [
+            {"user_id": 100, "full_name": "Alice", "email": "alice@example.com"},
+            {"user_id": 101, "full_name": "Alice", "email": "alice2@example.com"},
+        ],
+    )
+    ambiguous = runner.invoke(zulip_app, ["user", "show", "Alice", "--by-name"])
+    assert ambiguous.exit_code == 1
+    combined = ambiguous.stdout + ambiguous.stderr
+    assert "user_id=100" in combined
+    assert "alice2@example.com" in combined
