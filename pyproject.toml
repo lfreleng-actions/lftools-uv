@@ -319,6 +319,9 @@ constraint-dependencies = [
     "authlib>=1.6.9",
     # Fixes CVE-2026-26007 (subgroup attack on SECT curves)
     "cryptography>=46.0.5",
+    # Fixes CVE-2026-49264 (JSONP callback injection), CVE-2026-49265
+    # (PKCE timing attack); via google-auth-oauthlib -> requests-oauthlib
+    "oauthlib>=4.0.0",
     # Bump transitive dependency to latest stable
     "pygments>=2.20.0",
 ]
