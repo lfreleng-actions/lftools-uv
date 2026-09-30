@@ -421,3 +421,17 @@ def test_folder_show_cli_table_json_and_no_resolve(monkeypatch: pytest.MonkeyPat
     assert payload["folder"]["id"] == 10
     assert show_mock.call_args.args[1] == "id:10"
     assert show_mock.call_args.kwargs["resolve"] is False
+
+
+def test_folder_show_feature_gate_api_and_cli(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Folder show fails below the channel-folders feature level."""
+    from lftools_uv.api.endpoints.zulip import get_folder_detail
+
+    client = _folder_client(feature_level=388)
+    with pytest.raises(ZulipFeatureLevelError):
+        get_folder_detail(client, "Projects")
+
+    _patch_cli_client(monkeypatch, _folder_client(feature_level=388))
+    result = CliRunner().invoke(zulip_app, ["folder", "show", "Projects"])
+    assert result.exit_code == 1
+    assert "feature level 389" in (result.stdout + result.stderr)

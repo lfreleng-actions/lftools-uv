@@ -99,7 +99,7 @@ def group_show(
         "--group-name",
         help="Target group by name (case-insensitive).",
     ),
-    group_id: int | None = typer.Option(
+    group_id: str | None = typer.Option(
         None,
         "--group-id",
         help="Target group by numeric ID.",
@@ -122,6 +122,13 @@ def group_show(
         emit_error("Exactly one group target is required")
         raise typer.Exit(code=1)
     effective_name = group if group is not None else group_name
+    parsed_group_id: int | None = None
+    if group_id is not None:
+        try:
+            parsed_group_id = int(group_id)
+        except ValueError:
+            emit_error("--group-id must be a numeric group ID.")
+            raise typer.Exit(code=1) from None
     options = {**(ctx.obj or {})}
     if json_output:
         options["json_output"] = True
@@ -130,7 +137,7 @@ def group_show(
         detail = zulip_cli.get_group_detail(
             client,
             group_name=effective_name,
-            group_id=group_id,
+            group_id=parsed_group_id,
             resolve=not no_resolve,
         )
     except ZulipAmbiguityError as exc:

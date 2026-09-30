@@ -3308,3 +3308,52 @@ def test_get_folder_detail_includes_archived_lookup_and_channels() -> None:
     assert raw_detail["resolved"] == {}
     client.get_members.assert_not_called()
     assert not any(call["url"] == "streams" for call in client.calls)
+
+
+def test_channel_detail_bare_group_setting_skips_user_lookup() -> None:
+    """Bare integer permission groups resolve groups without fetching users."""
+    from lftools_uv.api.endpoints.zulip import get_channel_detail
+
+    client = mock.MagicMock()
+
+    def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> dict[str, Any]:
+        if url == "streams" and method == "GET":
+            return {
+                "result": "success",
+                "streams": [{"stream_id": 1, "name": "general", "can_subscribe_group": 22}],
+            }
+        if url == "user_groups" and method == "GET":
+            return {"result": "success", "user_groups": DETAIL_GROUPS}
+        raise AssertionError(f"unexpected endpoint: {method} {url}")
+
+    client.call_endpoint.side_effect = call_endpoint
+    detail = get_channel_detail(client, name="general")
+    assert detail["resolved"]["groups"]["can_subscribe_group"]["display"] == "Members (id=22)"
+    client.get_members.assert_not_called()
+    assert "can_send_message_group" not in detail["annotations"]
+
+
+def test_group_detail_permission_direct_members_resolve_without_members() -> None:
+    """Group-setting direct_members trigger user resolution by default."""
+    from lftools_uv.api.endpoints.zulip import get_group_detail
+
+    client = mock.MagicMock()
+    client.get_members.return_value = {"result": "success", "members": DETAIL_USERS}
+    client.call_endpoint.return_value = {
+        "result": "success",
+        "user_groups": [
+            {
+                "id": 40,
+                "name": "release-managers",
+                "description": "Release managers",
+                "members": [],
+                "is_system_group": False,
+                "can_manage_group": {"direct_members": [101], "direct_subgroups": []},
+            }
+        ],
+    }
+
+    detail = get_group_detail(client, group_name="release-managers")
+    setting = detail["resolved"]["groups"]["can_manage_group"]
+    assert setting["resolved_members"] == [{"user_id": 101, "full_name": "Build Bot", "email": "bot@example.com"}]
+    assert setting["display"] == "Build Bot (id=101)"

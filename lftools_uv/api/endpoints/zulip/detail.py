@@ -274,6 +274,28 @@ def group_setting_display(
     return result
 
 
+def _group_setting_has_direct_members(value: Any) -> bool:
+    """Return True when a group-setting value embeds direct user IDs."""
+    if not isinstance(value, dict):
+        return False
+    raw_members = value.get("direct_members", [])
+    return isinstance(raw_members, list) and any(
+        isinstance(uid, int) and not isinstance(uid, bool) for uid in raw_members
+    )
+
+
+def _group_setting_has_group_refs(value: Any) -> bool:
+    """Return True when a group-setting value embeds group IDs."""
+    if isinstance(value, int) and not isinstance(value, bool):
+        return True
+    if not isinstance(value, dict):
+        return False
+    raw_subgroups = value.get("direct_subgroups", [])
+    return isinstance(raw_subgroups, list) and any(
+        isinstance(gid, int) and not isinstance(gid, bool) for gid in raw_subgroups
+    )
+
+
 def _resolve_group_by_show_target(
     groups: list[dict[str, Any]],
     *,
@@ -333,8 +355,10 @@ def get_channel_detail(
         users_by_id: dict[int, dict[str, Any]] | None = None
         groups_by_id: dict[int, dict[str, Any]] | None = None
         if group_fields:
-            users_by_id = _user_index(_fetch_users(client))
-            groups_by_id = _group_index(_fetch_groups(client))
+            if any(_group_setting_has_direct_members(stream[field]) for field in group_fields):
+                users_by_id = _user_index(_fetch_users(client))
+            if any(_group_setting_has_group_refs(stream[field]) for field in group_fields):
+                groups_by_id = _group_index(_fetch_groups(client))
             resolved["groups"] = {}
             for field in group_fields:
                 rendered = group_setting_display(stream[field], users_by_id=users_by_id, groups_by_id=groups_by_id)
@@ -388,16 +412,18 @@ def get_group_detail(
     display_fields: dict[str, Any] = {"display_name": display_name, "type": group_type}
     users_by_id: dict[int, dict[str, Any]] | None = None
     groups_by_id: dict[int, dict[str, Any]] | None = None
+    group_setting_values = [group[field] for field in GROUP_SETTING_FIELDS if field in group]
 
     if resolve:
-        if members or isinstance(group.get("creator_id"), int):
+        creator_id = group.get("creator_id")
+        needs_group_setting_users = any(_group_setting_has_direct_members(value) for value in group_setting_values)
+        if members or isinstance(creator_id, int) or needs_group_setting_users:
             users_by_id = _user_index(_fetch_users(client))
         resolved["members"] = (
             [user_ref(users_by_id.get(uid), uid) for uid in members if isinstance(uid, int)]
             if users_by_id is not None
             else []
         )
-        creator_id = group.get("creator_id")
         if isinstance(creator_id, int) and not isinstance(creator_id, bool) and users_by_id is not None:
             resolved["creator"] = user_ref(users_by_id.get(creator_id), creator_id)
             display_fields["creator_id"] = _display_user_id(creator_id, users_by_id)
@@ -412,7 +438,7 @@ def get_group_detail(
             )
     for field in GROUP_SETTING_FIELDS:
         if field in group:
-            if groups_by_id is None and resolve:
+            if groups_by_id is None and resolve and _group_setting_has_group_refs(group[field]):
                 groups_by_id = _group_index(groups)
             rendered = group_setting_display(group[field], users_by_id=users_by_id, groups_by_id=groups_by_id)
             display_fields[field] = rendered["display"]

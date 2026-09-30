@@ -2912,6 +2912,10 @@ def test_group_show_cli_targets_and_ambiguity(monkeypatch: pytest.MonkeyPatch) -
     assert "Members" in result.stdout
     assert show_mock.call_args.kwargs["group_name"] == "engineering"
 
+    result = runner.invoke(zulip_app, ["group", "show", "--group-id", "abc"])
+    assert result.exit_code == 1
+    assert "--group-id must be a numeric group ID" in (result.stdout + result.stderr)
+
     show_mock.side_effect = ZulipAmbiguityError(
         "Group name 'design' matched 2 groups", [{"group_id": 1, "name": "design"}]
     )
