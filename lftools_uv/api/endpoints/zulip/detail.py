@@ -245,6 +245,7 @@ def group_setting_display(
     *,
     users_by_id: dict[int, dict[str, Any]] | None = None,
     groups_by_id: dict[int, dict[str, Any]] | None = None,
+    include_resolved: bool = False,
 ) -> dict[str, Any]:
     """Render Zulip group-setting values in integer and object forms."""
     direct_members: list[int] = []
@@ -267,10 +268,14 @@ def group_setting_display(
         "direct_subgroups": direct_subgroups,
         "display": display,
     }
-    if users_by_id is not None:
-        result["resolved_members"] = [user_ref(users_by_id.get(uid), uid) for uid in direct_members]
-    if groups_by_id is not None:
-        result["resolved_groups"] = [group_ref(groups_by_id.get(gid), gid) for gid in direct_subgroups]
+    if include_resolved or users_by_id is not None:
+        result["resolved_members"] = (
+            [user_ref(users_by_id.get(uid), uid) for uid in direct_members] if users_by_id is not None else []
+        )
+    if include_resolved or groups_by_id is not None:
+        result["resolved_groups"] = (
+            [group_ref(groups_by_id.get(gid), gid) for gid in direct_subgroups] if groups_by_id is not None else []
+        )
     return result
 
 
@@ -355,7 +360,12 @@ def get_channel_detail(
                 groups_by_id = _group_index(_fetch_groups(client))
             resolved["groups"] = {}
             for field in group_fields:
-                rendered = group_setting_display(stream[field], users_by_id=users_by_id, groups_by_id=groups_by_id)
+                rendered = group_setting_display(
+                    stream[field],
+                    users_by_id=users_by_id,
+                    groups_by_id=groups_by_id,
+                    include_resolved=True,
+                )
                 resolved["groups"][field] = rendered
                 display_fields[field] = rendered["display"]
         creator_id = stream.get("creator_id")
@@ -434,7 +444,12 @@ def get_group_detail(
             if resolve:
                 if groups_by_id is None and _group_setting_has_group_refs(group[field]):
                     groups_by_id = _group_index(groups)
-                rendered = group_setting_display(group[field], users_by_id=users_by_id, groups_by_id=groups_by_id)
+                rendered = group_setting_display(
+                    group[field],
+                    users_by_id=users_by_id,
+                    groups_by_id=groups_by_id,
+                    include_resolved=True,
+                )
                 display_fields[field] = rendered["display"]
                 resolved.setdefault("groups", {})[field] = rendered
             else:

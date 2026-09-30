@@ -3246,7 +3246,10 @@ def test_get_channel_detail_resolves_and_no_resolve_skips_calls() -> None:
     assert detail["derived"] == {"type": "public"}
     assert detail["resolved"]["folder"] == {"id": 10, "name": "Projects"}
     assert detail["resolved"]["creator"]["full_name"] == "Alice Admin"
-    assert detail["resolved"]["groups"]["can_subscribe_group"]["display"] == "Members (id=22)"
+    subscribe_group = detail["resolved"]["groups"]["can_subscribe_group"]
+    assert subscribe_group["display"] == "Members (id=22)"
+    assert subscribe_group["resolved_members"] == []
+    assert subscribe_group["resolved_groups"] == [{"group_id": 22, "name": "Members", "type": "system"}]
     assert detail["annotations"]["can_send_message_group"]["status"] == "not exposed"
 
     client = _detail_client()
@@ -3328,7 +3331,10 @@ def test_channel_detail_bare_group_setting_skips_user_lookup() -> None:
 
     client.call_endpoint.side_effect = call_endpoint
     detail = get_channel_detail(client, name="general")
-    assert detail["resolved"]["groups"]["can_subscribe_group"]["display"] == "Members (id=22)"
+    setting = detail["resolved"]["groups"]["can_subscribe_group"]
+    assert setting["display"] == "Members (id=22)"
+    assert setting["resolved_members"] == []
+    assert setting["resolved_groups"] == [{"group_id": 22, "name": "Members", "type": "system"}]
     client.get_members.assert_not_called()
     assert "can_send_message_group" not in detail["annotations"]
 
