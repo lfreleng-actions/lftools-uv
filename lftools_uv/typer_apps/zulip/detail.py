@@ -96,10 +96,9 @@ def render_user_sections(detail: dict[str, Any], *, resolve: bool) -> None:
         emit_table(rows, headers=("Field ID", "Value", "Rendered Value"))
     if resolve:
         typer.echo("\nGroups")
-        rows = [
-            [group.get("name") or "", group.get("group_id"), group.get("type") or ""]
-            for group in detail.get("resolved", {}).get("groups", [])
-        ]
+        resolved = detail.get("resolved")
+        resolved_groups = resolved.get("groups", []) if isinstance(resolved, dict) else []
+        rows = [[group.get("name") or "", group.get("group_id"), group.get("type") or ""] for group in resolved_groups]
         emit_table(rows, headers=("Name", "Group ID", "Type"))
 
 
@@ -108,6 +107,8 @@ def render_folder_sections(detail: dict[str, Any], *, resolve: bool) -> None:
     if not resolve:
         return
     typer.echo("\nAssigned Channels")
+    resolved = detail.get("resolved")
+    resolved_channels = resolved.get("channels", []) if isinstance(resolved, dict) else []
     rows = [
         [
             channel.get("name") or "",
@@ -115,6 +116,6 @@ def render_folder_sections(detail: dict[str, Any], *, resolve: bool) -> None:
             channel.get("type") or "",
             "yes" if channel.get("is_archived") else "no",
         ]
-        for channel in detail.get("resolved", {}).get("channels", [])
+        for channel in resolved_channels
     ]
     emit_table(rows, headers=("Name", "Channel ID", "Type", "Archived"))
