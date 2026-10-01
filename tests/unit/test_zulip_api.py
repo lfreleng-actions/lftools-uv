@@ -3236,6 +3236,27 @@ def test_show_annotations_and_group_setting_shapes() -> None:
     assert "Administrators" in complex_display["display"]
 
 
+def test_show_annotation_keys_cover_primary_display_fields() -> None:
+    """Each show detail annotates every primary displayed field."""
+    from lftools_uv.api.endpoints.zulip import (
+        get_channel_detail,
+        get_folder_detail,
+        get_group_detail,
+        get_user_detail,
+    )
+
+    details = [
+        get_channel_detail(_detail_client(), name="general"),
+        get_group_detail(_detail_client(), group_name="engineering"),
+        get_user_detail(_detail_client(), "101", mode="id"),
+        get_folder_detail(_detail_client(), "id:10"),
+    ]
+    for detail in details:
+        raw_key = detail["_raw_key"]
+        displayed_fields = set(detail[raw_key]) | set(detail.get("derived", {}))
+        assert displayed_fields <= set(detail["annotations"]), raw_key
+
+
 def test_get_channel_detail_resolves_and_no_resolve_skips_calls() -> None:
     """Channel show keeps raw stream data and honors --no-resolve."""
     from lftools_uv.api.endpoints.zulip import get_channel_detail
@@ -3267,6 +3288,7 @@ def test_get_group_detail_resolves_members_and_subgroups() -> None:
     detail = get_group_detail(client, group_name="engineering")
     assert detail["group"]["members"] == [100]
     assert detail["derived"]["member_count"] == 1
+    assert detail["annotations"]["member_count"] == {"status": "no", "setter": None, "notes": None}
     assert detail["resolved"]["members"][0]["email"] == "alice@example.com"
     assert detail["resolved"]["direct_subgroups"][0]["name"] == "Administrators"
     assert detail["resolved"]["groups"]["can_manage_group"]["display"] == "Administrators (id=20)"

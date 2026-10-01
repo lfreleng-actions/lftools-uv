@@ -94,6 +94,7 @@ GROUP_ANNOTATIONS: dict[str, SettableAnnotation] = {
     "group_id": READ_ONLY,
     "name": SettableAnnotation("not exposed", None, "custom groups only"),
     "display_name": READ_ONLY,
+    "member_count": READ_ONLY,
     "description": SettableAnnotation("not exposed"),
     "is_system_group": READ_ONLY,
     "type": READ_ONLY,
@@ -455,7 +456,7 @@ def get_group_detail(
             else:
                 display_fields[field] = group[field]
 
-    fields = [*list(group.keys()), "display_name", "type"]
+    fields = [*list(group.keys()), "display_name", "type", "member_count"]
     return {
         "group": group,
         "derived": derived,
