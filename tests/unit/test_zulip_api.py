@@ -3412,6 +3412,49 @@ def test_legacy_role_group_refs_are_system_groups() -> None:
     }
 
 
+def test_group_show_includes_deactivated_groups() -> None:
+    """Group show opts into deactivated groups while list keeps defaults."""
+    from lftools_uv.api.endpoints.zulip import get_group_detail, list_groups
+
+    client = mock.MagicMock()
+    client.calls = []
+    client.get_server_settings.return_value = {"result": "success", "zulip_feature_level": 500}
+
+    def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> dict[str, Any]:
+        client.calls.append({"url": url, "method": method, "request": request})
+        if url == "user_groups" and method == "GET":
+            groups = [
+                {
+                    "id": 30,
+                    "name": "engineering",
+                    "description": "Engineering team",
+                    "members": [],
+                    "is_system_group": False,
+                    "deactivated": False,
+                }
+            ]
+            if request == {"include_deactivated_groups": True}:
+                groups.append(
+                    {
+                        "id": 31,
+                        "name": "old-engineering",
+                        "description": "Old Engineering team",
+                        "members": [],
+                        "is_system_group": False,
+                        "deactivated": True,
+                    }
+                )
+            return {"result": "success", "user_groups": groups}
+        raise AssertionError(f"unexpected endpoint: {method} {url}")
+
+    client.call_endpoint.side_effect = call_endpoint
+
+    assert [group["group_id"] for group in list_groups(client)] == [30]
+    detail = get_group_detail(client, group_name="old-engineering", resolve=False)
+    assert detail["group"]["deactivated"] is True
+    assert [call["request"] for call in client.calls] == [None, {"include_deactivated_groups": True}]
+
+
 def test_group_show_name_ambiguity_includes_system_display_collision() -> None:
     """System display names collide with custom group names for show lookup."""
     from lftools_uv.api.endpoints.zulip import get_group_detail

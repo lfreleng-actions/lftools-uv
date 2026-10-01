@@ -406,7 +406,7 @@ def get_group_detail(
     resolve: bool = True,
 ) -> dict[str, Any]:
     """Return complete raw user-group detail plus annotations/resolution."""
-    groups = _fetch_groups(client)
+    groups = _fetch_groups(client, include_deactivated=True)
     group = _resolve_group_by_show_target(groups, group_name=group_name, group_id=group_id)
     display_name = group_display_name(group)
     group_type = "system" if _is_system_group(group) else "custom"

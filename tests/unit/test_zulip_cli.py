@@ -2924,6 +2924,84 @@ def test_group_show_cli_targets_and_ambiguity(monkeypatch: pytest.MonkeyPatch) -
     assert "group_id=1" in (result.stdout + result.stderr)
 
 
+def test_group_show_cli_legacy_role_group_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Group show JSON classifies legacy role-named groups as system."""
+    client = _patch_show_common(monkeypatch)
+    client.get_server_settings.return_value = {"result": "success", "zulip_feature_level": 500}
+
+    def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> dict[str, Any]:
+        assert url == "user_groups"
+        assert method == "GET"
+        assert request == {"include_deactivated_groups": True}
+        return {
+            "result": "success",
+            "user_groups": [
+                {
+                    "id": 20,
+                    "name": "role:administrators",
+                    "description": "Admins",
+                    "members": [],
+                    "direct_subgroup_ids": [],
+                }
+            ],
+        }
+
+    client.call_endpoint.side_effect = call_endpoint
+
+    result = CliRunner().invoke(zulip_app, ["--json", "group", "show", "Administrators", "--no-resolve"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["derived"]["type"] == "system"
+    assert payload["derived"]["member_count"] == 0
+    assert payload["annotations"]["member_count"] == {"status": "no", "setter": None, "notes": None}
+
+
+def test_group_show_cli_renders_deactivated_group(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Group show can render a deactivated group omitted from group list."""
+    client = _patch_show_common(monkeypatch)
+    client.get_server_settings.return_value = {"result": "success", "zulip_feature_level": 500}
+    client.calls = []
+
+    def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> dict[str, Any]:
+        client.calls.append({"url": url, "method": method, "request": request})
+        assert url == "user_groups"
+        assert method == "GET"
+        groups = [
+            {
+                "id": 30,
+                "name": "engineering",
+                "description": "Engineering team",
+                "members": [],
+                "is_system_group": False,
+                "deactivated": False,
+            }
+        ]
+        if request == {"include_deactivated_groups": True}:
+            groups.append(
+                {
+                    "id": 31,
+                    "name": "old-engineering",
+                    "description": "Old Engineering team",
+                    "members": [],
+                    "is_system_group": False,
+                    "deactivated": True,
+                }
+            )
+        return {"result": "success", "user_groups": groups}
+
+    client.call_endpoint.side_effect = call_endpoint
+
+    list_result = CliRunner().invoke(zulip_app, ["--json", "group", "list"])
+    assert list_result.exit_code == 0, list_result.output
+    assert [group["group_id"] for group in json.loads(list_result.stdout)["groups"]] == [30]
+
+    show_result = CliRunner().invoke(zulip_app, ["group", "show", "old-engineering", "--no-resolve"])
+    assert show_result.exit_code == 0, show_result.output
+    assert "deactivated" in show_result.stdout
+    assert "true" in show_result.stdout
+    assert [call["request"] for call in client.calls] == [None, {"include_deactivated_groups": True}]
+
+
 def test_user_show_cli_modes_json_and_no_resolve(monkeypatch: pytest.MonkeyPatch) -> None:
     """User show validates mode flags and forwards JSON/no-resolve."""
     _patch_show_common(monkeypatch)
