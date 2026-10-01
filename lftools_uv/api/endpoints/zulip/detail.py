@@ -358,7 +358,7 @@ def get_channel_detail(
             if any(_group_setting_has_direct_members(stream[field]) for field in group_fields):
                 users_by_id = _user_index(_fetch_users(client))
             if any(_group_setting_has_group_refs(stream[field]) for field in group_fields):
-                groups_by_id = _group_index(_fetch_groups(client))
+                groups_by_id = _group_index(_fetch_groups(client, include_deactivated=True))
             resolved["groups"] = {}
             for field in group_fields:
                 rendered = group_setting_display(

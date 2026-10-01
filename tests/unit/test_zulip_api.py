@@ -3383,6 +3383,7 @@ def test_channel_detail_bare_group_setting_skips_user_lookup() -> None:
     from lftools_uv.api.endpoints.zulip import get_channel_detail
 
     client = mock.MagicMock()
+    client.get_server_settings.return_value = {"result": "success", "zulip_feature_level": 500}
 
     def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> dict[str, Any]:
         if url == "streams" and method == "GET":
@@ -3402,6 +3403,55 @@ def test_channel_detail_bare_group_setting_skips_user_lookup() -> None:
     assert setting["resolved_groups"] == [{"group_id": 22, "name": "Members", "type": "system"}]
     client.get_members.assert_not_called()
     assert "can_send_message_group" not in detail["annotations"]
+
+
+def test_channel_detail_group_settings_include_deactivated_groups() -> None:
+    """Channel permission group resolution includes deactivated groups."""
+    from lftools_uv.api.endpoints.zulip import get_channel_detail
+
+    client = mock.MagicMock()
+    client.calls = []
+    client.get_server_settings.return_value = {"result": "success", "zulip_feature_level": 500}
+
+    def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> dict[str, Any]:
+        client.calls.append({"url": url, "method": method, "request": request})
+        if url == "streams" and method == "GET":
+            return {
+                "result": "success",
+                "streams": [{"stream_id": 1, "name": "general", "can_subscribe_group": 31}],
+            }
+        if url == "user_groups" and method == "GET":
+            groups = [
+                {
+                    "id": 30,
+                    "name": "engineering",
+                    "description": "Engineering team",
+                    "members": [],
+                    "is_system_group": False,
+                    "deactivated": False,
+                }
+            ]
+            if request == {"include_deactivated_groups": True}:
+                groups.append(
+                    {
+                        "id": 31,
+                        "name": "old-engineering",
+                        "description": "Old Engineering team",
+                        "members": [],
+                        "is_system_group": False,
+                        "deactivated": True,
+                    }
+                )
+            return {"result": "success", "user_groups": groups}
+        raise AssertionError(f"unexpected endpoint: {method} {url}")
+
+    client.call_endpoint.side_effect = call_endpoint
+
+    detail = get_channel_detail(client, name="general")
+    setting = detail["resolved"]["groups"]["can_subscribe_group"]
+    assert setting["display"] == "old-engineering (id=31)"
+    assert setting["resolved_groups"] == [{"group_id": 31, "name": "old-engineering", "type": "custom"}]
+    assert any(call["request"] == {"include_deactivated_groups": True} for call in client.calls)
 
 
 def test_group_detail_permission_direct_members_resolve_without_members() -> None:
