@@ -1,5 +1,45 @@
 <!--
 # Sync Impact Report
+**Version Change**: 1.1.0 → 2.0.0
+**Change Type**: MAJOR - Governance change: constitutional authority now
+ranks below the lfreleng-actions organisation guidelines
+
+## Modified Principles
+- UPDATED: Governance > Constitutional Authority - the constitution no
+  longer claims to supersede all guidance; it ranks below the
+  organisation guidelines
+  (https://github.com/lfreleng-actions/.github/blob/main/AGENTS.md),
+  matching their section 3 precedence and this repository's AGENTS.md
+- UPDATED: Commit Message Standards - commits are signed as well as
+  signed off (`git commit -S -s`); the organisation requires signatures
+  and one unsigned commit blocks a merge
+- UPDATED: Commit Message Standards - the Claude co-author address is
+  `noreply@anthropic.com`; `claude@anthropic.com` is obsolete
+- UPDATED: Development Standards > Git Workflow Requirements - signed
+  commits require `-S` in addition to the DCO sign-off
+
+## Added Sections
+- None
+
+## Removed Sections
+- None
+
+## Templates Review Status
+- ✅ `.specify/templates/plan-template.md` - reviewed, no conflicts
+- ✅ `.specify/templates/spec-template.md` - reviewed, no conflicts
+- ✅ `.specify/templates/tasks-template.md` - reviewed, no conflicts
+- ✅ `.specify/templates/constitution-template.md` - reviewed; its
+      "supersedes all other practices" line is an upstream example
+      comment, not a rule, and stays unchanged
+- ✅ `.specify/templates/checklist-template.md` - reviewed, no conflicts
+- ✅ `.specify/templates/commands/*.md` - not present, no updates needed
+
+## Follow-up TODOs
+- None
+-->
+
+<!--
+# Sync Impact Report (previous)
 **Version Change**: 1.0.0 → 1.1.0
 **Change Type**: MINOR - New section added (Prohibited Post-Failure Git Operations)
 
@@ -162,20 +202,20 @@ Every agent-authored commit MUST include:
 
    ```text
    Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
-   Co-authored-by: Claude <claude@anthropic.com>
+   Co-authored-by: Claude <noreply@anthropic.com>
    ```
 
    (Use appropriate agent name and email address)
 
-2. **DCO Sign-off line**: Added via `git commit -s`
+2. **DCO Sign-off line**: Added via `git commit -S -s`
 
    ```text
    Signed-off-by: Human Author <human@email>
    ```
 
-**Execution**: Use `git commit -s` to automatically add DCO sign-off.
-The Co-authored-by trailer goes in the commit message body;
-`git commit -s` appends Signed-off-by last.
+**Execution**: Use `git commit -S -s` to sign the commit and add the
+DCO sign-off. The Co-authored-by trailer goes in the commit message
+body; `-s` appends Signed-off-by last.
 
 **Rationale**: Transparency in authorship is critical for:
 
@@ -236,7 +276,8 @@ to every Linux Foundation project that uses it for CI/CD operations.
   `rc`, and `production` are PROHIBITED (enforced via pre-commit hook).
 - **Conventional Commits**: REQUIRED for all commits (enforced via
   gitlint).
-- **Signed Commits**: DCO sign-off REQUIRED via `git commit -s`.
+- **Signed Commits**: Commits MUST be signed and carry a DCO sign-off:
+  `git commit -S -s`. One unsigned commit blocks the merge.
 - **Pull Requests**: All changes MUST go through PR review before
   merging to main.
 
@@ -284,9 +325,13 @@ fresh commit attempt is always the safe recovery path.
 
 ### Constitutional Authority
 
-This constitution supersedes all other development practices and
-guidelines. When conflicts arise, constitutional principles take
-precedence.
+This constitution governs development in this repository, below the
+lfreleng-actions organisation guidelines
+(<https://github.com/lfreleng-actions/.github/blob/main/AGENTS.md>),
+which take precedence over it. Within that limit, constitutional
+principles take precedence over this repository's `AGENTS.md` and any
+other local practice, and may add requirements or narrow choices the
+organisation guidelines leave open.
 
 ### Amendment Process
 
@@ -333,4 +378,4 @@ constitutional principles.
 
 ---
 
-**Version**: 1.1.0 | **Ratified**: 2026-04-28 | **Last Amended**: 2026-04-28
+**Version**: 2.0.0 | **Ratified**: 2026-04-28 | **Last Amended**: 2026-10-01
