@@ -56,6 +56,12 @@ def _build_system_role_display_names() -> dict[str, str]:
 SYSTEM_ROLE_DISPLAY_NAMES: dict[str, str] = _build_system_role_display_names()
 
 
+def _is_system_group(group: dict[str, Any]) -> bool:
+    """Return True for explicit and legacy Zulip system group objects."""
+    name = str(group.get("name", ""))
+    return bool(group.get("is_system_group", False)) or name.startswith("role:")
+
+
 def _fetch_groups(client: Any) -> list[dict[str, Any]]:
     """Return the raw user_groups listing from the Zulip server."""
     try:
@@ -203,7 +209,7 @@ def _normalize_group(raw: dict[str, Any]) -> dict[str, Any]:
     is_system_raw = raw.get("is_system_group", False)
     if not isinstance(is_system_raw, bool):
         raise ZulipAPIError(f"Group object has non-boolean 'is_system_group': {raw!r}")
-    if is_system_raw:
+    if _is_system_group(raw):
         display = SYSTEM_ROLE_DISPLAY_NAMES.get(api_name, api_name)
     else:
         display = api_name
@@ -213,7 +219,7 @@ def _normalize_group(raw: dict[str, Any]) -> dict[str, Any]:
         "name": display,
         "description": "" if description is None else str(description),
         "member_count": len(members),
-        "type": "system" if is_system_raw else "custom",
+        "type": "system" if _is_system_group(raw) else "custom",
     }
 
 

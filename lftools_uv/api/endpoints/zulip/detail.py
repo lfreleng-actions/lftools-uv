@@ -18,7 +18,7 @@ from .channels import _fetch_streams, resolve_channel
 from .errors import ZulipAmbiguityError, ZulipNotFoundError, ZulipValidationError
 from .features import FEATURE_LEVELS, check_feature_level
 from .folders import _fetch_channel_folders, _resolve_single_channel_folder_token
-from .groups import SYSTEM_ROLE_DISPLAY_NAMES, _fetch_groups
+from .groups import SYSTEM_ROLE_DISPLAY_NAMES, _fetch_groups, _is_system_group
 from .users import IdMode, _fetch_users, _resolve_single_user
 
 SettableStatus = Literal["via --flag", "via command", "not exposed", "no"]
@@ -193,7 +193,7 @@ def user_ref(user: dict[str, Any] | None, user_id: int | None = None) -> dict[st
 def group_display_name(group: dict[str, Any]) -> str:
     """Return the human display name for a raw Zulip group."""
     name = str(group.get("name", ""))
-    if group.get("is_system_group", False) or name.startswith("role:"):
+    if _is_system_group(group):
         return SYSTEM_ROLE_DISPLAY_NAMES.get(name, name)
     return name
 
@@ -205,7 +205,7 @@ def group_ref(group: dict[str, Any] | None, group_id: int | None = None) -> dict
             return None
         return {"group_id": group_id, "name": None, "type": None}
     raw_id = group.get("id", group.get("group_id", group_id))
-    group_type = "system" if group.get("is_system_group", False) else "custom"
+    group_type = "system" if _is_system_group(group) else "custom"
     return {"group_id": raw_id, "name": group_display_name(group), "type": group_type}
 
 
@@ -408,7 +408,7 @@ def get_group_detail(
     groups = _fetch_groups(client)
     group = _resolve_group_by_show_target(groups, group_name=group_name, group_id=group_id)
     display_name = group_display_name(group)
-    group_type = "system" if group.get("is_system_group", False) else "custom"
+    group_type = "system" if _is_system_group(group) else "custom"
     members = group.get("members", []) if isinstance(group.get("members", []), list) else []
     derived = {"display_name": display_name, "type": group_type, "member_count": len(members)}
     resolved: dict[str, Any] = {}

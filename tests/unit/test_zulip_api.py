@@ -3379,6 +3379,17 @@ def test_show_no_resolve_keeps_group_setting_structures_raw() -> None:
     assert group_detail["_display_fields"]["can_manage_group"] == {"direct_members": [], "direct_subgroups": [20]}
 
 
+def test_legacy_role_group_refs_are_system_groups() -> None:
+    """Legacy role-named groups are system groups without the explicit flag."""
+    from lftools_uv.api.endpoints.zulip.detail import group_ref
+
+    assert group_ref({"id": 20, "name": "role:administrators"}) == {
+        "group_id": 20,
+        "name": "Administrators",
+        "type": "system",
+    }
+
+
 def test_group_show_name_ambiguity_includes_system_display_collision() -> None:
     """System display names collide with custom group names for show lookup."""
     from lftools_uv.api.endpoints.zulip import get_group_detail
