@@ -18,12 +18,48 @@ import typer
 from lftools_uv.api.endpoints.zulip import ZulipError
 from lftools_uv.typer_apps import zulip as zulip_cli
 from lftools_uv.typer_apps.zulip.apps import folder_app
+from lftools_uv.typer_apps.zulip.detail import render_detail_fields, render_folder_sections
 from lftools_uv.typer_apps.zulip.helpers import (
     emit_error,
     emit_json,
     emit_table,
     handle_zulip_error,
 )
+
+
+@folder_app.command("show")
+def folder_show(
+    ctx: typer.Context,
+    folder: str | None = typer.Argument(None, help="Folder name or id:NUM. Bare numeric values are names."),
+    no_resolve: bool = typer.Option(
+        False,
+        "--no-resolve",
+        help="Skip extra lookup calls and render raw IDs where possible. Target lookup still runs as needed.",
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit machine-readable JSON instead of a table.",
+        hidden=True,
+    ),
+) -> None:
+    """Show complete details for one channel folder."""
+    if folder is None:
+        emit_error("FOLDER is required")
+        raise typer.Exit(code=1)
+    options = {**(ctx.obj or {})}
+    if json_output:
+        options["json_output"] = True
+    try:
+        client = zulip_cli.get_client(zuliprc=options.get("zuliprc"))
+        detail = zulip_cli.get_folder_detail(client, folder, resolve=not no_resolve)
+    except ZulipError as exc:
+        raise handle_zulip_error(exc) from exc
+    if options.get("json_output"):
+        emit_json(zulip_cli.public_detail_payload(detail))
+        return
+    render_detail_fields(detail, "folder")
+    render_folder_sections(detail, resolve=not no_resolve)
 
 
 @folder_app.command("list")

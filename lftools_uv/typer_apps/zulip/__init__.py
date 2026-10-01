@@ -41,14 +41,19 @@ from lftools_uv.api.endpoints.zulip import (
     archive_channel,
     archive_channel_folder,
     create_channel_folder,
+    get_channel_detail,
     get_client,
+    get_folder_detail,
+    get_group_detail,
     get_topic_policy,
+    get_user_detail,
     list_channel_folders,
     list_channels,
     list_groups,
     list_subscribers,
     list_users,
     plan_folder_move,
+    public_detail_payload,
     reorder_channel_folders,
     resolve_channel,
     resolve_channel_folder_reference,
@@ -88,7 +93,7 @@ from lftools_uv.typer_apps.zulip.helpers import (
 # isort: off
 # Import order fixes the order commands are registered in, and therefore
 # the order they are listed in ``--help``. Keep it stable.
-from lftools_uv.typer_apps.zulip.channel_read import channel_list, channel_subscribers
+from lftools_uv.typer_apps.zulip.channel_read import channel_list, channel_show, channel_subscribers
 from lftools_uv.typer_apps.zulip.channel_create import channel_create
 from lftools_uv.typer_apps.zulip.channel_subscribe import channel_subscribe
 from lftools_uv.typer_apps.zulip.channel_unsubscribe import channel_unsubscribe
@@ -100,12 +105,13 @@ from lftools_uv.typer_apps.zulip.folders import (
     folder_archive,
     folder_create,
     folder_list,
+    folder_show,
     folder_move,
     folder_unarchive,
     folder_update,
 )
-from lftools_uv.typer_apps.zulip.users import user_list
-from lftools_uv.typer_apps.zulip.groups import group_list
+from lftools_uv.typer_apps.zulip.users import user_list, user_show
+from lftools_uv.typer_apps.zulip.groups import group_list, group_show
 
 # isort: on
 
@@ -153,6 +159,15 @@ __all__ = [
     "list_groups",
     "list_subscribers",
     "list_users",
+    "channel_show",
+    "folder_show",
+    "get_channel_detail",
+    "get_folder_detail",
+    "get_group_detail",
+    "get_user_detail",
+    "group_show",
+    "public_detail_payload",
+    "user_show",
     "log",
     "mutation_result",
     "plan_folder_move",

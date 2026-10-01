@@ -38,6 +38,10 @@ from .errors import ZulipAPIError, ZulipFeatureLevelError
 #: * Feature level 59 — stream reactivation via stream update API.
 #: * Feature level 389 — channel folders.
 #: * Feature level 414 — channel folder ordering.
+#: * Feature level 290 — deactivated user groups and the original
+#:   ``allow_deactivated`` request parameter.
+#: * Feature level 294 — ``allow_deactivated`` renamed to
+#:   ``include_deactivated_groups``.
 FEATURE_LEVELS: dict[str, int] = {
     "web-public": 12,
     "can-subscribe-group": 357,
@@ -46,6 +50,8 @@ FEATURE_LEVELS: dict[str, int] = {
     "unarchive": 59,
     "channel-folders": 389,
     "channel-folders-order": 414,
+    "deactivated-groups": 290,
+    "include-deactivated-groups": 294,
 }
 
 

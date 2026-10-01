@@ -95,7 +95,7 @@ zulip_app.add_typer(user_app, name="user")
 
 group_app = typer.Typer(
     name="group",
-    help="List Zulip user groups.",
+    help="Inspect Zulip user groups.",
     no_args_is_help=True,
 )
 zulip_app.add_typer(group_app, name="group")

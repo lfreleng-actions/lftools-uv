@@ -111,6 +111,7 @@ Represents a raw Zulip user-group object plus member and permission displays.
 | `description` | `str` | Human description | not exposed |
 | `is_system_group` | `bool` | Built-in role group marker | no |
 | `type` | `str` | Derived `system` or `custom` | no |
+| `member_count` | `int` | Derived count of direct members | no |
 | `deactivated` | `bool` | Group deactivation status | not exposed |
 | `date_created` | `int \| null` | Creation timestamp | no |
 | `creator_id` | `int \| null` | Creator user ID | no |

@@ -23,10 +23,10 @@ from .errors import ZulipAmbiguityError, ZulipAPIError, ZulipNotFoundError, Zuli
 IdMode = Literal["email", "id", "name"]
 
 
-def _fetch_users(client: Any) -> list[dict[str, Any]]:
+def _fetch_users(client: Any, *, include_custom_profile_fields: bool = False) -> list[dict[str, Any]]:
     """Return the raw user listing from the Zulip server."""
     try:
-        response = client.get_members({"include_custom_profile_fields": False})
+        response = client.get_members({"include_custom_profile_fields": include_custom_profile_fields})
     except Exception as exc:  # pragma: no cover - network errors
         raise ZulipAPIError(f"Failed to list users: {exc}") from exc
     if not isinstance(response, dict) or response.get("result") != "success":

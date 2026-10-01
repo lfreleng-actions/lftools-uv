@@ -2831,3 +2831,210 @@ def test_channel_topic_policy_write_json(monkeypatch: pytest.MonkeyPatch) -> Non
         "operation": "topic-policy",
         "topic_policy": "deny",
     }
+
+
+# ---------------------------------------------------------------------------
+# Zulip show CLI commands
+# ---------------------------------------------------------------------------
+
+
+def _show_detail(raw_key: str, raw: dict[str, Any], *, derived: dict[str, Any] | None = None) -> dict[str, Any]:
+    fields = [*(derived or {}).keys(), *raw.keys()]
+    return {
+        raw_key: raw,
+        "derived": derived or {},
+        "resolved": {},
+        "annotations": {field: {"status": "no", "setter": None, "notes": None} for field in fields},
+        "_display_fields": {},
+        "_raw_key": raw_key,
+    }
+
+
+def _patch_show_common(monkeypatch: pytest.MonkeyPatch) -> mock.MagicMock:
+    client = mock.MagicMock()
+    monkeypatch.setattr(zulip_mod, "get_client", lambda **_kw: client)
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
+    return client
+
+
+def test_channel_show_cli_table_json_and_no_resolve(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Channel show exposes table/JSON output and forwards --no-resolve."""
+    _patch_show_common(monkeypatch)
+    detail = _show_detail(
+        "channel",
+        {"stream_id": 42, "name": "general", "can_send_message_group": 20},
+        derived={"type": "public"},
+    )
+    detail["annotations"]["name"] = {"status": "via --flag", "setter": "--name", "notes": None}
+    show_mock = mock.MagicMock(return_value=detail)
+    monkeypatch.setattr(zulip_mod, "get_channel_detail", show_mock)
+    runner = CliRunner()
+
+    result = runner.invoke(zulip_app, ["channel", "show", "general"])
+    assert result.exit_code == 0, result.output
+    assert "Field" in result.stdout
+    assert "general" in result.stdout
+    assert "via --flag" in result.stdout
+    assert show_mock.call_args.kwargs["resolve"] is True
+
+    result = runner.invoke(zulip_app, ["--json", "channel", "show", "general", "--no-resolve"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert set(payload) == {"channel", "derived", "resolved", "annotations"}
+    assert payload["channel"]["stream_id"] == 42
+    assert show_mock.call_args.kwargs["resolve"] is False
+
+
+def test_channel_show_cli_target_validation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Channel show enforces exactly one target and numeric --channel-id."""
+    _patch_show_common(monkeypatch)
+    monkeypatch.setattr(zulip_mod, "get_channel_detail", mock.MagicMock(return_value=_show_detail("channel", {})))
+    runner = CliRunner()
+    assert runner.invoke(zulip_app, ["channel", "show"]).exit_code == 1
+    both = runner.invoke(zulip_app, ["channel", "show", "general", "--channel-id", "42"])
+    assert both.exit_code == 1
+    bad_id = runner.invoke(zulip_app, ["channel", "show", "--channel-id", "abc"])
+    assert bad_id.exit_code == 1
+    assert "numeric channel ID" in (bad_id.stdout + bad_id.stderr)
+
+
+def test_group_show_cli_targets_and_ambiguity(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Group show accepts positional names and prints ambiguity matches."""
+    _patch_show_common(monkeypatch)
+    detail = _show_detail("group", {"id": 30, "name": "engineering", "members": [100]}, derived={"type": "custom"})
+    detail["resolved"] = {"members": [{"user_id": 100, "full_name": "Alice", "email": "a@example.com"}]}
+    show_mock = mock.MagicMock(return_value=detail)
+    monkeypatch.setattr(zulip_mod, "get_group_detail", show_mock)
+    runner = CliRunner()
+
+    result = runner.invoke(zulip_app, ["group", "show", "engineering"])
+    assert result.exit_code == 0, result.output
+    assert "Members" in result.stdout
+    assert show_mock.call_args.kwargs["group_name"] == "engineering"
+
+    result = runner.invoke(zulip_app, ["group", "show", "--group-id", "abc"])
+    assert result.exit_code == 1
+    assert "--group-id must be a numeric group ID" in (result.stdout + result.stderr)
+
+    show_mock.side_effect = ZulipAmbiguityError(
+        "Group name 'design' matched 2 groups", [{"group_id": 1, "name": "design"}]
+    )
+    result = runner.invoke(zulip_app, ["group", "show", "design"])
+    assert result.exit_code == 1
+    assert "group_id=1" in (result.stdout + result.stderr)
+
+
+def test_group_show_cli_legacy_role_group_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Group show JSON classifies legacy role-named groups as system."""
+    client = _patch_show_common(monkeypatch)
+    client.get_server_settings.return_value = {"result": "success", "zulip_feature_level": 500}
+
+    def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> dict[str, Any]:
+        assert url == "user_groups"
+        assert method == "GET"
+        assert request == {"include_deactivated_groups": True}
+        return {
+            "result": "success",
+            "user_groups": [
+                {
+                    "id": 20,
+                    "name": "role:administrators",
+                    "description": "Admins",
+                    "members": [],
+                    "direct_subgroup_ids": [],
+                }
+            ],
+        }
+
+    client.call_endpoint.side_effect = call_endpoint
+
+    result = CliRunner().invoke(zulip_app, ["--json", "group", "show", "Administrators", "--no-resolve"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["derived"]["type"] == "system"
+    assert payload["derived"]["member_count"] == 0
+    assert payload["annotations"]["member_count"] == {"status": "no", "setter": None, "notes": None}
+
+
+def test_group_show_cli_renders_deactivated_group(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Group show can render a deactivated group omitted from group list."""
+    client = _patch_show_common(monkeypatch)
+    client.get_server_settings.return_value = {"result": "success", "zulip_feature_level": 500}
+    client.calls = []
+
+    def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> dict[str, Any]:
+        client.calls.append({"url": url, "method": method, "request": request})
+        assert url == "user_groups"
+        assert method == "GET"
+        groups = [
+            {
+                "id": 30,
+                "name": "engineering",
+                "description": "Engineering team",
+                "members": [],
+                "is_system_group": False,
+                "deactivated": False,
+            }
+        ]
+        if request == {"include_deactivated_groups": True}:
+            groups.append(
+                {
+                    "id": 31,
+                    "name": "old-engineering",
+                    "description": "Old Engineering team",
+                    "members": [],
+                    "is_system_group": False,
+                    "deactivated": True,
+                }
+            )
+        return {"result": "success", "user_groups": groups}
+
+    client.call_endpoint.side_effect = call_endpoint
+
+    list_result = CliRunner().invoke(zulip_app, ["--json", "group", "list"])
+    assert list_result.exit_code == 0, list_result.output
+    assert [group["group_id"] for group in json.loads(list_result.stdout)["groups"]] == [30]
+
+    show_result = CliRunner().invoke(zulip_app, ["group", "show", "old-engineering", "--no-resolve"])
+    assert show_result.exit_code == 0, show_result.output
+    assert "deactivated" in show_result.stdout
+    assert "true" in show_result.stdout
+    assert [call["request"] for call in client.calls] == [None, {"include_deactivated_groups": True}]
+
+
+def test_user_show_cli_modes_json_and_no_resolve(monkeypatch: pytest.MonkeyPatch) -> None:
+    """User show validates mode flags and forwards JSON/no-resolve."""
+    _patch_show_common(monkeypatch)
+    detail = _show_detail(
+        "user",
+        {"user_id": 100, "full_name": "Alice Admin", "role": 200},
+        derived={"role_label": "administrator"},
+    )
+    show_mock = mock.MagicMock(return_value=detail)
+    monkeypatch.setattr(zulip_mod, "get_user_detail", show_mock)
+    runner = CliRunner()
+
+    result = runner.invoke(zulip_app, ["--json", "user", "show", "100", "--by-id", "--no-resolve"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout)["derived"]["role_label"] == "administrator"
+    assert show_mock.call_args.args[1] == "100"
+    assert show_mock.call_args.kwargs == {"mode": "id", "resolve": False}
+
+    assert runner.invoke(zulip_app, ["user", "show", "Alice"]).exit_code == 1
+    assert runner.invoke(zulip_app, ["user", "show", "Alice", "--by-id", "--by-name"]).exit_code == 1
+    missing = runner.invoke(zulip_app, ["user", "show", "--by-id"])
+    assert missing.exit_code == 1
+    assert "USER is required" in (missing.stdout + missing.stderr)
+
+    show_mock.side_effect = ZulipAmbiguityError(
+        "User name 'Alice' matched 2 users; use --by-email or --by-id to disambiguate",
+        [
+            {"user_id": 100, "full_name": "Alice", "email": "alice@example.com"},
+            {"user_id": 101, "full_name": "Alice", "email": "alice2@example.com"},
+        ],
+    )
+    ambiguous = runner.invoke(zulip_app, ["user", "show", "Alice", "--by-name"])
+    assert ambiguous.exit_code == 1
+    combined = ambiguous.stdout + ambiguous.stderr
+    assert "user_id=100" in combined
+    assert "alice2@example.com" in combined
