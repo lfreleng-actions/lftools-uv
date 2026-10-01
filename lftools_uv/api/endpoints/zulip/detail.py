@@ -483,7 +483,7 @@ def get_user_detail(client: Any, ident: str, *, mode: IdMode, resolve: bool = Tr
             display_fields["bot_owner_id"] = _display_user_id(bot_owner_id, users_by_id)
         else:
             resolved["bot_owner"] = None
-        groups = _fetch_groups(client)
+        groups = _fetch_groups(client, include_deactivated=True)
         memberships = []
         if isinstance(user_id, int):
             for group in groups:

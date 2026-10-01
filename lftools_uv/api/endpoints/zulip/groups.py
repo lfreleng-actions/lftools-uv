@@ -65,10 +65,7 @@ def _is_system_group(group: dict[str, Any]) -> bool:
 
 def _deactivated_groups_request(client: Any) -> dict[str, bool] | None:
     """Return the compatible request parameter for deactivated groups."""
-    try:
-        feature_level = get_server_feature_level(client)
-    except ZulipAPIError:
-        return None
+    feature_level = get_server_feature_level(client)
     if feature_level >= FEATURE_LEVELS["include-deactivated-groups"]:
         return {"include_deactivated_groups": True}
     if feature_level >= FEATURE_LEVELS["deactivated-groups"]:

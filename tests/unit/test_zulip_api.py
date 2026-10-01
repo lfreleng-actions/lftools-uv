@@ -3316,6 +3316,49 @@ def test_get_user_detail_roles_membership_and_no_resolve() -> None:
     client.get_members.assert_called_once_with({"include_custom_profile_fields": True})
 
 
+def test_user_show_membership_includes_deactivated_groups() -> None:
+    """User show membership audits include deactivated containing groups."""
+    from lftools_uv.api.endpoints.zulip import get_user_detail
+
+    client = mock.MagicMock()
+    client.calls = []
+    client.get_server_settings.return_value = {"result": "success", "zulip_feature_level": 500}
+    client.get_members.return_value = {"result": "success", "members": DETAIL_USERS}
+
+    def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> dict[str, Any]:
+        client.calls.append({"url": url, "method": method, "request": request})
+        if url == "user_groups" and method == "GET":
+            groups = [
+                {
+                    "id": 30,
+                    "name": "engineering",
+                    "description": "Engineering team",
+                    "members": [100],
+                    "is_system_group": False,
+                    "deactivated": False,
+                }
+            ]
+            if request == {"include_deactivated_groups": True}:
+                groups.append(
+                    {
+                        "id": 31,
+                        "name": "old-engineering",
+                        "description": "Old Engineering team",
+                        "members": [100],
+                        "is_system_group": False,
+                        "deactivated": True,
+                    }
+                )
+            return {"result": "success", "user_groups": groups}
+        raise AssertionError(f"unexpected endpoint: {method} {url}")
+
+    client.call_endpoint.side_effect = call_endpoint
+
+    detail = get_user_detail(client, "100", mode="id")
+    assert {group["name"] for group in detail["resolved"]["groups"]} == {"engineering", "old-engineering"}
+    assert [call["request"] for call in client.calls] == [{"include_deactivated_groups": True}]
+
+
 def test_get_folder_detail_includes_archived_lookup_and_channels() -> None:
     """Folder show resolves id:N targets and assigned channels by default."""
     from lftools_uv.api.endpoints.zulip import get_folder_detail
@@ -3366,6 +3409,7 @@ def test_group_detail_permission_direct_members_resolve_without_members() -> Non
     from lftools_uv.api.endpoints.zulip import get_group_detail
 
     client = mock.MagicMock()
+    client.get_server_settings.return_value = {"result": "success", "zulip_feature_level": 500}
     client.get_members.return_value = {"result": "success", "members": DETAIL_USERS}
     client.call_endpoint.return_value = {
         "result": "success",
@@ -3455,11 +3499,24 @@ def test_group_show_includes_deactivated_groups() -> None:
     assert [call["request"] for call in client.calls] == [None, {"include_deactivated_groups": True}]
 
 
+def test_group_show_propagates_feature_lookup_errors() -> None:
+    """Group show does not hide server-settings failures as no support."""
+    from lftools_uv.api.endpoints.zulip import get_group_detail
+
+    client = mock.MagicMock()
+    client.get_server_settings.return_value = {"result": "error", "msg": "boom"}
+
+    with pytest.raises(ZulipAPIError, match="Unexpected server_settings response"):
+        get_group_detail(client, group_name="old-engineering", resolve=False)
+    client.call_endpoint.assert_not_called()
+
+
 def test_group_show_name_ambiguity_includes_system_display_collision() -> None:
     """System display names collide with custom group names for show lookup."""
     from lftools_uv.api.endpoints.zulip import get_group_detail
 
     client = mock.MagicMock()
+    client.get_server_settings.return_value = {"result": "success", "zulip_feature_level": 500}
     client.call_endpoint.return_value = {
         "result": "success",
         "user_groups": [
