@@ -141,5 +141,5 @@ Implementation PRs should run focused Zulip tests first:
 uv run pytest tests/unit/test_zulip_api.py tests/unit/test_zulip_cli.py
 uv run ruff check .
 uv run mypy lftools_uv
-SKIP=basedpyright pre-commit run --all-files
+prek run --files <changed-file> [<changed-file> ...]
 ```

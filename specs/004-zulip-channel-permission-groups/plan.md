@@ -140,8 +140,9 @@ foundation so later PRs only add their own flag-specific plumbing.
 - Add API tests for create raw group-setting payloads and update
   `{"new": ...}` payloads for each field.
 - Add API tests for feature-level gates below FL 342, FL 325, and FL 333.
-- Add CLI tests verifying each option forwards its raw string to the API layer
-  and that help includes `id:NUM` syntax.
+- Add CLI tests verifying create options pass resolved `GroupSettingValue`
+  values to the API layer, update options forward raw group specifications for
+  API-layer resolution, and help includes `id:NUM` syntax.
 - Add tests that group ambiguity and numeric-not-found hints are reused by each
   flag path.
 - Add tests that `CHANNEL_ANNOTATIONS` reports each field as `via --flag` with
@@ -149,7 +150,7 @@ foundation so later PRs only add their own flag-specific plumbing.
 - Run focused tests during implementation:
   `uv run pytest tests/unit/test_zulip_api.py tests/unit/test_zulip_cli.py`.
 - Run `uv run ruff check .`, `uv run mypy lftools_uv`, and
-  `SKIP=basedpyright pre-commit run --all-files` before implementation PRs.
+  `prek run --files <changed files>` before implementation PRs.
 
 ## Cross-Feature Dependency
 
