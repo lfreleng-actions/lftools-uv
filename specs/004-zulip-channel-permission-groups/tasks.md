@@ -138,7 +138,7 @@ stacked PR lands.
 
 - [ ] T044 [P4] For each implementation PR, update any user-facing Zulip docs or quickstart references touched by that PR without adding internal spec/task IDs to help text (FR-072, FR-075)
 - [ ] T045 [P4] For each implementation PR, reconcile `specs/004-zulip-channel-permission-groups/` only if implementation discovers a documented API fact that changes this spec; cite official Zulip docs in the change (FR-075)
-- [ ] T046 [P4] For each implementation PR, run `SKIP=basedpyright pre-commit run --all-files` and fix reported issues without bypassing hooks (FR-074)
+- [ ] T046 [P4] For each implementation PR, run `prek run --files <changed-file> [<changed-file> ...]` with that PR's changed paths and fix reported issues without bypassing hooks (FR-074)
 
 ---
 
