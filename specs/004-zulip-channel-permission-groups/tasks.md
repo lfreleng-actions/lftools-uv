@@ -45,7 +45,7 @@ P1. P2 and P3 depend on this foundation.
 - [ ] T003 [P0] Add a shared API helper for resolving optional permission group specs with `resolve_groups()` and returning `GroupSettingValue | None`, preserving existing `id:NUM`, ambiguity, and numeric-not-found behavior (FR-064)
 - [ ] T004 [P0] Extend create/update validation paths to recognize the three new optional settings for at-least-one-setting checks without changing behavior when none are supplied (FR-071)
 - [ ] T005 [P] [P0] Add API tests in `tests/unit/test_zulip_api.py` that the new feature-level constants exist with values 342, 325, and 333 (FR-067)
-- [ ] T006 [P] [P0] Add unit tests for the shared resolver/helper using a single group, multiple groups, `id:NUM`, ambiguous names, empty specs, and bare numeric not-found hints (FR-064)
+- [ ] T006 [P] [P0] Add unit tests for the shared resolver/helper using a single group, multiple groups, `id:NUM`, ambiguous names, empty specs, bare numeric not-found hints, and `none` treated as an ordinary group name instead of a clear/reset sentinel (FR-064, FR-070)
 
 **Checkpoint**: Shared feature constants and resolver plumbing are ready for all
 three flag PRs.
