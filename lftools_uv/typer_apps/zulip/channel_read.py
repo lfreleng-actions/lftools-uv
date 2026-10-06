@@ -18,6 +18,7 @@ import typer
 from lftools_uv.api.endpoints.zulip import ZulipError
 from lftools_uv.typer_apps import zulip as zulip_cli
 from lftools_uv.typer_apps.zulip.apps import channel_app
+from lftools_uv.typer_apps.zulip.detail import render_detail_fields
 from lftools_uv.typer_apps.zulip.helpers import (
     _resolve_channel_target,
     emit_error,
@@ -140,3 +141,66 @@ def channel_subscribers(
 
     rows = [(sub.get("full_name") or "", sub.get("email") or "", sub.get("user_id")) for sub in subscribers]
     emit_table(rows, headers=("Full Name", "Email", "User ID"))
+
+
+@channel_app.command("show")
+def channel_show(
+    ctx: typer.Context,
+    channel: str | None = typer.Argument(
+        None,
+        help="Channel name, even if numeric-looking. Mutually exclusive with --channel-id.",
+    ),
+    channel_id: str | None = typer.Option(
+        None,
+        "--channel-id",
+        help="Target channel by numeric ID instead of name.",
+    ),
+    include_archived: bool = typer.Option(
+        False,
+        "--include-archived",
+        help="Search archived channels in addition to active ones.",
+    ),
+    no_resolve: bool = typer.Option(
+        False,
+        "--no-resolve",
+        help="Skip extra lookup calls and render raw IDs where possible. Target lookup still runs as needed.",
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit machine-readable JSON instead of a table.",
+        hidden=True,
+    ),
+) -> None:
+    """Show complete details for one channel."""
+    if channel is None and channel_id is None:
+        emit_error("Exactly one of channel or --channel-id is required")
+        raise typer.Exit(code=1)
+    if channel is not None and channel_id is not None:
+        emit_error("Exactly one of channel or --channel-id is required")
+        raise typer.Exit(code=1)
+    parsed_channel_id: int | None = None
+    if channel_id is not None:
+        try:
+            parsed_channel_id = int(channel_id)
+        except ValueError:
+            emit_error("--channel-id must be a numeric channel ID.")
+            raise typer.Exit(code=1) from None
+    options = {**(ctx.obj or {})}
+    if json_output:
+        options["json_output"] = True
+    try:
+        client = zulip_cli.get_client(zuliprc=options.get("zuliprc"))
+        detail = zulip_cli.get_channel_detail(
+            client,
+            name=channel,
+            channel_id=parsed_channel_id,
+            include_archived=include_archived,
+            resolve=not no_resolve,
+        )
+    except ZulipError as exc:
+        raise handle_zulip_error(exc) from exc
+    if options.get("json_output"):
+        emit_json(zulip_cli.public_detail_payload(detail))
+        return
+    render_detail_fields(detail, "channel")

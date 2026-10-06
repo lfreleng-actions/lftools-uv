@@ -383,3 +383,63 @@ def test_folder_help_output_has_no_spec_ids(monkeypatch: pytest.MonkeyPatch) -> 
         assert "US#" not in cleaned
         assert "T###" not in cleaned
         assert "FR-###" not in cleaned
+
+
+# Folder show command
+
+
+def test_folder_show_cli_table_json_and_no_resolve(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Folder show renders detail output and forwards --no-resolve."""
+    _patch_cli_client(monkeypatch, mock.MagicMock())
+    detail = {
+        "folder": {"id": 10, "name": "Projects", "description": "Project channels"},
+        "resolved": {"channels": [{"stream_id": 42, "name": "general", "type": "public", "is_archived": False}]},
+        "annotations": {
+            "id": {"status": "no", "setter": None, "notes": None},
+            "name": {"status": "via --flag", "setter": "--name", "notes": None},
+            "description": {"status": "via --flag", "setter": "--description", "notes": None},
+        },
+        "_display_fields": {},
+        "_raw_key": "folder",
+    }
+    show_mock = mock.MagicMock(return_value=detail)
+    monkeypatch.setattr(zulip_cli, "get_folder_detail", show_mock)
+    runner = CliRunner()
+
+    result = runner.invoke(zulip_app, ["folder", "show", "Projects"])
+    assert result.exit_code == 0, result.output
+    assert "Projects" in result.stdout
+    assert "Assigned Channels" in result.stdout
+    assert "general" in result.stdout
+    assert show_mock.call_args.args[1] == "Projects"
+    assert show_mock.call_args.kwargs["resolve"] is True
+
+    result = runner.invoke(zulip_app, ["--json", "folder", "show", "id:10", "--no-resolve"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert set(payload) == {"folder", "resolved", "annotations"}
+    assert payload["folder"]["id"] == 10
+    assert show_mock.call_args.args[1] == "id:10"
+    assert show_mock.call_args.kwargs["resolve"] is False
+
+
+def test_folder_show_feature_gate_api_and_cli(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Folder show fails below the channel-folders feature level."""
+    from lftools_uv.api.endpoints.zulip import get_folder_detail
+
+    client = _folder_client(feature_level=388)
+    with pytest.raises(ZulipFeatureLevelError):
+        get_folder_detail(client, "Projects")
+
+    _patch_cli_client(monkeypatch, _folder_client(feature_level=388))
+    result = CliRunner().invoke(zulip_app, ["folder", "show", "Projects"])
+    assert result.exit_code == 1
+    assert "feature level 389" in (result.stdout + result.stderr)
+
+
+def test_folder_show_missing_target_exits_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Folder show reports a missing target with the show error contract."""
+    _patch_cli_client(monkeypatch, mock.MagicMock())
+    result = CliRunner().invoke(zulip_app, ["folder", "show"])
+    assert result.exit_code == 1
+    assert "FOLDER is required" in (result.stdout + result.stderr)

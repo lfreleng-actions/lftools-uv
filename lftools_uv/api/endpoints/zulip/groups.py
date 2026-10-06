@@ -26,6 +26,7 @@ from .errors import (
     ZulipNotFoundError,
     ZulipValidationError,
 )
+from .features import FEATURE_LEVELS, get_server_feature_level
 
 #: Display-name → API name mapping for built-in system role groups.
 SYSTEM_ROLE_GROUPS: dict[str, str] = {
@@ -56,10 +57,27 @@ def _build_system_role_display_names() -> dict[str, str]:
 SYSTEM_ROLE_DISPLAY_NAMES: dict[str, str] = _build_system_role_display_names()
 
 
-def _fetch_groups(client: Any) -> list[dict[str, Any]]:
+def _is_system_group(group: dict[str, Any]) -> bool:
+    """Return True for explicit and legacy Zulip system group objects."""
+    name = str(group.get("name", ""))
+    return bool(group.get("is_system_group", False)) or name.startswith("role:")
+
+
+def _deactivated_groups_request(client: Any) -> dict[str, bool] | None:
+    """Return the compatible request parameter for deactivated groups."""
+    feature_level = get_server_feature_level(client)
+    if feature_level >= FEATURE_LEVELS["include-deactivated-groups"]:
+        return {"include_deactivated_groups": True}
+    if feature_level >= FEATURE_LEVELS["deactivated-groups"]:
+        return {"allow_deactivated": True}
+    return None
+
+
+def _fetch_groups(client: Any, *, include_deactivated: bool = False) -> list[dict[str, Any]]:
     """Return the raw user_groups listing from the Zulip server."""
+    request = _deactivated_groups_request(client) if include_deactivated else None
     try:
-        response = client.call_endpoint(url="user_groups", method="GET")
+        response = client.call_endpoint(url="user_groups", method="GET", request=request)
     except Exception as exc:  # pragma: no cover - network errors
         raise ZulipAPIError(f"Failed to list user groups: {exc}") from exc
     if not isinstance(response, dict) or response.get("result") != "success":
@@ -203,7 +221,7 @@ def _normalize_group(raw: dict[str, Any]) -> dict[str, Any]:
     is_system_raw = raw.get("is_system_group", False)
     if not isinstance(is_system_raw, bool):
         raise ZulipAPIError(f"Group object has non-boolean 'is_system_group': {raw!r}")
-    if is_system_raw:
+    if _is_system_group(raw):
         display = SYSTEM_ROLE_DISPLAY_NAMES.get(api_name, api_name)
     else:
         display = api_name
@@ -213,7 +231,7 @@ def _normalize_group(raw: dict[str, Any]) -> dict[str, Any]:
         "name": display,
         "description": "" if description is None else str(description),
         "member_count": len(members),
-        "type": "system" if is_system_raw else "custom",
+        "type": "system" if _is_system_group(raw) else "custom",
     }
 
 

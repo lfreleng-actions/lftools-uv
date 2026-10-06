@@ -140,6 +140,8 @@ Error: Channel 'missing' not found
 Exactly one of positional `group`, `--group-name`, or `--group-id` is required.
 A numeric-looking positional group is treated as a name; use `--group-id` for ID
 lookup.
+Group show searches deactivated groups so that their `deactivated` state remains
+inspectable; `group list` keeps its default active-group listing behavior.
 
 **Human Output**:
 
@@ -181,6 +183,7 @@ Direct subgroup table headers with `--no-resolve`: `Group ID`.
     "creator": {"user_id": 5, "full_name": "Alice Admin"}
   },
   "annotations": {
+    "member_count": {"status": "no", "setter": null, "notes": null},
     "members": {"status": "not exposed", "setter": null, "notes": null},
     "can_manage_group": {"status": "not exposed", "setter": null, "notes": null}
   }
