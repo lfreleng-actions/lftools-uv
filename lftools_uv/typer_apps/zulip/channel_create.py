@@ -166,6 +166,12 @@ def channel_create(
                 FEATURE_LEVELS["can-administer-channel-group"],
                 "can-administer-channel-group",
             )
+        if can_send_message_group is not None:
+            check_feature_level(
+                client,
+                FEATURE_LEVELS["can-send-message-group"],
+                "can-send-message-group",
+            )
 
         # Resolve allow-group if provided
         # For private channels, resolve_groups with allow_nobody=False will raise

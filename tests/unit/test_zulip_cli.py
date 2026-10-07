@@ -1348,7 +1348,27 @@ def test_channel_create_can_send_message_group_feature_errors() -> None:
     assert result.exit_code == 1
     combined = result.output + (getattr(result, "stderr", "") or "")
     assert "feature level 333" in combined
+    assert not any(c.kwargs.get("url") == "user_groups" for c in client.call_endpoint.call_args_list)
     assert not any(c.kwargs.get("url") == "users/me/subscriptions" for c in client.call_endpoint.call_args_list)
+
+
+def test_channel_create_can_send_message_group_gate_precedes_other_groups() -> None:
+    """Unsupported send-message flag gates before any group lookup."""
+    client = _create_cli_client(feature_level=332)
+    result = _invoke_create(
+        [
+            "new-project",
+            "--allow-group",
+            "engineering",
+            "--can-send-message-group",
+            "Members",
+        ],
+        client=client,
+    )
+    assert result.exit_code == 1
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "feature level 333" in combined
+    assert not any(c.kwargs.get("url") == "user_groups" for c in client.call_endpoint.call_args_list)
 
 
 def test_channel_create_can_send_message_group_json_feature_error() -> None:

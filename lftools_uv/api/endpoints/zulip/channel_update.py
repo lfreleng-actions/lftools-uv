@@ -443,10 +443,9 @@ def update_channel(
       can-remove-subscribers-group, can-add-subscribers-group,
       can-administer-channel-group, or can-send-message-group).
     * Applies the FR-019 feature-level checks for web-public,
-      topic-policy, can-subscribe-group (``--allow-group``) and
-      can-remove-subscribers-group, and gates newer permission groups
-      such as can-add-subscribers-group and
-      can-administer-channel-group.
+      topic-policy, can-subscribe-group (``--allow-group``),
+      can-remove-subscribers-group, can-add-subscribers-group,
+      can-administer-channel-group, and can-send-message-group.
     * Enforces lockout prevention when converting to ``private``: if
       the channel currently has 0 subscribers, the caller must supply
       either ``subscribe_user_specs`` (a non-empty list) or a non-Nobody
