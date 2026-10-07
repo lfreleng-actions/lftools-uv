@@ -101,8 +101,10 @@ def channel_create(
     require at least one --subscribe user or a non-Nobody --allow-group.
     """
     from lftools_uv.api.endpoints.zulip import (
+        FEATURE_LEVELS,
         ZulipLockoutError,
         ZulipValidationError,
+        check_feature_level,
         create_channel,
         resolve_group_setting_value,
         resolve_groups,
@@ -153,6 +155,12 @@ def channel_create(
         # Resolve can-remove-subscribers-group if provided
         can_remove_value = resolve_group_setting_value(client, can_remove_subscribers_group)
 
+        if can_add_subscribers_group is not None:
+            check_feature_level(
+                client,
+                FEATURE_LEVELS["can-add-subscribers-group"],
+                "can-add-subscribers-group",
+            )
         can_add_value = resolve_group_setting_value(client, can_add_subscribers_group)
 
         folder_id: int | None = None

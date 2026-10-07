@@ -1204,6 +1204,7 @@ def test_channel_create_can_add_subscribers_group_feature_errors() -> None:
     assert result.exit_code == 1
     combined = result.output + (getattr(result, "stderr", "") or "")
     assert "feature level 342" in combined
+    assert not any(c.kwargs.get("url") == "user_groups" for c in client.call_endpoint.call_args_list)
     assert not any(c.kwargs.get("url") == "users/me/subscriptions" for c in client.call_endpoint.call_args_list)
 
 
