@@ -42,6 +42,7 @@ def create_channel(
     allow_group_value: GroupSettingValue | None = None,
     can_remove_subscribers_group_value: GroupSettingValue | None = None,
     can_add_subscribers_group_value: GroupSettingValue | None = None,
+    can_administer_channel_group_value: GroupSettingValue | None = None,
     announce: bool | None = None,
     topic_policy: str | None = None,
     folder_id: int | None = None,
@@ -69,6 +70,8 @@ def create_channel(
         Resolved group-setting value for ``can_remove_subscribers_group``.
     can_add_subscribers_group_value
         Resolved group-setting value for ``can_add_subscribers_group``.
+    can_administer_channel_group_value
+        Resolved group-setting value for ``can_administer_channel_group``.
     announce
         ``True`` to announce, ``False`` to suppress, ``None`` for API default.
     topic_policy
@@ -93,7 +96,8 @@ def create_channel(
     ZulipFeatureLevelError
         When the server lacks the required feature level for web-public,
         topic-policy, can-subscribe-group, can-remove-subscribers-group,
-        or can-add-subscribers-group features.
+        can-add-subscribers-group, or can-administer-channel-group
+        features.
     ZulipAPIError
         For transport or server errors.
     """
@@ -118,6 +122,13 @@ def create_channel(
 
     if can_add_subscribers_group_value is not None:
         check_feature_level(client, FEATURE_LEVELS["can-add-subscribers-group"], "can-add-subscribers-group")
+
+    if can_administer_channel_group_value is not None:
+        check_feature_level(
+            client,
+            FEATURE_LEVELS["can-administer-channel-group"],
+            "can-administer-channel-group",
+        )
 
     if folder_id is not None:
         _validate_channel_folder_assignment_id(folder_id)
@@ -165,6 +176,9 @@ def create_channel(
 
     if can_add_subscribers_group_value is not None:
         request["can_add_subscribers_group"] = can_add_subscribers_group_value
+
+    if can_administer_channel_group_value is not None:
+        request["can_administer_channel_group"] = can_administer_channel_group_value
 
     # Make the API call
     try:

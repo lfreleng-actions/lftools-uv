@@ -1563,6 +1563,53 @@ def test_create_channel_can_add_subscribers_group_feature_level() -> None:
     assert client.call_endpoint.call_args_list == []
 
 
+def test_create_channel_passes_can_administer_channel_group_simple() -> None:
+    """can_administer_channel_group is sent as a raw create value."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client()
+    create_channel(
+        client,
+        name="new-channel",
+        can_administer_channel_group_value=20,
+    )
+    calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
+    request = calls[0].kwargs.get("request", {})
+    assert request["can_administer_channel_group"] == 20
+    assert "can_add_subscribers_group" not in request
+
+
+def test_create_channel_passes_can_administer_channel_group_complex() -> None:
+    """Object administer settings are sent raw on create."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    value = {"direct_members": [], "direct_subgroups": [20, 22]}
+    client = _create_channel_client()
+    create_channel(
+        client,
+        name="new-channel",
+        can_administer_channel_group_value=value,
+    )
+    calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
+    request = calls[0].kwargs.get("request", {})
+    assert request["can_administer_channel_group"] == value
+
+
+def test_create_channel_can_administer_channel_group_feature_level() -> None:
+    """can_administer_channel_group requires Zulip feature level 325."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client(feature_level=324)
+    with pytest.raises(ZulipFeatureLevelError) as exc:
+        create_channel(
+            client,
+            name="new-channel",
+            can_administer_channel_group_value=20,
+        )
+    assert exc.value.required == FEATURE_LEVELS["can-administer-channel-group"]
+    assert client.call_endpoint.call_args_list == []
+
+
 def test_create_channel_api_error_handled() -> None:
     """API errors are raised as ZulipAPIError."""
     from lftools_uv.api.endpoints.zulip import create_channel
@@ -2666,6 +2713,36 @@ def test_update_channel_can_add_subscribers_group_feature_level() -> None:
     assert client.call_endpoint.call_args_list == []
 
 
+def test_update_channel_can_administer_channel_group_wrapper() -> None:
+    """``--can-administer-channel-group`` uses the PATCH wrapper."""
+    client = _update_client()
+    _ = update_channel(client, name="general", can_administer_channel_group="design")
+    payload = client.last_patch["request"]
+    assert payload["can_administer_channel_group"] == {"new": 30}
+    assert "can_add_subscribers_group" not in payload
+
+
+def test_update_channel_can_administer_channel_group_complex_wrapper() -> None:
+    """Multiple administer groups stay wrapped under ``new``."""
+    client = _update_client()
+    _ = update_channel(client, name="general", can_administer_channel_group="design, id:10")
+    payload = client.last_patch["request"]
+    assert payload["can_administer_channel_group"] == {"new": {"direct_members": [], "direct_subgroups": [30, 10]}}
+
+
+def test_update_channel_can_administer_channel_group_feature_level() -> None:
+    """``--can-administer-channel-group`` requires feature level 325."""
+    client = _update_client(feature_level=324)
+    with pytest.raises(ZulipFeatureLevelError) as exc:
+        _ = update_channel(
+            client,
+            name="general",
+            can_administer_channel_group="design",
+        )
+    assert exc.value.required == FEATURE_LEVELS["can-administer-channel-group"]
+    assert client.call_endpoint.call_args_list == []
+
+
 def test_update_channel_topic_policy_feature_level() -> None:
     """``--topic-policy`` requires the documented feature level."""
     client = _update_client(feature_level=1)
@@ -3218,6 +3295,7 @@ DETAIL_STREAMS = [
         "topics_policy": "inherit",
         "can_subscribe_group": 22,
         "can_add_subscribers_group": 20,
+        "can_administer_channel_group": 20,
         "can_send_message_group": {"direct_members": [101], "direct_subgroups": [20]},
         "subscriber_count": 7,
     }
@@ -3380,6 +3458,11 @@ def test_get_channel_detail_resolves_and_no_resolve_skips_calls() -> None:
         "status": "via --flag",
         "setter": "--can-add-subscribers-group",
         "notes": "FL 342",
+    }
+    assert detail["annotations"]["can_administer_channel_group"] == {
+        "status": "via --flag",
+        "setter": "--can-administer-channel-group",
+        "notes": "FL 325",
     }
     assert detail["annotations"]["can_send_message_group"]["status"] == "not exposed"
 

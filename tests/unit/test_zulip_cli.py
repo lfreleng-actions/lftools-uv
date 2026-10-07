@@ -1239,6 +1239,57 @@ def test_channel_create_can_add_subscribers_group_json_feature_error() -> None:
     assert "feature level 342" in combined
 
 
+def test_channel_create_can_administer_channel_group_payload() -> None:
+    """Create CLI resolves and sends can_administer_channel_group raw."""
+    client = _create_cli_client()
+    result = _invoke_create(
+        [
+            "new-project",
+            "--can-administer-channel-group",
+            "Administrators",
+        ],
+        client=client,
+    )
+    assert result.exit_code == 0, result.output
+    calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
+    request = calls[0].kwargs["request"]
+    assert request["can_administer_channel_group"] == 20
+    assert "can_add_subscribers_group" not in request
+
+
+def test_channel_create_can_administer_channel_group_numeric_hint() -> None:
+    """The administer create flag reuses bare-numeric group hints."""
+    result = _invoke_create(["new-project", "--can-administer-channel-group", "123"])
+    assert result.exit_code == 1
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "use 'id:123'" in combined
+
+
+def test_channel_create_can_administer_channel_group_feature_errors() -> None:
+    """The create flag fails before mutation below FL 325."""
+    client = _create_cli_client(feature_level=324)
+    result = _invoke_create(
+        ["new-project", "--can-administer-channel-group", "Administrators"],
+        client=client,
+    )
+    assert result.exit_code == 1
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "feature level 325" in combined
+    assert not any(c.kwargs.get("url") == "users/me/subscriptions" for c in client.call_endpoint.call_args_list)
+
+
+def test_channel_create_can_administer_channel_group_json_feature_error() -> None:
+    """JSON mode reports the same administer feature-level text."""
+    result = _invoke_create(
+        ["new-project", "--can-administer-channel-group", "Administrators"],
+        feature_level=324,
+        json_output=True,
+    )
+    assert result.exit_code == 1
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "feature level 325" in combined
+
+
 def test_channel_create_user_ambiguity_error() -> None:
     """Ambiguous user name raises error with match listing."""
     # Create members with duplicate names
@@ -1292,6 +1343,7 @@ def test_channel_create_help_renders(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "--subscribe" in cleaned
     assert "--allow-group" in cleaned
     assert "--can-add-subscribers-group" in cleaned
+    assert "--can-administer-channel-group" in cleaned
     assert "id:NUM" in cleaned
     assert "--announce" in cleaned
     assert "--topic-policy" in cleaned
@@ -2356,6 +2408,38 @@ def test_channel_update_can_add_subscribers_group_feature_error(monkeypatch: pyt
     assert "feature level 342" in out
 
 
+def test_channel_update_can_administer_channel_group(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _patch_update(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        [
+            "channel",
+            "update",
+            "general",
+            "--can-administer-channel-group",
+            "design",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert fake.call_args.kwargs["can_administer_channel_group"] == "design"
+
+
+def test_channel_update_can_administer_channel_group_feature_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_update(
+        monkeypatch,
+        side_effect=ZulipFeatureLevelError(required=325, actual=324, feature_name="can-administer-channel-group"),
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        ["channel", "update", "general", "--can-administer-channel-group", "design"],
+    )
+    assert result.exit_code != 0
+    out = result.output + (result.stderr or "")
+    assert "feature level 325" in out
+
+
 def test_channel_update_help_lists_can_add_subscribers_group(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
     runner = CliRunner()
@@ -2367,6 +2451,7 @@ def test_channel_update_help_lists_can_add_subscribers_group(monkeypatch: pytest
     assert result.exit_code == 0, result.output
     cleaned = clean_cli_output(result.output)
     assert "--can-add-subscribers-group" in cleaned
+    assert "--can-administer-channel-group" in cleaned
     assert "id:NUM" in cleaned
 
 
