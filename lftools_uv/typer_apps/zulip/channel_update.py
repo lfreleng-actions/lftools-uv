@@ -74,7 +74,12 @@ def channel_update(  # noqa: PLR0913 - CLI parity with contract
     can_remove_subscribers_group: str | None = typer.Option(
         None,
         "--can-remove-subscribers-group",
-        help="Group(s) permitted to remove subscribers (group-setting syntax).",
+        help="Group(s) permitted to remove subscribers; use 'id:NUM' for ID lookup.",
+    ),
+    can_add_subscribers_group: str | None = typer.Option(
+        None,
+        "--can-add-subscribers-group",
+        help="Group(s) permitted to add subscribers; use 'id:NUM' for ID lookup.",
     ),
     folder: str | None = typer.Option(
         None,
@@ -124,6 +129,7 @@ def channel_update(  # noqa: PLR0913 - CLI parity with contract
             topic_policy,
             allow_group,
             can_remove_subscribers_group,
+            can_add_subscribers_group,
             folder,
             folder_id,
         )
@@ -132,7 +138,8 @@ def channel_update(  # noqa: PLR0913 - CLI parity with contract
         emit_error(
             "channel update requires at least one setting to change "
             "(--name, --description, --type, --topic-policy, --allow-group, "
-            "--folder, --subscribe, or --can-remove-subscribers-group)"
+            "--folder, --subscribe, --can-remove-subscribers-group, "
+            "or --can-add-subscribers-group)"
         )
         raise typer.Exit(code=1)
 
@@ -203,6 +210,7 @@ def channel_update(  # noqa: PLR0913 - CLI parity with contract
             user_id_mode=cast(IdMode | None, user_id_mode),
             allow_group=allow_group,
             can_remove_subscribers_group=can_remove_subscribers_group,
+            can_add_subscribers_group=can_add_subscribers_group,
             folder_id=parsed_folder_id,
             folder_id_specified=folder_id_specified,
             include_archived=include_archived,
