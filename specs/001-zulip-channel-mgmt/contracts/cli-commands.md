@@ -76,6 +76,9 @@ Status (if `--include-archived`).
 | `--by-name` | flag | Conditional | Identify users by name |
 | `--allow-group` | str | Conditional | Groups allowed to join |
 | `--can-remove-subscribers-group` | str | No | Subscriber removal perm |
+| `--can-add-subscribers-group` | str | No | Subscriber add perm |
+| `--can-administer-channel-group` | str | No | Channel admin perm |
+| `--can-send-message-group` | str | No | Message send perm |
 | `--announce` | flag | No | Post announcement |
 | `--no-announce` | flag | No | Suppress announcement |
 | `--topic-policy` | choice | No | allow/deny/follow-default |
@@ -84,9 +87,11 @@ Status (if `--include-archived`).
 non-Nobody group, or `--subscribe`) when creating private channels, to
 prevent admin lockout from the newly created channel.
 
-**`--allow-group` and `--can-remove-subscribers-group` syntax**: Both
-flags accept a comma-separated, quoted string. Each item is interpreted
-as a group name by default. Use `id:NUM` prefix to force ID lookup.
+**Group-setting syntax**: `--allow-group`,
+`--can-remove-subscribers-group`, `--can-add-subscribers-group`,
+`--can-administer-channel-group`, and `--can-send-message-group` accept a
+comma-separated, quoted string. Each item is interpreted as a group name
+by default. Use `id:NUM` prefix to force ID lookup.
 Both system role groups (Owners, Administrators, Moderators, Full
 Members, Members, Everyone, Nobody) and custom user groups are valid
 inputs. System role groups are standard Zulip user groups with numeric
@@ -101,6 +106,9 @@ no separate "role token" path at the API level. Users never type
 - `--allow-group 'Administrators, Members'` (system role groups)
 - `--allow-group 'Nobody'` (disables the permission)
 - `--can-remove-subscribers-group 'baz, admin'`
+- `--can-add-subscribers-group 'team-leads'`
+- `--can-administer-channel-group 'Administrators'`
+- `--can-send-message-group 'Members'`
 
 **API Translation**: The CLI resolves each comma-separated group
 name/ID to a numeric group ID, then translates to the Zulip API
@@ -129,6 +137,15 @@ This translation is transparent to the user.
   Zulip API field `can_remove_subscribers_group`. Requires minimum
   feature level (threshold hardcoded during implementation, checked at
   runtime against server's reported level) per FR-019.
+- `--can-add-subscribers-group` is valid on ALL channel types. Maps to
+  Zulip API field `can_add_subscribers_group`. Requires Zulip feature
+  level 342.
+- `--can-administer-channel-group` is valid on ALL channel types. Maps to
+  Zulip API field `can_administer_channel_group`. Requires Zulip feature
+  level 325.
+- `--can-send-message-group` is valid on ALL channel types. Maps to
+  Zulip API field `can_send_message_group`. Requires Zulip feature level
+  333.
 - `--subscribe` requires exactly one of `--by-email`/`--by-id`/`--by-name`
 - `--announce` and `--no-announce` are mutually exclusive
 - `--topic-policy` requires minimum Zulip feature level (threshold
@@ -172,11 +189,14 @@ This translation is transparent to the user.
 | `--by-name` | flag | Conditional | Identify users by name |
 | `--allow-group` | str | Conditional | Groups allowed to join |
 | `--can-remove-subscribers-group` | str | No | Subscriber removal perm |
+| `--can-add-subscribers-group` | str | No | Subscriber add perm |
+| `--can-administer-channel-group` | str | No | Channel admin perm |
+| `--can-send-message-group` | str | No | Message send perm |
 | `--include-archived` | flag | No | Search archived channels |
 
-**`--allow-group` and `--can-remove-subscribers-group` syntax**: Same
-comma-separated inline syntax as `channel create` (see above). Both
-flags translate to group-setting value objects for the Zulip API.
+**Group-setting syntax**: Same comma-separated inline syntax as
+`channel create` (see above). Permission flags translate to
+group-setting value objects for the Zulip API.
 **Update payload**: Permission fields use the group-setting-update
 wrapper format: `{"new": <group-setting-value>}`. The `old` field is
 omitted (the CLI syncs desired state, not incremental edits). The CLI
@@ -199,6 +219,15 @@ wraps automatically; user syntax is identical to `channel create`.
   Zulip API field `can_remove_subscribers_group`. Requires minimum
   feature level (threshold hardcoded during implementation, checked at
   runtime against server's reported level) per FR-019.
+- `--can-add-subscribers-group` is valid on ALL channel types. Maps to
+  Zulip API field `can_add_subscribers_group`. Requires Zulip feature
+  level 342.
+- `--can-administer-channel-group` is valid on ALL channel types. Maps to
+  Zulip API field `can_administer_channel_group`. Requires Zulip feature
+  level 325.
+- `--can-send-message-group` is valid on ALL channel types. Maps to
+  Zulip API field `can_send_message_group`. Requires Zulip feature level
+  333.
 - `--topic-policy` requires minimum Zulip feature level (threshold
   hardcoded during implementation, checked at runtime against server's
   reported level)
@@ -508,12 +537,15 @@ Members.
   Members, Everyone, Nobody) are listed alongside custom groups with
   `"type": "system"`. All groups have numeric IDs and are resolved via
   the same lookup path (display name → groups API → numeric ID). All
-  listed groups are valid inputs for `--allow-group` and
-  `--can-remove-subscribers-group`.
+  listed groups are valid inputs for `--allow-group`,
+  `--can-remove-subscribers-group`, `--can-add-subscribers-group`,
+  `--can-administer-channel-group`, and `--can-send-message-group`.
 - `--group-name`/`--group-id` are scoped to filtering this listing only.
   In permission flag contexts (`--allow-group`,
-  `--can-remove-subscribers-group`), groups are identified inline via
-  comma-separated values with `id:` prefix disambiguation.
+  `--can-remove-subscribers-group`, `--can-add-subscribers-group`,
+  `--can-administer-channel-group`, and `--can-send-message-group`), groups
+  are identified inline via comma-separated values with `id:` prefix
+  disambiguation.
 - If `--group-name` matches multiple groups (case-insensitive), the
   command MUST fail with an ambiguity error listing matching groups
   (with IDs) and instruct the user to use `--group-id` instead.

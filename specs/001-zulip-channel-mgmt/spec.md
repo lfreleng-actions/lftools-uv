@@ -59,8 +59,10 @@ a single Zulip server."
   prerequisite for channel creation since private channels can specify
   allowed groups. The `group list` command supports `--group-name` (case-
   insensitive) and `--group-id` for filtering; ambiguous name matches fail
-  with error. Permission flags (`--allow-group`, `--can-remove-subscribers-group`)
-  use inline comma-separated values with `id:` prefix disambiguation.
+  with error. Permission group flags (`--allow-group`,
+  `--can-remove-subscribers-group`, `--can-add-subscribers-group`,
+  `--can-administer-channel-group`, and `--can-send-message-group`) use inline
+  comma-separated values with `id:` prefix disambiguation.
 - Q: Should an unarchive command be provided since archive is reversible?
   → A: Yes — add `lftools-uv zulip channel unarchive` with `--yes` flag
   required for safety.
@@ -77,8 +79,9 @@ a single Zulip server."
   flag to include archived channels.
 - Q: What fields should the update command support in v1? → A: Name,
   description, channel type (public/web-public/private), topic policy,
-  `--allow-group`, and `--can-remove-subscribers-group`.
-  No other settings for v1.
+  `--allow-group`, `--can-remove-subscribers-group`,
+  `--can-add-subscribers-group`, `--can-administer-channel-group`, and
+  `--can-send-message-group`. No other settings for v1.
 - Q: What should the config CLI flag be named and what is the exact
   precedence? → A: `--zuliprc PATH` pointing to a zuliprc-format file.
   Precedence: `--zuliprc` flag > `./zuliprc` (current directory) >
@@ -98,12 +101,12 @@ a single Zulip server."
   requires at least one `--subscribe` or non-Nobody `--allow-group`.
 - Q: How should groups be identified in commands? → A: In `group list`
   filtering: by `--group-name` (case-insensitive) or `--group-id`. In
-  permission flags (`--allow-group`, `--can-remove-subscribers-group`):
-  inline comma-separated values (names by default, `id:NUM` for ID lookup).
-  If a group name is ambiguous, the
-  command MUST fail with an error instructing the user to use
-  `--group-id` in `group list` context, or `id:NUM` prefix syntax in
-  permission flag contexts (`--allow-group`, `--can-remove-subscribers-group`).
+  group-setting flags (`--allow-group`, `--can-remove-subscribers-group`,
+  `--can-add-subscribers-group`, `--can-administer-channel-group`, and
+  `--can-send-message-group`): inline comma-separated values (names by
+  default, `id:NUM` for ID lookup). If a group name is ambiguous, the command
+  MUST fail with an error instructing the user to use `--group-id` in
+  `group list` context, or `id:NUM` prefix syntax in permission flag contexts.
 - Q: Should the tool require a minimum Zulip server version? → A: No —
   feature-detect at runtime. Commands relying on newer features
   (unarchive, group-based access, topic policy, web-public channels)
@@ -246,20 +249,22 @@ a single Zulip server."
   on public channels was INCORRECT and has been removed. A new SEPARATE flag
   `--can-remove-subscribers-group` is required for "who can remove subscribers"
   and is valid on ALL channel types independently of `--allow-group`.
-- Q: What scope should `--can-remove-subscribers-group` have in v1? → A:
-  Include in v1 for create & update commands on all channel types; no
-  lockout-prevention interaction (it is purely an administrative permission
-  flag, not required for channel accessibility).
-- Q: How does `--can-remove-subscribers-group` identify groups, and can it
-  coexist with `--allow-group` in one command? → A: Both flags take a direct
+- Q: What scope should channel permission group flags have in v1? → A:
+  Include `--can-remove-subscribers-group`, `--can-add-subscribers-group`,
+  `--can-administer-channel-group`, and `--can-send-message-group` for create
+  & update commands on all channel types; no lockout-prevention interaction
+  (these are administrative/content permissions, not required for channel
+  accessibility).
+- Q: How do permission group flags identify groups, and can they coexist with
+  `--allow-group` in one command? → A: All permission group flags take a direct
   comma-separated, quoted string value. Each item is interpreted as a group
-  name by default. For disambiguation, use prefix syntax: `id:123` forces
-  ID lookup. Without a prefix, values are always treated as names
-  (consistent with channel identifier rules). The `name:` prefix is
-  reserved for future use if default parsing rules change but is not
-  needed under current rules. Both flags can appear in the same command
-  with independent group lists. This eliminates the need for `--group-name`/
-  `--group-id` as separate flags for permission flag contexts. Examples:
+  name by default. For disambiguation, use prefix syntax: `id:123` forces ID
+  lookup. Without a prefix, values are always treated as names (consistent with
+  channel identifier rules). The `name:` prefix is reserved for future use if
+  default parsing rules change but is not needed under current rules.
+  Permission group flags can appear in the same command with independent group
+  lists. This eliminates the need for `--group-name`/`--group-id` as separate
+  flags for permission flag contexts. Examples:
   `--allow-group 'foo, bar, id:123'` — groups "foo" and "bar" by name, plus
   group with ID 123.
   `--can-remove-subscribers-group 'baz, admin'` — groups "baz" and
@@ -834,7 +839,9 @@ and verifying it reappears in the active channel list.
   server version? The system MUST detect the missing capability at runtime and
   return a clear error like "This operation requires Zulip feature level X
   (server has Y)" and exit with a non-zero code. This applies to `unarchive`,
-  `--allow-group` (group-based self-subscribe permission), `--can-remove-subscribers-group`,
+  `--allow-group` (group-based self-subscribe permission),
+  `--can-remove-subscribers-group`, `--can-add-subscribers-group`,
+  `--can-administer-channel-group`, `--can-send-message-group`,
   `--topic-policy`, and web-public channel type (requires spectator access).
 - What happens when a mutation is a no-op (e.g., archiving an already-archived
   channel, subscribing an already-subscribed user)? The command MUST succeed
@@ -911,7 +918,9 @@ and verifying it reappears in the active channel list.
   field on ALL channel types (pass-through; enforcement is the server's
   responsibility). Both custom user groups AND system role groups (Everyone,
   Members, Full Members, Moderators, Administrators, Owners, Nobody) are valid
-  inputs to `--allow-group` and `--can-remove-subscribers-group`. Users specify
+  inputs to `--allow-group`, `--can-remove-subscribers-group`,
+  `--can-add-subscribers-group`, `--can-administer-channel-group`, and
+  `--can-send-message-group`. Users specify
   system role groups by their display name only (case-insensitive matching).
   System role groups (Owners, Administrators, Moderators, Full Members,
   Members, Everyone, Nobody) are standard Zulip user groups with numeric IDs,
@@ -925,17 +934,19 @@ and verifying it reappears in the active channel list.
   `role:` prefix is purely internal Zulip nomenclature; the API uses numeric
   IDs for all groups regardless of type. Users do NOT type `role:` prefixes.
   `Nobody` effectively disables a permission.
-  Administrative permissions (e.g., who can remove subscribers) are managed via
-  a separate `--can-remove-subscribers-group` flag, valid on ALL channel types
-  in both `channel create` and `channel update`. This flag is NOT part of
-  lockout-prevention logic (it controls an administrative capability, not
-  channel accessibility). Both `--allow-group` and `--can-remove-subscribers-group`
-  MAY be specified in the same command invocation — they are independent flags
+  Administrative permissions are managed via separate flags, valid on ALL
+  channel types in both `channel create` and `channel update`:
+  `--can-remove-subscribers-group`, `--can-add-subscribers-group`,
+  `--can-administer-channel-group`, and `--can-send-message-group`.
+  These flags are NOT part of lockout-prevention logic. Permission flags MAY be
+  specified in the same command invocation — they are independent flags
   targeting different permissions. Each takes a direct comma-separated, quoted
-  string value (e.g., `--allow-group 'foo, bar, id:123'`). Values are interpreted
-  as group names by default; `id:NUM` forces ID lookup.
+  string value (e.g., `--allow-group 'foo, bar, id:123'`). Values are
+  interpreted as group names by default; `id:NUM` forces ID lookup.
   **API Translation (Group-Setting Values)**: The Zulip API `can_subscribe_group`
-  and `can_remove_subscribers_group` fields use a "group-setting value" format:
+  `can_remove_subscribers_group`, `can_add_subscribers_group`,
+  `can_administer_channel_group`, and `can_send_message_group` fields use a
+  "group-setting value" format:
   - **Simple form**: A single integer user group ID (used when only one group is
     specified).
   - **Complex form**: `{"direct_members": [], "direct_subgroups": [id1, id2, ...]}`
@@ -966,10 +977,12 @@ and verifying it reappears in the active channel list.
   flag applies to ALL `--subscribe` values in a single invocation (mixing email
   and ID in one command is not permitted). `--by-name` ambiguity follows the
   same fail-with-error behavior as FR-005/FR-006.
-  Groups in `--allow-group` and `--can-remove-subscribers-group` are identified
-  inline via comma-separated values (names by default, `id:NUM` prefix for ID
-  lookup). Case-insensitive
-  name matching applies; ambiguous matches fail with an error.
+  Groups in group-setting flags (`--allow-group`,
+  `--can-remove-subscribers-group`, `--can-add-subscribers-group`,
+  `--can-administer-channel-group`, and `--can-send-message-group`) are
+  identified inline via comma-separated values (names by default, `id:NUM`
+  prefix for ID lookup). Case-insensitive name matching applies; ambiguous
+  matches fail with an error.
 - **FR-003**: System MUST provide a
   `lftools-uv zulip channel archive` command that
   archives (deactivates) a channel. The command MUST require a `--yes` flag to
@@ -983,10 +996,15 @@ and verifying it reappears in the active channel list.
   API allows it), topic policy (`--topic-policy` with values `allow`,
   `deny`, or `follow-default`; also available as a standalone command per
   FR-021), `--allow-group` (who is allowed to join —
-  maps to Zulip API `can_subscribe_group`), and `--can-remove-subscribers-group`
+  maps to Zulip API `can_subscribe_group`), `--can-remove-subscribers-group`
   (who can remove subscribers — maps to Zulip API
-  `can_remove_subscribers_group`). These are the only fields supported for v1;
-  no other settings are in scope. When `--subscribe` is used in the update
+  `can_remove_subscribers_group`), `--can-add-subscribers-group` (who can add
+  subscribers — maps to Zulip API `can_add_subscribers_group`),
+  `--can-administer-channel-group` (who can administer the channel — maps to
+  Zulip API `can_administer_channel_group`), and
+  `--can-send-message-group` (who can send messages — maps to Zulip API
+  `can_send_message_group`). No other channel update settings are in scope.
+  When `--subscribe` is used in the update
   context (e.g., during type conversion to private for lockout prevention), the
   same `--by-email`/`--by-id`/`--by-name` identifier flags apply as in
   FR-005/FR-006. The `--topic-policy` flag requires runtime
@@ -1004,9 +1022,11 @@ and verifying it reappears in the active channel list.
   to public/web-public channels (or updates that do not change type),
   `--allow-group` is accepted with the same semantics (defines who is allowed to
   join) but the server does NOT enforce the restriction on non-private channels.
-  Administrative permissions (e.g., who can remove subscribers) are managed via
-  `--can-remove-subscribers-group`, valid on ALL channel types in both create
-  and update. This flag is NOT part of lockout-prevention logic.
+  Administrative permissions are managed via
+  `--can-remove-subscribers-group`, `--can-add-subscribers-group`,
+  `--can-administer-channel-group`, and `--can-send-message-group`, valid on
+  ALL channel types in both create and update. These flags are NOT part of
+  lockout-prevention logic.
 - **FR-005**: System MUST provide a `lftools-uv zulip channel subscribe` command
   that subscribes one or more users to a channel, with support for bulk
   operations. Users MUST be identified via an explicit `--by-email`,
@@ -1089,20 +1109,24 @@ and verifying it reappears in the active channel list.
   System role groups are the primary mechanism for restricting
   channel access and their discovery is the PRIMARY use case
   for this command (finding system role group names to use with
-  `--allow-group` for channel permission management). Both
-  custom and system role groups MUST be usable with
-  `--allow-group` (who is allowed to join) and
-  `--can-remove-subscribers-group` (who can remove subscribers)
-  for channel permissions on ALL channel types. In permission
-  flag contexts (`--allow-group`, `--can-remove-subscribers-group`),
-  groups are identified inline via comma-separated values
-  (names by default, `id:NUM` for ID lookup). The `group list` command itself
+  `--allow-group` for channel permission management). Both custom and system
+  role groups MUST be usable with `--allow-group`,
+  `--can-remove-subscribers-group`, `--can-add-subscribers-group`,
+  `--can-administer-channel-group`, and `--can-send-message-group` for channel
+  permissions on ALL channel types. In permission flag contexts
+  (`--allow-group`, `--can-remove-subscribers-group`,
+  `--can-add-subscribers-group`, `--can-administer-channel-group`, and
+  `--can-send-message-group`), groups are identified inline via
+  comma-separated values (names by default, `id:NUM` for ID lookup). The
+  `group list` command itself
   supports `--group-name` (case-insensitive) and `--group-id`
   for filtering. If a group name is ambiguous in `group list` context, the
   command MUST fail with an error instructing the user to use `--group-id`
   for filtering (NOT `id:NUM` prefix syntax, which is only valid in
-  permission flag contexts like `--allow-group` and
-  `--can-remove-subscribers-group`). The command MUST support `--json` output
+  permission flag contexts like `--allow-group`,
+  `--can-remove-subscribers-group`, `--can-add-subscribers-group`,
+  `--can-administer-channel-group`, and `--can-send-message-group`). The command
+  MUST support `--json` output
   producing `{"groups": [...]}` where each entry contains
   `group_id` (int), `name` (str), `description` (str),
   `member_count` (int), and `type` (str: `"custom"` or
@@ -1230,21 +1254,26 @@ and verifying it reappears in the active channel list.
   output: the CLI MUST show the human-friendly display name and a `type` field
   (`system` or `custom`), NOT the raw `role:` API name.
   In `group list`, identifiable by `--group-id` or `--group-name`
-  (case-insensitive) for filtering. In permission flags (`--allow-group`,
-  `--can-remove-subscribers-group`), identified inline via comma-separated
-  values (names by default, `id:NUM` for ID lookup). Used for
-  group-based permissions on ALL channel
-  types via two distinct flags: `--allow-group` (who is allowed to join —
-  enforced on private channels, accepted but not enforced on public/web-public)
-  and `--can-remove-subscribers-group` (who can remove subscribers — valid on
-  ALL channel types). Groups granted access to private channels are permitted to
-  join but are NOT automatically subscribed. The CLI resolves group names/IDs to
-  numeric IDs and translates to the Zulip API "group-setting value" format:
-  simple integer (single group) or `{"direct_members": [], "direct_subgroups":
-  [id1, id2, ...]}` (multiple groups). For **update** operations (PATCH), the
-  API wraps these in a group-setting-update format: `{"new": <group-setting-value>}`
-  (the CLI handles this wrapping automatically; user syntax is the same for
-  create and update).
+  (case-insensitive) for filtering. In group-setting flags (`--allow-group`,
+  `--can-remove-subscribers-group`, `--can-add-subscribers-group`,
+  `--can-administer-channel-group`, and `--can-send-message-group`), identified
+  inline via comma-separated values (names by default, `id:NUM` for ID lookup).
+  Used for group-based permissions on ALL channel types via distinct flags:
+  `--allow-group` (who is allowed to join — enforced on private channels,
+  accepted but not enforced on public/web-public),
+  `--can-remove-subscribers-group` (who can remove subscribers),
+  `--can-add-subscribers-group` (who can add subscribers),
+  `--can-administer-channel-group` (who can administer the channel), and
+  `--can-send-message-group` (who can send messages). Groups granted access to
+  private channels are permitted to join but are NOT automatically subscribed.
+  The CLI resolves group names/IDs to numeric IDs and translates to the Zulip
+  API "group-setting value" format: simple integer (single group) or
+  `{"direct_members": [], "direct_subgroups": [id1, id2, ...]}` (multiple
+  groups). For **create** operations (POST), permission fields send this raw
+  group-setting value. For **update** operations (PATCH), the API wraps these in
+  a group-setting-update format: `{"new": <group-setting-value>}` (the CLI
+  handles this wrapping automatically; user syntax is the same for create and
+  update).
 - **Zulip Configuration**: Connection and authentication details (server URL,
   bot email, API key) resolved from multiple sources with defined precedence:
   `--zuliprc PATH` > `./zuliprc` > `[zulip]` in lftools.ini > `~/.zuliprc`.
