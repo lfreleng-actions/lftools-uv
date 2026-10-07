@@ -1208,6 +1208,25 @@ def test_channel_create_can_add_subscribers_group_feature_errors() -> None:
     assert not any(c.kwargs.get("url") == "users/me/subscriptions" for c in client.call_endpoint.call_args_list)
 
 
+def test_channel_create_can_add_subscribers_group_gate_precedes_other_groups() -> None:
+    """Unsupported add-subscribers flag gates before any group lookup."""
+    client = _create_cli_client(feature_level=341)
+    result = _invoke_create(
+        [
+            "new-project",
+            "--allow-group",
+            "engineering",
+            "--can-add-subscribers-group",
+            "Administrators",
+        ],
+        client=client,
+    )
+    assert result.exit_code == 1
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "feature level 342" in combined
+    assert not any(c.kwargs.get("url") == "user_groups" for c in client.call_endpoint.call_args_list)
+
+
 def test_channel_create_can_add_subscribers_group_json_feature_error() -> None:
     """JSON mode reports the same canonical feature-level text."""
     result = _invoke_create(

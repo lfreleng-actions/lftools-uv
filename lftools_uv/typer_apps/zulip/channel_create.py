@@ -144,6 +144,13 @@ def channel_create(
             resolved_users = resolve_users(client, subscribe, mode=id_mode)  # type: ignore[arg-type]
             subscribe_user_ids = [u["user_id"] for u in resolved_users]
 
+        if can_add_subscribers_group is not None:
+            check_feature_level(
+                client,
+                FEATURE_LEVELS["can-add-subscribers-group"],
+                "can-add-subscribers-group",
+            )
+
         # Resolve allow-group if provided
         # For private channels, resolve_groups with allow_nobody=False will raise
         # ZulipLockoutError if the only group is Nobody - this is the lockout check
@@ -155,12 +162,6 @@ def channel_create(
         # Resolve can-remove-subscribers-group if provided
         can_remove_value = resolve_group_setting_value(client, can_remove_subscribers_group)
 
-        if can_add_subscribers_group is not None:
-            check_feature_level(
-                client,
-                FEATURE_LEVELS["can-add-subscribers-group"],
-                "can-add-subscribers-group",
-            )
         can_add_value = resolve_group_setting_value(client, can_add_subscribers_group)
 
         folder_id: int | None = None
