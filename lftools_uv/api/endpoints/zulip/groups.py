@@ -137,6 +137,7 @@ def _resolve_single_group_token(token: str, groups: list[dict[str, Any]]) -> dic
 
 
 GroupSettingValue = int | dict[str, list[int]]
+ResolvedGroupSetting = tuple[list[dict[str, Any]] | None, GroupSettingValue | None]
 
 
 def _build_group_setting_value(group_ids: list[int]) -> GroupSettingValue:
@@ -148,6 +149,32 @@ def _build_group_setting_value(group_ids: list[int]) -> GroupSettingValue:
     if len(group_ids) == 1:
         return group_ids[0]
     return {"direct_members": [], "direct_subgroups": group_ids}
+
+
+def _resolve_groups_from_listing(
+    spec: str,
+    groups: list[dict[str, Any]],
+    *,
+    allow_nobody: bool = True,
+) -> tuple[list[dict[str, Any]], GroupSettingValue]:
+    """Resolve one group-setting spec against an existing group listing."""
+    tokens = [t for t in (part.strip() for part in spec.split(",")) if t]
+    if not tokens:
+        raise ZulipValidationError("Group specification must not be empty")
+    resolved = [_resolve_single_group_token(tok, groups) for tok in tokens]
+    if not allow_nobody and len(resolved) == 1 and resolved[0].get("name") == "role:nobody":
+        raise ZulipLockoutError(
+            "'Nobody' does not satisfy lockout prevention — it disables "
+            "the permission entirely. Specify --subscribe users or a "
+            "non-Nobody --allow-group."
+        )
+    group_ids: list[int] = []
+    for grp in resolved:
+        gid = grp.get("id")
+        if not isinstance(gid, int):
+            raise ZulipAPIError(f"Group object missing numeric id: {grp!r}")
+        group_ids.append(gid)
+    return resolved, _build_group_setting_value(group_ids)
 
 
 def resolve_groups(
@@ -173,24 +200,8 @@ def resolve_groups(
     to ``"design, foo"``). A spec containing only empty segments is
     still rejected with :class:`ZulipValidationError`.
     """
-    tokens = [t for t in (part.strip() for part in spec.split(",")) if t]
-    if not tokens:
-        raise ZulipValidationError("Group specification must not be empty")
     groups = _fetch_groups(client)
-    resolved = [_resolve_single_group_token(tok, groups) for tok in tokens]
-    if not allow_nobody and len(resolved) == 1 and resolved[0].get("name") == "role:nobody":
-        raise ZulipLockoutError(
-            "'Nobody' does not satisfy lockout prevention — it disables "
-            "the permission entirely. Specify --subscribe users or a "
-            "non-Nobody --allow-group."
-        )
-    group_ids: list[int] = []
-    for grp in resolved:
-        gid = grp.get("id")
-        if not isinstance(gid, int):
-            raise ZulipAPIError(f"Group object missing numeric id: {grp!r}")
-        group_ids.append(gid)
-    return resolved, _build_group_setting_value(group_ids)
+    return _resolve_groups_from_listing(spec, groups, allow_nobody=allow_nobody)
 
 
 def resolve_group_setting_value(client: Any, spec: str | None) -> GroupSettingValue | None:
@@ -199,6 +210,29 @@ def resolve_group_setting_value(client: Any, spec: str | None) -> GroupSettingVa
         return None
     _, value = resolve_groups(client, spec)
     return value
+
+
+def resolve_group_setting_specs(
+    client: Any,
+    specs: dict[str, tuple[str | None, bool]],
+) -> dict[str, ResolvedGroupSetting]:
+    """Resolve multiple group-setting specs using one ``user_groups`` fetch.
+
+    ``specs`` maps a caller-defined key to ``(spec, allow_nobody)``. Keys
+    with ``None`` specs are returned as ``(None, None)`` and do not force a
+    groups request unless another supplied spec needs one.
+    """
+    if not any(spec is not None for spec, _allow_nobody in specs.values()):
+        return dict.fromkeys(specs, (None, None))
+
+    groups = _fetch_groups(client)
+    resolved: dict[str, ResolvedGroupSetting] = {}
+    for key, (spec, allow_nobody) in specs.items():
+        if spec is None:
+            resolved[key] = (None, None)
+            continue
+        resolved[key] = _resolve_groups_from_listing(spec, groups, allow_nobody=allow_nobody)
+    return resolved
 
 
 def _normalize_group(raw: dict[str, Any]) -> dict[str, Any]:

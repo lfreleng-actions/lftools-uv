@@ -29,7 +29,7 @@ from .dispatch import resolve_channel
 from .errors import ZulipAPIError, ZulipLockoutError, ZulipValidationError
 from .features import FEATURE_LEVELS, check_feature_level
 from .folders import _validate_channel_folder_assignment_id
-from .groups import GroupSettingValue, resolve_group_setting_value, resolve_groups
+from .groups import GroupSettingValue, resolve_group_setting_specs, resolve_group_setting_value, resolve_groups
 from .topics import TOPIC_POLICY_MAP, TopicPolicy
 from .users import IdMode, resolve_users
 
@@ -488,11 +488,21 @@ def update_channel(
     )
     stream_id, resolved_name = _resolved_channel_identity(channel)
 
-    allow_group_resolved, allow_group_value = _resolve_allow_group(client, changes.allow_group)
-    can_remove_value = _resolve_can_remove_group(client, changes.can_remove_subscribers_group)
-    can_add_value = resolve_group_setting_value(client, changes.can_add_subscribers_group)
-    can_administer_value = resolve_group_setting_value(client, changes.can_administer_channel_group)
-    can_send_message_value = resolve_group_setting_value(client, changes.can_send_message_group)
+    group_values = resolve_group_setting_specs(
+        client,
+        {
+            "allow": (changes.allow_group, True),
+            "remove": (changes.can_remove_subscribers_group, True),
+            "add": (changes.can_add_subscribers_group, True),
+            "administer": (changes.can_administer_channel_group, True),
+            "send": (changes.can_send_message_group, True),
+        },
+    )
+    allow_group_resolved, allow_group_value = group_values["allow"]
+    can_remove_value = group_values["remove"][1]
+    can_add_value = group_values["add"][1]
+    can_administer_value = group_values["administer"][1]
+    can_send_message_value = group_values["send"][1]
 
     _enforce_private_lockout(
         client,

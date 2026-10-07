@@ -116,8 +116,7 @@ def channel_create(
         ZulipValidationError,
         check_feature_level,
         create_channel,
-        resolve_group_setting_value,
-        resolve_groups,
+        resolve_group_setting_specs,
         resolve_users,
     )
 
@@ -173,21 +172,21 @@ def channel_create(
                 "can-send-message-group",
             )
 
-        # Resolve allow-group if provided
-        # For private channels, resolve_groups with allow_nobody=False will raise
-        # ZulipLockoutError if the only group is Nobody - this is the lockout check
-        allow_group_value = None
-        if allow_group:
-            allow_nobody = channel_type != "private"
-            _, allow_group_value = resolve_groups(client, allow_group, allow_nobody=allow_nobody)
-
-        # Resolve can-remove-subscribers-group if provided
-        can_remove_value = resolve_group_setting_value(client, can_remove_subscribers_group)
-
-        can_add_value = resolve_group_setting_value(client, can_add_subscribers_group)
-
-        can_administer_value = resolve_group_setting_value(client, can_administer_channel_group)
-        can_send_message_value = resolve_group_setting_value(client, can_send_message_group)
+        group_values = resolve_group_setting_specs(
+            client,
+            {
+                "allow": (allow_group, channel_type != "private" or bool(subscribe_user_ids)),
+                "remove": (can_remove_subscribers_group, True),
+                "add": (can_add_subscribers_group, True),
+                "administer": (can_administer_channel_group, True),
+                "send": (can_send_message_group, True),
+            },
+        )
+        allow_group_value = group_values["allow"][1]
+        can_remove_value = group_values["remove"][1]
+        can_add_value = group_values["add"][1]
+        can_administer_value = group_values["administer"][1]
+        can_send_message_value = group_values["send"][1]
 
         folder_id: int | None = None
         folder_id_specified = folder is not None

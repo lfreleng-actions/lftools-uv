@@ -1072,6 +1072,29 @@ def test_channel_create_private_with_nobody_fails() -> None:
     assert "nobody" in combined.lower() or "lockout" in combined.lower()
 
 
+def test_channel_create_private_with_subscribe_and_nobody_succeeds() -> None:
+    """Subscribers satisfy lockout prevention when allow-group is Nobody."""
+    client = _create_cli_client()
+    result = _invoke_create(
+        [
+            "new-project",
+            "--type",
+            "private",
+            "--subscribe",
+            "alice@example.com",
+            "--by-email",
+            "--allow-group",
+            "Nobody",
+        ],
+        client=client,
+    )
+    assert result.exit_code == 0, result.output
+    calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
+    request = calls[0].kwargs["request"]
+    assert request["principals"] == [10]
+    assert request["can_subscribe_group"] == 21
+
+
 def test_channel_create_announce_mutex() -> None:
     """--announce and --no-announce are mutually exclusive."""
     result = _invoke_create(["new-project", "--announce", "--no-announce"])
@@ -1328,6 +1351,37 @@ def test_channel_create_can_send_message_group_payload() -> None:
     assert "stream_post_policy" not in request
     assert "can_add_subscribers_group" not in request
     assert "can_administer_channel_group" not in request
+
+
+def test_channel_create_combined_group_flags_fetch_groups_once() -> None:
+    """Create CLI resolves combined group flags from one group listing."""
+    client = _create_cli_client()
+    result = _invoke_create(
+        [
+            "new-project",
+            "--allow-group",
+            "engineering",
+            "--can-remove-subscribers-group",
+            "Administrators",
+            "--can-add-subscribers-group",
+            "Members",
+            "--can-administer-channel-group",
+            "id:10",
+            "--can-send-message-group",
+            "engineering",
+        ],
+        client=client,
+    )
+    assert result.exit_code == 0, result.output
+    user_group_calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "user_groups"]
+    assert len(user_group_calls) == 1
+    calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
+    request = calls[0].kwargs["request"]
+    assert request["can_subscribe_group"] == 10
+    assert request["can_remove_subscribers_group"] == 20
+    assert request["can_add_subscribers_group"] == 22
+    assert request["can_administer_channel_group"] == 10
+    assert request["can_send_message_group"] == 10
 
 
 def test_channel_create_can_send_message_group_numeric_hint() -> None:

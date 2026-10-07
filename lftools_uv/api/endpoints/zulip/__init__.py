@@ -136,6 +136,7 @@ from .groups import (
     _normalize_group,
     _resolve_single_group_token,
     list_groups,
+    resolve_group_setting_specs,
     resolve_group_setting_value,
     resolve_groups,
 )

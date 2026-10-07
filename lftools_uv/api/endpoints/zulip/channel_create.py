@@ -143,8 +143,8 @@ def create_channel(
 
     # Lockout prevention for private channels:
     # Require at least one subscriber OR a non-None allow_group_value.
-    # Callers must validate that allow_group_value is not the Nobody group
-    # before calling (the CLI does this via resolve_groups with allow_nobody=False).
+    # Callers must reject Nobody-only allow_group_value when no subscribers
+    # are supplied (the CLI does this during group resolution).
     has_subscribers = bool(subscribe_user_ids)
     has_allow_group = allow_group_value is not None
 

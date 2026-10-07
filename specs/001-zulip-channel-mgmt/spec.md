@@ -943,7 +943,7 @@ and verifying it reappears in the active channel list.
   targeting different permissions. Each takes a direct comma-separated, quoted
   string value (e.g., `--allow-group 'foo, bar, id:123'`). Values are
   interpreted as group names by default; `id:NUM` forces ID lookup.
-  **API Translation (Group-Setting Values)**: The Zulip API `can_subscribe_group`
+  **API Translation (Group-Setting Values)**: The Zulip API `can_subscribe_group`,
   `can_remove_subscribers_group`, `can_add_subscribers_group`,
   `can_administer_channel_group`, and `can_send_message_group` fields use a
   "group-setting value" format:

@@ -2804,6 +2804,28 @@ def test_update_channel_can_send_message_group_wrapper() -> None:
     assert "can_administer_channel_group" not in payload
 
 
+def test_update_channel_combined_group_flags_fetch_groups_once() -> None:
+    """Update resolves combined group flags from one group listing."""
+    client = _update_client()
+    _ = update_channel(
+        client,
+        name="general",
+        allow_group="id:10",
+        can_remove_subscribers_group="Administrators",
+        can_add_subscribers_group="Members",
+        can_administer_channel_group="id:10",
+        can_send_message_group="design",
+    )
+    user_group_calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "user_groups"]
+    assert len(user_group_calls) == 1
+    payload = client.last_patch["request"]
+    assert payload["can_subscribe_group"] == {"new": 10}
+    assert payload["can_remove_subscribers_group"] == {"new": 20}
+    assert payload["can_add_subscribers_group"] == {"new": 22}
+    assert payload["can_administer_channel_group"] == {"new": 10}
+    assert payload["can_send_message_group"] == {"new": 30}
+
+
 def test_update_channel_can_send_message_group_complex_wrapper() -> None:
     """Multiple send-message groups stay wrapped under ``new``."""
     client = _update_client()
