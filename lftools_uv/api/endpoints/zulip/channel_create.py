@@ -32,6 +32,115 @@ from .logger import log
 from .topics import TOPIC_POLICY_MAP, VALID_TOPIC_POLICIES
 
 
+def _check_create_feature_levels(
+    client: Any,
+    *,
+    channel_type: Literal["public", "private", "web-public"],
+    topic_policy: str | None,
+    allow_group_value: GroupSettingValue | None,
+    can_remove_subscribers_group_value: GroupSettingValue | None,
+    can_add_subscribers_group_value: GroupSettingValue | None,
+    can_administer_channel_group_value: GroupSettingValue | None,
+    can_send_message_group_value: GroupSettingValue | None,
+) -> None:
+    """Apply create-channel feature-level gates."""
+    if channel_type == "web-public":
+        check_feature_level(client, FEATURE_LEVELS["web-public"], "web-public channels")
+    if topic_policy is not None:
+        check_feature_level(client, FEATURE_LEVELS["topic-policy"], "topic-policy")
+    if allow_group_value is not None:
+        check_feature_level(client, FEATURE_LEVELS["can-subscribe-group"], "group-based channel subscription")
+    if can_remove_subscribers_group_value is not None:
+        check_feature_level(client, FEATURE_LEVELS["can-remove-subscribers-group"], "can-remove-subscribers-group")
+    if can_add_subscribers_group_value is not None:
+        check_feature_level(client, FEATURE_LEVELS["can-add-subscribers-group"], "can-add-subscribers-group")
+    if can_administer_channel_group_value is not None:
+        check_feature_level(client, FEATURE_LEVELS["can-administer-channel-group"], "can-administer-channel-group")
+    if can_send_message_group_value is not None:
+        check_feature_level(client, FEATURE_LEVELS["can-send-message-group"], "can-send-message-group")
+
+
+def _validate_private_create_lockout(
+    channel_type: Literal["public", "private", "web-public"],
+    *,
+    subscribe_user_ids: list[int] | None,
+    allow_group_value: GroupSettingValue | None,
+) -> None:
+    """Reject private channel creation with no path for anyone to join."""
+    if channel_type == "private" and not subscribe_user_ids and allow_group_value is None:
+        raise ZulipLockoutError(
+            "Private channels require at least one --subscribe user or a non-Nobody --allow-group to prevent lockout."
+        )
+
+
+def _build_create_request(
+    *,
+    name: str,
+    description: str,
+    channel_type: Literal["public", "private", "web-public"],
+    subscribe_user_ids: list[int] | None,
+    allow_group_value: GroupSettingValue | None,
+    can_remove_subscribers_group_value: GroupSettingValue | None,
+    can_add_subscribers_group_value: GroupSettingValue | None,
+    can_administer_channel_group_value: GroupSettingValue | None,
+    can_send_message_group_value: GroupSettingValue | None,
+    announce: bool | None,
+    folder_id: int | None,
+    folder_id_specified: bool,
+) -> dict[str, Any]:
+    """Build the Zulip create-channel POST payload."""
+    subscription: dict[str, Any] = {"name": name}
+    if description:
+        subscription["description"] = description
+    if folder_id is not None or folder_id_specified:
+        subscription["folder_id"] = folder_id
+
+    request: dict[str, Any] = {
+        "subscriptions": [subscription],
+        "principals": list(subscribe_user_ids) if subscribe_user_ids else [],
+        "invite_only": channel_type == "private",
+        "is_web_public": channel_type == "web-public",
+    }
+    if announce is not None:
+        request["announce"] = announce
+
+    permission_values = {
+        "can_subscribe_group": allow_group_value,
+        "can_remove_subscribers_group": can_remove_subscribers_group_value,
+        "can_add_subscribers_group": can_add_subscribers_group_value,
+        "can_administer_channel_group": can_administer_channel_group_value,
+        "can_send_message_group": can_send_message_group_value,
+    }
+    request.update({key: value for key, value in permission_values.items() if value is not None})
+    return request
+
+
+def _apply_topic_policy_after_create(
+    client: Any,
+    *,
+    stream_id: int,
+    name: str,
+    topic_policy: str,
+) -> tuple[bool, str | None]:
+    """Apply topic policy after the create call returns."""
+    topic_policy_value = TOPIC_POLICY_MAP[topic_policy]
+    try:
+        patch_response = client.call_endpoint(
+            url=f"streams/{stream_id}",
+            method="PATCH",
+            request={"topics_policy": topic_policy_value},
+        )
+    except Exception as exc:  # pragma: no cover
+        log.warning("Failed to set topic_policy on channel %s: %s", name, exc)
+        return False, f"Failed to apply topic-policy '{topic_policy}': {exc}"
+
+    if isinstance(patch_response, dict) and patch_response.get("result") == "success":
+        return True, None
+    patch_msg = patch_response.get("msg") if isinstance(patch_response, dict) else str(patch_response)
+    log.warning("Failed to set topic_policy on channel %s: %s", name, patch_msg)
+    return False, f"Failed to apply topic-policy '{topic_policy}': {patch_msg}"
+
+
 def create_channel(
     client: Any,
     *,
@@ -110,84 +219,42 @@ def create_channel(
             f"Invalid topic-policy value: {topic_policy!r}. Valid values are: {', '.join(sorted(VALID_TOPIC_POLICIES))}"
         )
 
-    # Feature-level checks
-    if channel_type == "web-public":
-        check_feature_level(client, FEATURE_LEVELS["web-public"], "web-public channels")
-
-    if topic_policy is not None:
-        check_feature_level(client, FEATURE_LEVELS["topic-policy"], "topic-policy")
-
-    if allow_group_value is not None:
-        check_feature_level(client, FEATURE_LEVELS["can-subscribe-group"], "group-based channel subscription")
-
-    if can_remove_subscribers_group_value is not None:
-        check_feature_level(client, FEATURE_LEVELS["can-remove-subscribers-group"], "can-remove-subscribers-group")
-
-    if can_add_subscribers_group_value is not None:
-        check_feature_level(client, FEATURE_LEVELS["can-add-subscribers-group"], "can-add-subscribers-group")
-
-    if can_administer_channel_group_value is not None:
-        check_feature_level(
-            client,
-            FEATURE_LEVELS["can-administer-channel-group"],
-            "can-administer-channel-group",
-        )
-
-    if can_send_message_group_value is not None:
-        check_feature_level(client, FEATURE_LEVELS["can-send-message-group"], "can-send-message-group")
+    _check_create_feature_levels(
+        client,
+        channel_type=channel_type,
+        topic_policy=topic_policy,
+        allow_group_value=allow_group_value,
+        can_remove_subscribers_group_value=can_remove_subscribers_group_value,
+        can_add_subscribers_group_value=can_add_subscribers_group_value,
+        can_administer_channel_group_value=can_administer_channel_group_value,
+        can_send_message_group_value=can_send_message_group_value,
+    )
 
     if folder_id is not None:
         _validate_channel_folder_assignment_id(folder_id)
     if folder_id is not None or folder_id_specified:
         check_feature_level(client, FEATURE_LEVELS["channel-folders"], "channel-folders")
 
-    # Lockout prevention for private channels:
-    # Require at least one subscriber OR a non-None allow_group_value.
-    # Callers must reject Nobody-only allow_group_value when no subscribers
-    # are supplied (the CLI does this during group resolution).
-    has_subscribers = bool(subscribe_user_ids)
-    has_allow_group = allow_group_value is not None
+    _validate_private_create_lockout(
+        channel_type,
+        subscribe_user_ids=subscribe_user_ids,
+        allow_group_value=allow_group_value,
+    )
 
-    if channel_type == "private" and not has_subscribers and not has_allow_group:
-        raise ZulipLockoutError(
-            "Private channels require at least one --subscribe user or a non-Nobody --allow-group to prevent lockout."
-        )
-
-    subscription: dict[str, Any] = {"name": name}
-    if description:
-        subscription["description"] = description
-    if folder_id is not None or folder_id_specified:
-        subscription["folder_id"] = folder_id
-
-    principals: list[int] = list(subscribe_user_ids) if subscribe_user_ids else []
-
-    request: dict[str, Any] = {
-        "subscriptions": [subscription],
-        "principals": principals,
-        "invite_only": channel_type == "private",
-        "is_web_public": channel_type == "web-public",
-    }
-
-    if announce is True:
-        request["announce"] = True
-    elif announce is False:
-        request["announce"] = False
-    # None = API default (no key)
-
-    if allow_group_value is not None:
-        request["can_subscribe_group"] = allow_group_value
-
-    if can_remove_subscribers_group_value is not None:
-        request["can_remove_subscribers_group"] = can_remove_subscribers_group_value
-
-    if can_add_subscribers_group_value is not None:
-        request["can_add_subscribers_group"] = can_add_subscribers_group_value
-
-    if can_administer_channel_group_value is not None:
-        request["can_administer_channel_group"] = can_administer_channel_group_value
-
-    if can_send_message_group_value is not None:
-        request["can_send_message_group"] = can_send_message_group_value
+    request = _build_create_request(
+        name=name,
+        description=description,
+        channel_type=channel_type,
+        subscribe_user_ids=subscribe_user_ids,
+        allow_group_value=allow_group_value,
+        can_remove_subscribers_group_value=can_remove_subscribers_group_value,
+        can_add_subscribers_group_value=can_add_subscribers_group_value,
+        can_administer_channel_group_value=can_administer_channel_group_value,
+        can_send_message_group_value=can_send_message_group_value,
+        announce=announce,
+        folder_id=folder_id,
+        folder_id_specified=folder_id_specified,
+    )
 
     # Make the API call
     try:
@@ -220,22 +287,14 @@ def create_channel(
     # (introduced in Zulip feature level 334)
     topic_policy_applied = False
     if topic_policy is not None and stream_id is not None:
-        topic_policy_value = TOPIC_POLICY_MAP[topic_policy]
-        try:
-            patch_response = client.call_endpoint(
-                url=f"streams/{stream_id}",
-                method="PATCH",
-                request={"topics_policy": topic_policy_value},
-            )
-            if isinstance(patch_response, dict) and patch_response.get("result") == "success":
-                topic_policy_applied = True
-            else:
-                patch_msg = patch_response.get("msg") if isinstance(patch_response, dict) else str(patch_response)
-                warnings.append(f"Failed to apply topic-policy '{topic_policy}': {patch_msg}")
-                log.warning("Failed to set topic_policy on channel %s: %s", name, patch_msg)
-        except Exception as exc:  # pragma: no cover
-            warnings.append(f"Failed to apply topic-policy '{topic_policy}': {exc}")
-            log.warning("Failed to set topic_policy on channel %s: %s", name, exc)
+        topic_policy_applied, warning = _apply_topic_policy_after_create(
+            client,
+            stream_id=stream_id,
+            name=name,
+            topic_policy=topic_policy,
+        )
+        if warning is not None:
+            warnings.append(warning)
 
     # Determine overall status
     status = "success"
