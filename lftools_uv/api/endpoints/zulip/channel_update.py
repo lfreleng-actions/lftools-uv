@@ -29,7 +29,7 @@ from .dispatch import resolve_channel
 from .errors import ZulipAPIError, ZulipLockoutError, ZulipValidationError
 from .features import FEATURE_LEVELS, check_feature_level
 from .folders import _validate_channel_folder_assignment_id
-from .groups import GroupSettingValue, resolve_group_setting_specs, resolve_group_setting_value, resolve_groups
+from .groups import GroupSettingValue, resolve_group_setting_specs
 from .topics import TOPIC_POLICY_MAP, TopicPolicy
 from .users import IdMode, resolve_users
 
@@ -230,29 +230,6 @@ def _resolved_channel_identity(channel: dict[str, Any]) -> tuple[int, str]:
     if not isinstance(name_raw, str):
         raise ZulipAPIError(f"Resolved channel missing name: {channel!r}")
     return stream_id_raw, name_raw
-
-
-def _resolve_allow_group(
-    client: Any,
-    allow_group: str | None,
-) -> tuple[list[dict[str, Any]] | None, GroupSettingValue | None]:
-    """Resolve ``--allow-group`` into its group dicts and API value.
-
-    ``allow_group`` is always resolved with allow_nobody=True; the
-    lockout-prevention check decides whether a Nobody-only value is
-    acceptable in the current context. (Per spec, Nobody is only
-    forbidden when converting to private with 0 existing subscribers
-    and no --subscribe targets; on a channel that already has
-    subscribers, Nobody is allowed and simply disables future joins.)
-    """
-    if allow_group is None:
-        return None, None
-    return resolve_groups(client, allow_group, allow_nobody=True)
-
-
-def _resolve_can_remove_group(client: Any, spec: str | None) -> GroupSettingValue | None:
-    """Resolve ``--can-remove-subscribers-group`` into its API value."""
-    return resolve_group_setting_value(client, spec)
 
 
 def _allow_group_satisfies_lockout(

@@ -299,6 +299,7 @@ __all__ = [
     "resolve_channel_folder_reference",
     "resolve_channel_folder_token",
     "resolve_config",
+    "resolve_group_setting_specs",
     "resolve_group_setting_value",
     "resolve_groups",
     "resolve_users",
