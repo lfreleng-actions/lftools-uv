@@ -16,6 +16,7 @@ call that Zulip uses to create a channel.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from .dispatch import resolve_channel
@@ -32,84 +33,84 @@ from .logger import log
 from .topics import TOPIC_POLICY_MAP, VALID_TOPIC_POLICIES
 
 
+@dataclass(frozen=True)
+class _CreatePermissionValues:
+    """Resolved create permission group-setting values."""
+
+    allow_group: GroupSettingValue | None
+    can_remove_subscribers_group: GroupSettingValue | None
+    can_add_subscribers_group: GroupSettingValue | None
+    can_administer_channel_group: GroupSettingValue | None
+    can_send_message_group: GroupSettingValue | None
+
+
+@dataclass(frozen=True)
+class _CreatePayload:
+    """Validated create-channel inputs used by helper functions."""
+
+    name: str
+    description: str
+    channel_type: Literal["public", "private", "web-public"]
+    subscribe_user_ids: list[int] | None
+    permissions: _CreatePermissionValues
+    announce: bool | None
+    topic_policy: str | None
+    folder_id: int | None
+    folder_id_specified: bool
+
+
 def _check_create_feature_levels(
     client: Any,
-    *,
-    channel_type: Literal["public", "private", "web-public"],
-    topic_policy: str | None,
-    allow_group_value: GroupSettingValue | None,
-    can_remove_subscribers_group_value: GroupSettingValue | None,
-    can_add_subscribers_group_value: GroupSettingValue | None,
-    can_administer_channel_group_value: GroupSettingValue | None,
-    can_send_message_group_value: GroupSettingValue | None,
+    payload: _CreatePayload,
 ) -> None:
     """Apply create-channel feature-level gates."""
-    if channel_type == "web-public":
+    if payload.channel_type == "web-public":
         check_feature_level(client, FEATURE_LEVELS["web-public"], "web-public channels")
-    if topic_policy is not None:
+    if payload.topic_policy is not None:
         check_feature_level(client, FEATURE_LEVELS["topic-policy"], "topic-policy")
-    if allow_group_value is not None:
+    if payload.permissions.allow_group is not None:
         check_feature_level(client, FEATURE_LEVELS["can-subscribe-group"], "group-based channel subscription")
-    if can_remove_subscribers_group_value is not None:
+    if payload.permissions.can_remove_subscribers_group is not None:
         check_feature_level(client, FEATURE_LEVELS["can-remove-subscribers-group"], "can-remove-subscribers-group")
-    if can_add_subscribers_group_value is not None:
+    if payload.permissions.can_add_subscribers_group is not None:
         check_feature_level(client, FEATURE_LEVELS["can-add-subscribers-group"], "can-add-subscribers-group")
-    if can_administer_channel_group_value is not None:
+    if payload.permissions.can_administer_channel_group is not None:
         check_feature_level(client, FEATURE_LEVELS["can-administer-channel-group"], "can-administer-channel-group")
-    if can_send_message_group_value is not None:
+    if payload.permissions.can_send_message_group is not None:
         check_feature_level(client, FEATURE_LEVELS["can-send-message-group"], "can-send-message-group")
 
 
-def _validate_private_create_lockout(
-    channel_type: Literal["public", "private", "web-public"],
-    *,
-    subscribe_user_ids: list[int] | None,
-    allow_group_value: GroupSettingValue | None,
-) -> None:
+def _validate_private_create_lockout(payload: _CreatePayload) -> None:
     """Reject private channel creation with no path for anyone to join."""
-    if channel_type == "private" and not subscribe_user_ids and allow_group_value is None:
+    if payload.channel_type == "private" and not payload.subscribe_user_ids and payload.permissions.allow_group is None:
         raise ZulipLockoutError(
             "Private channels require at least one --subscribe user or a non-Nobody --allow-group to prevent lockout."
         )
 
 
-def _build_create_request(
-    *,
-    name: str,
-    description: str,
-    channel_type: Literal["public", "private", "web-public"],
-    subscribe_user_ids: list[int] | None,
-    allow_group_value: GroupSettingValue | None,
-    can_remove_subscribers_group_value: GroupSettingValue | None,
-    can_add_subscribers_group_value: GroupSettingValue | None,
-    can_administer_channel_group_value: GroupSettingValue | None,
-    can_send_message_group_value: GroupSettingValue | None,
-    announce: bool | None,
-    folder_id: int | None,
-    folder_id_specified: bool,
-) -> dict[str, Any]:
+def _build_create_request(payload: _CreatePayload) -> dict[str, Any]:
     """Build the Zulip create-channel POST payload."""
-    subscription: dict[str, Any] = {"name": name}
-    if description:
-        subscription["description"] = description
-    if folder_id is not None or folder_id_specified:
-        subscription["folder_id"] = folder_id
+    subscription: dict[str, Any] = {"name": payload.name}
+    if payload.description:
+        subscription["description"] = payload.description
+    if payload.folder_id is not None or payload.folder_id_specified:
+        subscription["folder_id"] = payload.folder_id
 
     request: dict[str, Any] = {
         "subscriptions": [subscription],
-        "principals": list(subscribe_user_ids) if subscribe_user_ids else [],
-        "invite_only": channel_type == "private",
-        "is_web_public": channel_type == "web-public",
+        "principals": list(payload.subscribe_user_ids) if payload.subscribe_user_ids else [],
+        "invite_only": payload.channel_type == "private",
+        "is_web_public": payload.channel_type == "web-public",
     }
-    if announce is not None:
-        request["announce"] = announce
+    if payload.announce is not None:
+        request["announce"] = payload.announce
 
     permission_values = {
-        "can_subscribe_group": allow_group_value,
-        "can_remove_subscribers_group": can_remove_subscribers_group_value,
-        "can_add_subscribers_group": can_add_subscribers_group_value,
-        "can_administer_channel_group": can_administer_channel_group_value,
-        "can_send_message_group": can_send_message_group_value,
+        "can_subscribe_group": payload.permissions.allow_group,
+        "can_remove_subscribers_group": payload.permissions.can_remove_subscribers_group,
+        "can_add_subscribers_group": payload.permissions.can_add_subscribers_group,
+        "can_administer_channel_group": payload.permissions.can_administer_channel_group,
+        "can_send_message_group": payload.permissions.can_send_message_group,
     }
     request.update({key: value for key, value in permission_values.items() if value is not None})
     return request
@@ -219,42 +220,34 @@ def create_channel(
             f"Invalid topic-policy value: {topic_policy!r}. Valid values are: {', '.join(sorted(VALID_TOPIC_POLICIES))}"
         )
 
-    _check_create_feature_levels(
-        client,
+    payload = _CreatePayload(
+        name=name,
+        description=description,
         channel_type=channel_type,
+        subscribe_user_ids=subscribe_user_ids,
+        permissions=_CreatePermissionValues(
+            allow_group=allow_group_value,
+            can_remove_subscribers_group=can_remove_subscribers_group_value,
+            can_add_subscribers_group=can_add_subscribers_group_value,
+            can_administer_channel_group=can_administer_channel_group_value,
+            can_send_message_group=can_send_message_group_value,
+        ),
+        announce=announce,
         topic_policy=topic_policy,
-        allow_group_value=allow_group_value,
-        can_remove_subscribers_group_value=can_remove_subscribers_group_value,
-        can_add_subscribers_group_value=can_add_subscribers_group_value,
-        can_administer_channel_group_value=can_administer_channel_group_value,
-        can_send_message_group_value=can_send_message_group_value,
+        folder_id=folder_id,
+        folder_id_specified=folder_id_specified,
     )
+
+    _check_create_feature_levels(client, payload)
 
     if folder_id is not None:
         _validate_channel_folder_assignment_id(folder_id)
     if folder_id is not None or folder_id_specified:
         check_feature_level(client, FEATURE_LEVELS["channel-folders"], "channel-folders")
 
-    _validate_private_create_lockout(
-        channel_type,
-        subscribe_user_ids=subscribe_user_ids,
-        allow_group_value=allow_group_value,
-    )
+    _validate_private_create_lockout(payload)
 
-    request = _build_create_request(
-        name=name,
-        description=description,
-        channel_type=channel_type,
-        subscribe_user_ids=subscribe_user_ids,
-        allow_group_value=allow_group_value,
-        can_remove_subscribers_group_value=can_remove_subscribers_group_value,
-        can_add_subscribers_group_value=can_add_subscribers_group_value,
-        can_administer_channel_group_value=can_administer_channel_group_value,
-        can_send_message_group_value=can_send_message_group_value,
-        announce=announce,
-        folder_id=folder_id,
-        folder_id_specified=folder_id_specified,
-    )
+    request = _build_create_request(payload)
 
     # Make the API call
     try:
