@@ -79,6 +79,11 @@ def channel_create(
         "--can-administer-channel-group",
         help="Comma-separated groups that can administer the channel; use 'id:NUM' for ID lookup.",
     ),
+    can_send_message_group: str | None = typer.Option(
+        None,
+        "--can-send-message-group",
+        help="Comma-separated groups that can send messages; use 'id:NUM' for ID lookup.",
+    ),
     folder: str | None = typer.Option(
         None,
         "--folder",
@@ -176,6 +181,7 @@ def channel_create(
         can_add_value = resolve_group_setting_value(client, can_add_subscribers_group)
 
         can_administer_value = resolve_group_setting_value(client, can_administer_channel_group)
+        can_send_message_value = resolve_group_setting_value(client, can_send_message_group)
 
         folder_id: int | None = None
         folder_id_specified = folder is not None
@@ -192,6 +198,7 @@ def channel_create(
             can_remove_subscribers_group_value=can_remove_value,
             can_add_subscribers_group_value=can_add_value,
             can_administer_channel_group_value=can_administer_value,
+            can_send_message_group_value=can_send_message_value,
             announce=announce_value,
             topic_policy=topic_policy,
             folder_id=folder_id,

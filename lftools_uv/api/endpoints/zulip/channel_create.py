@@ -43,6 +43,7 @@ def create_channel(
     can_remove_subscribers_group_value: GroupSettingValue | None = None,
     can_add_subscribers_group_value: GroupSettingValue | None = None,
     can_administer_channel_group_value: GroupSettingValue | None = None,
+    can_send_message_group_value: GroupSettingValue | None = None,
     announce: bool | None = None,
     topic_policy: str | None = None,
     folder_id: int | None = None,
@@ -72,6 +73,8 @@ def create_channel(
         Resolved group-setting value for ``can_add_subscribers_group``.
     can_administer_channel_group_value
         Resolved group-setting value for ``can_administer_channel_group``.
+    can_send_message_group_value
+        Resolved group-setting value for ``can_send_message_group``.
     announce
         ``True`` to announce, ``False`` to suppress, ``None`` for API default.
     topic_policy
@@ -96,8 +99,8 @@ def create_channel(
     ZulipFeatureLevelError
         When the server lacks the required feature level for web-public,
         topic-policy, can-subscribe-group, can-remove-subscribers-group,
-        can-add-subscribers-group, or can-administer-channel-group
-        features.
+        can-add-subscribers-group, can-administer-channel-group, or
+        can-send-message-group features.
     ZulipAPIError
         For transport or server errors.
     """
@@ -129,6 +132,9 @@ def create_channel(
             FEATURE_LEVELS["can-administer-channel-group"],
             "can-administer-channel-group",
         )
+
+    if can_send_message_group_value is not None:
+        check_feature_level(client, FEATURE_LEVELS["can-send-message-group"], "can-send-message-group")
 
     if folder_id is not None:
         _validate_channel_folder_assignment_id(folder_id)
@@ -179,6 +185,9 @@ def create_channel(
 
     if can_administer_channel_group_value is not None:
         request["can_administer_channel_group"] = can_administer_channel_group_value
+
+    if can_send_message_group_value is not None:
+        request["can_send_message_group"] = can_send_message_group_value
 
     # Make the API call
     try:
