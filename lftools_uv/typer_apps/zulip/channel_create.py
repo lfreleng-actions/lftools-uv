@@ -155,6 +155,12 @@ def channel_create(
                 FEATURE_LEVELS["can-add-subscribers-group"],
                 "can-add-subscribers-group",
             )
+        if can_administer_channel_group is not None:
+            check_feature_level(
+                client,
+                FEATURE_LEVELS["can-administer-channel-group"],
+                "can-administer-channel-group",
+            )
 
         # Resolve allow-group if provided
         # For private channels, resolve_groups with allow_nobody=False will raise
@@ -168,6 +174,7 @@ def channel_create(
         can_remove_value = resolve_group_setting_value(client, can_remove_subscribers_group)
 
         can_add_value = resolve_group_setting_value(client, can_add_subscribers_group)
+
         can_administer_value = resolve_group_setting_value(client, can_administer_channel_group)
 
         folder_id: int | None = None

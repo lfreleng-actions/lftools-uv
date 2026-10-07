@@ -1275,7 +1275,27 @@ def test_channel_create_can_administer_channel_group_feature_errors() -> None:
     assert result.exit_code == 1
     combined = result.output + (getattr(result, "stderr", "") or "")
     assert "feature level 325" in combined
+    assert not any(c.kwargs.get("url") == "user_groups" for c in client.call_endpoint.call_args_list)
     assert not any(c.kwargs.get("url") == "users/me/subscriptions" for c in client.call_endpoint.call_args_list)
+
+
+def test_channel_create_can_administer_channel_group_gate_precedes_other_groups() -> None:
+    """Unsupported administer flag gates before any group lookup."""
+    client = _create_cli_client(feature_level=324)
+    result = _invoke_create(
+        [
+            "new-project",
+            "--allow-group",
+            "engineering",
+            "--can-administer-channel-group",
+            "Administrators",
+        ],
+        client=client,
+    )
+    assert result.exit_code == 1
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "feature level 325" in combined
+    assert not any(c.kwargs.get("url") == "user_groups" for c in client.call_endpoint.call_args_list)
 
 
 def test_channel_create_can_administer_channel_group_json_feature_error() -> None:
