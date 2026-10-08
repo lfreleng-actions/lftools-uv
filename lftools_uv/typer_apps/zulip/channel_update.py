@@ -109,8 +109,8 @@ def channel_update(  # noqa: PLR0913 - CLI parity with contract
 ) -> None:
     """Update channel settings.
 
-    Implements US8 (FR-004). Exactly one of ``[channel]`` or
-    ``--channel-id`` must be supplied. The API layer
+    Exactly one of ``[channel]`` or ``--channel-id`` must be supplied.
+    The API layer
     (:func:`update_channel`) enforces the at-least-one-setting
     constraint and surfaces it as a :class:`ZulipValidationError`; this
     CLI layer validates flag-shape constraints (choice values, the

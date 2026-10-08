@@ -105,7 +105,7 @@ def channel_create(
         help="Topic policy: allow, deny, or follow-default.",
     ),
 ) -> None:
-    """Create a new Zulip channel (US4).
+    """Create a new Zulip channel.
 
     Creates a channel with the specified name and options. Private channels
     require at least one --subscribe user or a non-Nobody --allow-group.
