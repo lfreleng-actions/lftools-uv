@@ -73,9 +73,9 @@ Represents a raw Zulip stream object plus derived and resolved details.
 | `topics_policy` | `str` | Raw Zulip topic policy | via --flag; setter `--topic-policy` |
 | `can_subscribe_group` | `GroupSettingDisplay` | Who can self-subscribe | via --flag; setter `--allow-group` |
 | `can_remove_subscribers_group` | `GroupSettingDisplay` | Who can remove subscribers | via --flag; setter `--can-remove-subscribers-group` |
-| `can_add_subscribers_group` | `GroupSettingDisplay` | Who can add subscribers | not exposed |
-| `can_administer_channel_group` | `GroupSettingDisplay` | Who can administer channel | not exposed |
-| `can_send_message_group` | `GroupSettingDisplay` | Who can post messages | not exposed |
+| `can_add_subscribers_group` | `GroupSettingDisplay` | Who can add subscribers | via --flag; setter `--can-add-subscribers-group` |
+| `can_administer_channel_group` | `GroupSettingDisplay` | Who can administer channel | via --flag; setter `--can-administer-channel-group` |
+| `can_send_message_group` | `GroupSettingDisplay` | Who can post messages | via --flag; setter `--can-send-message-group` |
 | `can_delete_any_message_group` | `GroupSettingDisplay` | Who can delete any message | not exposed |
 | `can_delete_own_message_group` | `GroupSettingDisplay` | Who can delete own messages | not exposed |
 | `can_move_messages_out_of_channel_group` | `GroupSettingDisplay` | Who can move messages out | not exposed |

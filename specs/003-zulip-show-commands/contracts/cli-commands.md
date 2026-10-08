@@ -104,7 +104,21 @@ Required derived rows when raw data exists:
   },
   "annotations": {
     "description": {"status": "via --flag", "setter": "--description", "notes": null},
-    "can_add_subscribers_group": {"status": "not exposed", "setter": null, "notes": null}
+    "can_add_subscribers_group": {
+      "status": "via --flag",
+      "setter": "--can-add-subscribers-group",
+      "notes": "FL 342"
+    },
+    "can_administer_channel_group": {
+      "status": "via --flag",
+      "setter": "--can-administer-channel-group",
+      "notes": "FL 325"
+    },
+    "can_send_message_group": {
+      "status": "via --flag",
+      "setter": "--can-send-message-group",
+      "notes": "FL 333"
+    }
   }
 }
 ```

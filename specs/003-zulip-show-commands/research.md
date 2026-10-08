@@ -64,9 +64,9 @@ it keeps only `stream_id`, `name`, `description`, derived `type`,
 | `can_remove_subscribers_group` | via --flag; setter `--can-remove-subscribers-group` |
 | `folder_id` | via --flag; setter `--folder`; clear via `--folder-id 0` |
 | `is_archived` | via command; setters `channel archive` / `channel unarchive` |
-| `can_add_subscribers_group` | not exposed; API settable at FL 342 |
-| `can_administer_channel_group` | not exposed; API settable at FL 325 |
-| `can_send_message_group` | not exposed; API settable at FL 333 |
+| `can_add_subscribers_group` | via --flag; setter `--can-add-subscribers-group`; API settable at FL 342 |
+| `can_administer_channel_group` | via --flag; setter `--can-administer-channel-group`; API settable at FL 325 |
+| `can_send_message_group` | via --flag; setter `--can-send-message-group`; API settable at FL 333 |
 | `can_delete_any_message_group` | not exposed; API settable at FL 407 |
 | `can_delete_own_message_group` | not exposed; API settable at FL 407 |
 | `can_move_messages_out_of_channel_group` | not exposed; API settable at FL 396 |
