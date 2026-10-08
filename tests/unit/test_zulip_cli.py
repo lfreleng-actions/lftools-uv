@@ -43,7 +43,7 @@ from lftools_uv.typer_apps.zulip import (
 )
 from tests.test_utils import clean_cli_output
 
-_SPEC_IDENTIFIER_RE = re.compile(r"\b(?:US\d+|FR-\d+|T\d{3})\b")
+_SPEC_IDENTIFIER_RE = re.compile(r"\b(?:US\d+|FR-\d+|SC-\d+|T\d{3})\b")
 
 
 def _iter_help_paths(command: Any, prefix: tuple[str, ...] = ()) -> list[tuple[str, ...]]:
