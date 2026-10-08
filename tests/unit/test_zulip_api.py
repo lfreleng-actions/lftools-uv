@@ -47,6 +47,7 @@ from lftools_uv.api.endpoints.zulip import (
     plan_folder_move,
     reorder_channel_folders,
     resolve_channel,
+    resolve_group_setting_value,
     resolve_groups,
     resolve_users,
     set_topic_policy,
@@ -110,6 +111,9 @@ def test_feature_level_table_contains_expected_keys() -> None:
         "web-public",
         "can-subscribe-group",
         "can-remove-subscribers-group",
+        "can-add-subscribers-group",
+        "can-administer-channel-group",
+        "can-send-message-group",
         "topic-policy",
         "unarchive",
     ):
@@ -400,6 +404,28 @@ def test_resolve_groups_tolerates_extra_commas() -> None:
     resolved, value = resolve_groups(client, "design, , id:11")
     assert [g["id"] for g in resolved] == [30, 11]
     assert value == {"direct_members": [], "direct_subgroups": [30, 11]}
+
+
+def test_resolve_group_setting_value_optional_specs() -> None:
+    """Shared optional helper preserves existing group resolution behavior."""
+    client = _groups_client(GROUPS)
+    assert resolve_group_setting_value(client, None) is None
+    assert resolve_group_setting_value(client, "design") == 30
+    assert resolve_group_setting_value(client, "design, id:10") == {
+        "direct_members": [],
+        "direct_subgroups": [30, 10],
+    }
+
+
+def test_resolve_group_setting_value_preserves_errors() -> None:
+    """Permission flags reuse empty, numeric-hint, and none-name errors."""
+    client = _groups_client(GROUPS)
+    with pytest.raises(ZulipValidationError, match="must not be empty"):
+        _ = resolve_group_setting_value(client, " , ")
+    with pytest.raises(ZulipNotFoundError, match="id:123"):
+        _ = resolve_group_setting_value(client, "123")
+    with pytest.raises(ZulipNotFoundError, match="'none'"):
+        _ = resolve_group_setting_value(client, "none")
 
 
 # ---------------------------------------------------------------------------
@@ -1490,6 +1516,53 @@ def test_create_channel_passes_can_remove_subscribers_group() -> None:
     assert request.get("can_remove_subscribers_group") == 22
 
 
+def test_create_channel_passes_can_add_subscribers_group_simple() -> None:
+    """can_add_subscribers_group is sent as a raw create value."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client()
+    create_channel(
+        client,
+        name="new-channel",
+        can_add_subscribers_group_value=20,
+    )
+    calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
+    request = calls[0].kwargs.get("request", {})
+    assert request["can_add_subscribers_group"] == 20
+    assert request["can_add_subscribers_group"] != {"new": 20}
+
+
+def test_create_channel_passes_can_add_subscribers_group_complex() -> None:
+    """Object group settings are sent raw on create."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    value = {"direct_members": [], "direct_subgroups": [20, 22]}
+    client = _create_channel_client()
+    create_channel(
+        client,
+        name="new-channel",
+        can_add_subscribers_group_value=value,
+    )
+    calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
+    request = calls[0].kwargs.get("request", {})
+    assert request["can_add_subscribers_group"] == value
+
+
+def test_create_channel_can_add_subscribers_group_feature_level() -> None:
+    """can_add_subscribers_group requires Zulip feature level 342."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client(feature_level=341)
+    with pytest.raises(ZulipFeatureLevelError) as exc:
+        create_channel(
+            client,
+            name="new-channel",
+            can_add_subscribers_group_value=20,
+        )
+    assert exc.value.required == FEATURE_LEVELS["can-add-subscribers-group"]
+    assert client.call_endpoint.call_args_list == []
+
+
 def test_create_channel_api_error_handled() -> None:
     """API errors are raised as ZulipAPIError."""
     from lftools_uv.api.endpoints.zulip import create_channel
@@ -2564,6 +2637,35 @@ def test_update_channel_can_remove_subscribers_group_feature_level() -> None:
         )
 
 
+def test_update_channel_can_add_subscribers_group_wrapper() -> None:
+    """``--can-add-subscribers-group`` uses the PATCH wrapper."""
+    client = _update_client()
+    _ = update_channel(client, name="general", can_add_subscribers_group="design")
+    payload = client.last_patch["request"]
+    assert payload["can_add_subscribers_group"] == {"new": 30}
+
+
+def test_update_channel_can_add_subscribers_group_complex_wrapper() -> None:
+    """Multiple add-subscriber groups stay wrapped under ``new``."""
+    client = _update_client()
+    _ = update_channel(client, name="general", can_add_subscribers_group="design, id:10")
+    payload = client.last_patch["request"]
+    assert payload["can_add_subscribers_group"] == {"new": {"direct_members": [], "direct_subgroups": [30, 10]}}
+
+
+def test_update_channel_can_add_subscribers_group_feature_level() -> None:
+    """``--can-add-subscribers-group`` requires feature level 342."""
+    client = _update_client(feature_level=341)
+    with pytest.raises(ZulipFeatureLevelError) as exc:
+        _ = update_channel(
+            client,
+            name="general",
+            can_add_subscribers_group="design",
+        )
+    assert exc.value.required == FEATURE_LEVELS["can-add-subscribers-group"]
+    assert client.call_endpoint.call_args_list == []
+
+
 def test_update_channel_topic_policy_feature_level() -> None:
     """``--topic-policy`` requires the documented feature level."""
     client = _update_client(feature_level=1)
@@ -3115,6 +3217,7 @@ DETAIL_STREAMS = [
         "creator_id": 100,
         "topics_policy": "inherit",
         "can_subscribe_group": 22,
+        "can_add_subscribers_group": 20,
         "can_send_message_group": {"direct_members": [101], "direct_subgroups": [20]},
         "subscriber_count": 7,
     }
@@ -3268,9 +3371,16 @@ def test_get_channel_detail_resolves_and_no_resolve_skips_calls() -> None:
     assert detail["resolved"]["folder"] == {"id": 10, "name": "Projects"}
     assert detail["resolved"]["creator"]["full_name"] == "Alice Admin"
     subscribe_group = detail["resolved"]["groups"]["can_subscribe_group"]
+    add_group = detail["resolved"]["groups"]["can_add_subscribers_group"]
+    assert add_group["display"] == "Administrators (id=20)"
     assert subscribe_group["display"] == "Members (id=22)"
     assert subscribe_group["resolved_members"] == []
     assert subscribe_group["resolved_groups"] == [{"group_id": 22, "name": "Members", "type": "system"}]
+    assert detail["annotations"]["can_add_subscribers_group"] == {
+        "status": "via --flag",
+        "setter": "--can-add-subscribers-group",
+        "notes": "FL 342",
+    }
     assert detail["annotations"]["can_send_message_group"]["status"] == "not exposed"
 
     client = _detail_client()

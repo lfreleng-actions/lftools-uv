@@ -193,6 +193,14 @@ def resolve_groups(
     return resolved, _build_group_setting_value(group_ids)
 
 
+def resolve_group_setting_value(client: Any, spec: str | None) -> GroupSettingValue | None:
+    """Resolve an optional permission-group spec to a Zulip setting value."""
+    if spec is None:
+        return None
+    _, value = resolve_groups(client, spec)
+    return value
+
+
 def _normalize_group(raw: dict[str, Any]) -> dict[str, Any]:
     """Normalize a raw ``user_groups`` API entry to the lftools schema.
 

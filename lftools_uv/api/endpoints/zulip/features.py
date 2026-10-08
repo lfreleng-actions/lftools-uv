@@ -34,6 +34,9 @@ from .errors import ZulipAPIError, ZulipFeatureLevelError
 #: * Feature level 357 — group-based channel subscription via
 #:   ``can_subscribe_group``.
 #: * Feature level 161 — ``can_remove_subscribers_group`` permission.
+#: * Feature level 342 — ``can_add_subscribers_group`` permission.
+#: * Feature level 325 — ``can_administer_channel_group`` permission.
+#: * Feature level 333 — ``can_send_message_group`` permission.
 #: * Feature level 334 — ``topic_policy`` per-channel field.
 #: * Feature level 59 — stream reactivation via stream update API.
 #: * Feature level 389 — channel folders.
@@ -46,6 +49,9 @@ FEATURE_LEVELS: dict[str, int] = {
     "web-public": 12,
     "can-subscribe-group": 357,
     "can-remove-subscribers-group": 161,
+    "can-add-subscribers-group": 342,
+    "can-administer-channel-group": 325,
+    "can-send-message-group": 333,
     "topic-policy": 334,
     "unarchive": 59,
     "channel-folders": 389,

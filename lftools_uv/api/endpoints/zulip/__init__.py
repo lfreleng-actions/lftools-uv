@@ -136,6 +136,7 @@ from .groups import (
     _normalize_group,
     _resolve_single_group_token,
     list_groups,
+    resolve_group_setting_value,
     resolve_groups,
 )
 from .logger import log
@@ -297,6 +298,7 @@ __all__ = [
     "resolve_channel_folder_reference",
     "resolve_channel_folder_token",
     "resolve_config",
+    "resolve_group_setting_value",
     "resolve_groups",
     "resolve_users",
     "set_topic_policy",

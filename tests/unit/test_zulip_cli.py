@@ -1168,6 +1168,77 @@ def test_channel_create_can_remove_subscribers_group() -> None:
     assert result.exit_code == 0, result.output
 
 
+def test_channel_create_can_add_subscribers_group_payload() -> None:
+    """Create CLI resolves and sends can_add_subscribers_group raw."""
+    client = _create_cli_client()
+    result = _invoke_create(
+        [
+            "new-project",
+            "--can-add-subscribers-group",
+            "Administrators",
+        ],
+        client=client,
+    )
+    assert result.exit_code == 0, result.output
+    calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
+    request = calls[0].kwargs["request"]
+    assert request["can_add_subscribers_group"] == 20
+    assert request["can_add_subscribers_group"] != {"new": 20}
+
+
+def test_channel_create_can_add_subscribers_group_numeric_hint() -> None:
+    """The new create flag reuses bare-numeric group hint errors."""
+    result = _invoke_create(["new-project", "--can-add-subscribers-group", "123"])
+    assert result.exit_code == 1
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "use 'id:123'" in combined
+
+
+def test_channel_create_can_add_subscribers_group_feature_errors() -> None:
+    """The create flag fails before mutation below FL 342."""
+    client = _create_cli_client(feature_level=341)
+    result = _invoke_create(
+        ["new-project", "--can-add-subscribers-group", "Administrators"],
+        client=client,
+    )
+    assert result.exit_code == 1
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "feature level 342" in combined
+    assert not any(c.kwargs.get("url") == "user_groups" for c in client.call_endpoint.call_args_list)
+    assert not any(c.kwargs.get("url") == "users/me/subscriptions" for c in client.call_endpoint.call_args_list)
+
+
+def test_channel_create_can_add_subscribers_group_gate_precedes_other_groups() -> None:
+    """Unsupported add-subscribers flag gates before any group lookup."""
+    client = _create_cli_client(feature_level=341)
+    result = _invoke_create(
+        [
+            "new-project",
+            "--allow-group",
+            "engineering",
+            "--can-add-subscribers-group",
+            "Administrators",
+        ],
+        client=client,
+    )
+    assert result.exit_code == 1
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "feature level 342" in combined
+    assert not any(c.kwargs.get("url") == "user_groups" for c in client.call_endpoint.call_args_list)
+
+
+def test_channel_create_can_add_subscribers_group_json_feature_error() -> None:
+    """JSON mode reports the same canonical feature-level text."""
+    result = _invoke_create(
+        ["new-project", "--can-add-subscribers-group", "Administrators"],
+        feature_level=341,
+        json_output=True,
+    )
+    assert result.exit_code == 1
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "feature level 342" in combined
+
+
 def test_channel_create_user_ambiguity_error() -> None:
     """Ambiguous user name raises error with match listing."""
     # Create members with duplicate names
@@ -1220,6 +1291,8 @@ def test_channel_create_help_renders(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "--type" in cleaned
     assert "--subscribe" in cleaned
     assert "--allow-group" in cleaned
+    assert "--can-add-subscribers-group" in cleaned
+    assert "id:NUM" in cleaned
     assert "--announce" in cleaned
     assert "--topic-policy" in cleaned
 
@@ -2249,6 +2322,52 @@ def test_channel_update_can_remove_subscribers_group(monkeypatch: pytest.MonkeyP
     )
     assert result.exit_code == 0, result.output
     assert fake.call_args.kwargs["can_remove_subscribers_group"] == "design"
+
+
+def test_channel_update_can_add_subscribers_group(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _patch_update(monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        [
+            "channel",
+            "update",
+            "general",
+            "--can-add-subscribers-group",
+            "design",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert fake.call_args.kwargs["can_add_subscribers_group"] == "design"
+
+
+def test_channel_update_can_add_subscribers_group_feature_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_update(
+        monkeypatch,
+        side_effect=ZulipFeatureLevelError(required=342, actual=341, feature_name="can-add-subscribers-group"),
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        ["channel", "update", "general", "--can-add-subscribers-group", "design"],
+    )
+    assert result.exit_code != 0
+    out = result.output + (result.stderr or "")
+    assert "feature level 342" in out
+
+
+def test_channel_update_help_lists_can_add_subscribers_group(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        ["channel", "update", "--help"],
+        env={"COLUMNS": "200", "NO_COLOR": "1", "TERM": "dumb"},
+    )
+    assert result.exit_code == 0, result.output
+    cleaned = clean_cli_output(result.output)
+    assert "--can-add-subscribers-group" in cleaned
+    assert "id:NUM" in cleaned
 
 
 def test_channel_update_no_settings_errors(monkeypatch: pytest.MonkeyPatch) -> None:

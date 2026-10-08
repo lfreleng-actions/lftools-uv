@@ -69,6 +69,11 @@ def channel_create(
         "--can-remove-subscribers-group",
         help="Comma-separated groups that can remove subscribers; use 'id:NUM' for ID lookup.",
     ),
+    can_add_subscribers_group: str | None = typer.Option(
+        None,
+        "--can-add-subscribers-group",
+        help="Comma-separated groups that can add subscribers; use 'id:NUM' for ID lookup.",
+    ),
     folder: str | None = typer.Option(
         None,
         "--folder",
@@ -96,9 +101,12 @@ def channel_create(
     require at least one --subscribe user or a non-Nobody --allow-group.
     """
     from lftools_uv.api.endpoints.zulip import (
+        FEATURE_LEVELS,
         ZulipLockoutError,
         ZulipValidationError,
+        check_feature_level,
         create_channel,
+        resolve_group_setting_value,
         resolve_groups,
         resolve_users,
     )
@@ -136,6 +144,13 @@ def channel_create(
             resolved_users = resolve_users(client, subscribe, mode=id_mode)  # type: ignore[arg-type]
             subscribe_user_ids = [u["user_id"] for u in resolved_users]
 
+        if can_add_subscribers_group is not None:
+            check_feature_level(
+                client,
+                FEATURE_LEVELS["can-add-subscribers-group"],
+                "can-add-subscribers-group",
+            )
+
         # Resolve allow-group if provided
         # For private channels, resolve_groups with allow_nobody=False will raise
         # ZulipLockoutError if the only group is Nobody - this is the lockout check
@@ -145,9 +160,9 @@ def channel_create(
             _, allow_group_value = resolve_groups(client, allow_group, allow_nobody=allow_nobody)
 
         # Resolve can-remove-subscribers-group if provided
-        can_remove_value = None
-        if can_remove_subscribers_group:
-            _, can_remove_value = resolve_groups(client, can_remove_subscribers_group)
+        can_remove_value = resolve_group_setting_value(client, can_remove_subscribers_group)
+
+        can_add_value = resolve_group_setting_value(client, can_add_subscribers_group)
 
         folder_id: int | None = None
         folder_id_specified = folder is not None
@@ -162,6 +177,7 @@ def channel_create(
             subscribe_user_ids=subscribe_user_ids,
             allow_group_value=allow_group_value,
             can_remove_subscribers_group_value=can_remove_value,
+            can_add_subscribers_group_value=can_add_value,
             announce=announce_value,
             topic_policy=topic_policy,
             folder_id=folder_id,
