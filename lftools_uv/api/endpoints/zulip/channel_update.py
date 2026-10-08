@@ -92,6 +92,7 @@ class _ChannelUpdate:
     allow_group: str | None = None
     can_remove_subscribers_group: str | None = None
     can_add_subscribers_group: str | None = None
+    can_administer_channel_group: str | None = None
     folder_id: int | None = None
     folder_id_specified: bool = False
 
@@ -114,6 +115,7 @@ def _validate_update_request(changes: _ChannelUpdate) -> None:
                 changes.allow_group,
                 changes.can_remove_subscribers_group,
                 changes.can_add_subscribers_group,
+                changes.can_administer_channel_group,
             )
         )
         or bool(changes.subscribe)
@@ -125,7 +127,8 @@ def _validate_update_request(changes: _ChannelUpdate) -> None:
             "channel update requires at least one setting to change "
             "(--name, --description, --type, --topic-policy, --allow-group, "
             "--folder, --subscribe, --can-remove-subscribers-group, "
-            "or --can-add-subscribers-group)"
+            "--can-add-subscribers-group, or "
+            "--can-administer-channel-group)"
         )
 
     valid_channel_types = {"public", "private", "web-public"}
@@ -199,6 +202,12 @@ def _check_update_feature_levels(client: Any, changes: _ChannelUpdate) -> None:
             client,
             FEATURE_LEVELS["can-add-subscribers-group"],
             feature_name="can-add-subscribers-group",
+        )
+    if changes.can_administer_channel_group is not None:
+        check_feature_level(
+            client,
+            FEATURE_LEVELS["can-administer-channel-group"],
+            feature_name="can-administer-channel-group",
         )
     if changes.folder_change:
         check_feature_level(client, FEATURE_LEVELS["channel-folders"], feature_name="channel-folders")
@@ -331,6 +340,7 @@ def _build_update_request(
     allow_group_value: GroupSettingValue | None,
     can_remove_value: GroupSettingValue | None,
     can_add_value: GroupSettingValue | None,
+    can_administer_value: GroupSettingValue | None,
 ) -> dict[str, Any]:
     """Build the PATCH body for the requested settings.
 
@@ -354,6 +364,8 @@ def _build_update_request(
         request["can_remove_subscribers_group"] = {"new": can_remove_value}
     if can_add_value is not None:
         request["can_add_subscribers_group"] = {"new": can_add_value}
+    if can_administer_value is not None:
+        request["can_administer_channel_group"] = {"new": can_administer_value}
     if changes.folder_change:
         request["folder_id"] = changes.folder_id
     return request
@@ -405,6 +417,7 @@ def update_channel(
     allow_group: str | None = None,
     can_remove_subscribers_group: str | None = None,
     can_add_subscribers_group: str | None = None,
+    can_administer_channel_group: str | None = None,
     folder_id: int | None = None,
     folder_id_specified: bool = False,
     include_archived: bool = False,
@@ -415,10 +428,13 @@ def update_channel(
 
     * Validates that at least one setting flag is supplied (rename,
       description, type, topic-policy, allow-group, folder assignment,
-      can-remove-subscribers-group, or can-add-subscribers-group).
+      can-remove-subscribers-group, can-add-subscribers-group, or
+      can-administer-channel-group).
     * Applies the FR-019 feature-level checks for web-public,
       topic-policy, can-subscribe-group (``--allow-group``) and
-      can-remove-subscribers-group.
+      can-remove-subscribers-group, and gates newer permission groups
+      such as can-add-subscribers-group and
+      can-administer-channel-group.
     * Enforces lockout prevention when converting to ``private``: if
       the channel currently has 0 subscribers, the caller must supply
       either ``subscribe_user_specs`` (a non-empty list) or a non-Nobody
@@ -445,6 +461,7 @@ def update_channel(
         allow_group=allow_group,
         can_remove_subscribers_group=can_remove_subscribers_group,
         can_add_subscribers_group=can_add_subscribers_group,
+        can_administer_channel_group=can_administer_channel_group,
         folder_id=folder_id,
         folder_id_specified=folder_id_specified,
     )
@@ -462,6 +479,7 @@ def update_channel(
     allow_group_resolved, allow_group_value = _resolve_allow_group(client, changes.allow_group)
     can_remove_value = _resolve_can_remove_group(client, changes.can_remove_subscribers_group)
     can_add_value = resolve_group_setting_value(client, changes.can_add_subscribers_group)
+    can_administer_value = resolve_group_setting_value(client, changes.can_administer_channel_group)
 
     _enforce_private_lockout(
         client,
@@ -475,6 +493,6 @@ def update_channel(
     if changes.subscribe:
         _subscribe_before_update(client, resolved_name, changes)
 
-    request = _build_update_request(changes, allow_group_value, can_remove_value, can_add_value)
+    request = _build_update_request(changes, allow_group_value, can_remove_value, can_add_value, can_administer_value)
     _patch_channel(client, stream_id, request)
     return _update_result(stream_id, resolved_name, changes)
