@@ -57,7 +57,7 @@ def channel_subscribe(
         hidden=True,
     ),
 ) -> None:
-    """Subscribe users to a channel (FR-005, US5)."""
+    """Subscribe users to a channel."""
     id_mode = _resolve_id_mode(by_email, by_id, by_name)
 
     # Split positional arguments per the contract:

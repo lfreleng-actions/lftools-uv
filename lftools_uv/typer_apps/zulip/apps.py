@@ -37,7 +37,7 @@ def zulip_callback(
     zuliprc: Path | None = typer.Option(
         None,
         "--zuliprc",
-        help="Path to a zuliprc configuration file (FR-011 precedence applies).",
+        help="Path to a zuliprc configuration file; overrides other config sources.",
         callback=zuliprc_callback,
     ),
     json_output: bool = typer.Option(

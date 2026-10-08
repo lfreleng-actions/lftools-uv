@@ -23,6 +23,7 @@ from typing import Any, cast
 from unittest import mock
 
 import pytest
+import typer
 from typer.testing import CliRunner
 
 import lftools_uv.typer_apps.zulip as zulip_mod
@@ -42,6 +43,20 @@ from lftools_uv.typer_apps.zulip import (
 )
 from tests.test_utils import clean_cli_output
 
+_SPEC_IDENTIFIER_RE = re.compile(r"\b(?:US\d+|FR-\d+|SC-\d+|T\d{3})\b")
+
+
+def _iter_help_paths(command: Any, prefix: tuple[str, ...] = ()) -> list[tuple[str, ...]]:
+    """Return every command path exposed by a Click command tree."""
+    paths = [prefix]
+    commands = getattr(command, "commands", None)
+    if isinstance(commands, dict):
+        for name, subcommand in commands.items():
+            if not isinstance(name, str):
+                continue
+            paths.extend(_iter_help_paths(subcommand, (*prefix, name)))
+    return paths
+
 
 def test_zulip_app_registered() -> None:
     """The zulip Typer app exposes help even without subcommands."""
@@ -49,6 +64,17 @@ def test_zulip_app_registered() -> None:
     result = runner.invoke(zulip_app, ["--help"])
     assert result.exit_code == 0
     assert "zulip" in result.stdout.lower()
+
+
+def test_zulip_help_omits_spec_identifiers() -> None:
+    """Zulip help output must not expose internal spec identifiers."""
+    runner = CliRunner()
+    command = typer.main.get_command(zulip_app)
+
+    for path in _iter_help_paths(command):
+        result = runner.invoke(zulip_app, [*path, "--help"])
+        assert result.exit_code == 0, path
+        assert _SPEC_IDENTIFIER_RE.search(clean_cli_output(result.stdout)) is None, path
 
 
 def test_missing_extra_message_is_canonical() -> None:

@@ -43,7 +43,7 @@ def channel_list(
         hidden=True,
     ),
 ) -> None:
-    """List channels visible to the authenticated user (US1).
+    """List channels visible to the authenticated user.
 
     The Channel ID column is the value to pass to ``--channel-id`` on
     other channel commands.

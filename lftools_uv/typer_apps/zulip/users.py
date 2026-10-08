@@ -42,7 +42,7 @@ def user_list(
         hidden=True,
     ),
 ) -> None:
-    """List users on the Zulip server (US2)."""
+    """List users on the Zulip server."""
     options = {**(ctx.obj or {})}
     if json_output:
         options["json_output"] = True

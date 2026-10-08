@@ -120,8 +120,8 @@ def channel_unarchive(
 
     Requires explicit ``--yes`` confirmation. When the target channel is
     archived you will typically also need ``--include-archived`` so that
-    the name/ID resolves; without it the CLI emits a helpful FR-018
-    message pointing at the flag.
+    the name/ID resolves; without it the CLI emits a helpful message
+    pointing at the flag.
     """
     _validate_single_channel_target(channel, channel_id)
 
