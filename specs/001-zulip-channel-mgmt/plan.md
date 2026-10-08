@@ -18,11 +18,16 @@ the official `zulip` Python client library with a separated API layer
 (`lftools_uv/api/endpoints/zulip.py`) and CLI presentation layer
 (`lftools_uv/typer_apps/zulip.py`), following existing project conventions.
 Runtime feature-level detection ensures graceful degradation on older Zulip
-servers. Group-based permissions use two distinct flags: `--allow-group`
-(who can join — maps to `can_subscribe_group`) and
+servers. Group-based permissions use distinct flags: `--allow-group`
+(who can join — maps to `can_subscribe_group`),
 `--can-remove-subscribers-group` (who can remove subscribers — maps to
-`can_remove_subscribers_group`), both accepting comma-separated inline
-group identification with `id:` prefix disambiguation.
+`can_remove_subscribers_group`), `--can-add-subscribers-group` (who can
+add subscribers — maps to `can_add_subscribers_group`),
+`--can-administer-channel-group` (who can administer the channel — maps
+to `can_administer_channel_group`), and `--can-send-message-group` (who
+can send messages — maps to `can_send_message_group`), all accepting
+comma-separated inline group identification with `id:` prefix
+disambiguation.
 
 ## Technical Context
 

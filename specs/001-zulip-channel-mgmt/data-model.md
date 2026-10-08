@@ -22,6 +22,9 @@ Represents a Zulip channel (internally called a "stream" in the Zulip API).
 | `subscriber_count` | `int` | Number of current subscribers |
 | `can_subscribe_group` | `GroupSettingValue \| None` | Subscribe perm |
 | `can_remove_subscribers_group` | `GroupSettingValue \| None` | Removal perm |
+| `can_add_subscribers_group` | `GroupSettingValue \| None` | Add perm |
+| `can_administer_channel_group` | `GroupSettingValue \| None` | Admin perm |
+| `can_send_message_group` | `GroupSettingValue \| None` | Message-send perm |
 
 **GroupSettingValue** (Zulip API "group-setting value"):
 
@@ -51,6 +54,9 @@ empty `direct_members`.
 - `can_remove_subscribers_group` requires minimum Zulip feature level
   (threshold hardcoded during implementation, checked at runtime against
   server's reported level) per FR-019
+- `can_add_subscribers_group` requires Zulip feature level 342
+- `can_administer_channel_group` requires Zulip feature level 325
+- `can_send_message_group` requires Zulip feature level 333
 
 **State Transitions**:
 
@@ -124,14 +130,15 @@ context-specific:
 - In `group list` context: fail with error listing matches and instruct
   the user to use `--group-id` flag instead.
 - In permission flag context (`--allow-group`,
-  `--can-remove-subscribers-group`): fail with error listing matches and
-  instruct use of `id:NUM` prefix syntax.
+  `--can-remove-subscribers-group`, `--can-add-subscribers-group`,
+  `--can-administer-channel-group`, `--can-send-message-group`): fail
+  with error listing matches and instruct use of `id:NUM` prefix syntax.
 
 **System Role Groups**: Built-in groups (Owners, Administrators, Moderators,
 Full Members, Members, Everyone, Nobody) are listed with `type: system`. They
-have numeric IDs just like custom groups and are usable in `--allow-group` and
-`--can-remove-subscribers-group`. Users specify system role groups by display
-name only (case-insensitive). System groups are identified by the
+have numeric IDs just like custom groups and are usable in permission group
+flags. Users specify system role groups by display name only
+(case-insensitive). System groups are identified by the
 `is_system_group: true` property on the group object and use the `role:`
 naming convention internally. The display-name-to-API-name mapping is:
 
@@ -169,7 +176,7 @@ In `group list` filtering:
 | `--group-name` | `name`       | Yes — fail with error |
 | `--group-id`   | `group_id`   | No (unique)           |
 
-In permission flags (`--allow-group`, `--can-remove-subscribers-group`):
+In group-setting flags:
 
 Groups are identified inline via a comma-separated, quoted string value.
 Each item is interpreted as a group name by default. Prefix syntax:
@@ -183,6 +190,9 @@ Examples:
 
 - `--allow-group 'foo, bar, id:123'`
 - `--can-remove-subscribers-group 'baz, admin'`
+- `--can-add-subscribers-group 'team-leads'`
+- `--can-administer-channel-group 'Administrators'`
+- `--can-send-message-group 'Members'`
 
 ---
 
@@ -231,13 +241,18 @@ Standard response schema for mutation operations.
 Channel 1──────* Subscriber (ZulipUser)
 Channel *──────* UserGroup (via --allow-group, all types)
 Channel *──────* UserGroup (via --can-remove-subscribers-group, all types)
+Channel *──────* UserGroup (via --can-add-subscribers-group, all types)
+Channel *──────* UserGroup (via --can-administer-channel-group, all types)
+Channel *──────* UserGroup (via --can-send-message-group, all types)
 ZulipConfig 1──── Client Session
 ```
 
 - A Channel has zero or more Subscribers (ZulipUser instances)
-- A Channel may have zero or more allowed UserGroups (via `--allow-group` /
-  `can_subscribe_group`) — enforced on private, accepted on public/web-public
-- A Channel may have a subscriber-removal permission group (via
-  `--can-remove-subscribers-group` / `can_remove_subscribers_group`) —
-  valid on ALL channel types
+- A Channel may have zero or more permission UserGroups:
+  - `--allow-group` / `can_subscribe_group` — enforced on private,
+    accepted on public/web-public
+  - `--can-remove-subscribers-group` / `can_remove_subscribers_group`
+  - `--can-add-subscribers-group` / `can_add_subscribers_group`
+  - `--can-administer-channel-group` / `can_administer_channel_group`
+  - `--can-send-message-group` / `can_send_message_group`
 - A ZulipConfig produces one authenticated client session

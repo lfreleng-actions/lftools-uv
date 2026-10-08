@@ -1610,6 +1610,56 @@ def test_create_channel_can_administer_channel_group_feature_level() -> None:
     assert client.call_endpoint.call_args_list == []
 
 
+def test_create_channel_passes_can_send_message_group_simple() -> None:
+    """can_send_message_group is sent as a raw create value."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client()
+    create_channel(
+        client,
+        name="new-channel",
+        can_send_message_group_value=22,
+    )
+    calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
+    request = calls[0].kwargs.get("request", {})
+    assert request["can_send_message_group"] == 22
+    assert "stream_post_policy" not in request
+    assert "can_add_subscribers_group" not in request
+    assert "can_administer_channel_group" not in request
+
+
+def test_create_channel_passes_can_send_message_group_complex() -> None:
+    """Object send-message settings are sent raw on create."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    value = {"direct_members": [], "direct_subgroups": [20, 22]}
+    client = _create_channel_client()
+    create_channel(
+        client,
+        name="new-channel",
+        can_send_message_group_value=value,
+    )
+    calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "users/me/subscriptions"]
+    request = calls[0].kwargs.get("request", {})
+    assert request["can_send_message_group"] == value
+    assert "stream_post_policy" not in request
+
+
+def test_create_channel_can_send_message_group_feature_level() -> None:
+    """can_send_message_group requires Zulip feature level 333."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client(feature_level=332)
+    with pytest.raises(ZulipFeatureLevelError) as exc:
+        create_channel(
+            client,
+            name="new-channel",
+            can_send_message_group_value=22,
+        )
+    assert exc.value.required == FEATURE_LEVELS["can-send-message-group"]
+    assert client.call_endpoint.call_args_list == []
+
+
 def test_create_channel_api_error_handled() -> None:
     """API errors are raised as ZulipAPIError."""
     from lftools_uv.api.endpoints.zulip import create_channel
@@ -2743,6 +2793,61 @@ def test_update_channel_can_administer_channel_group_feature_level() -> None:
     assert client.call_endpoint.call_args_list == []
 
 
+def test_update_channel_can_send_message_group_wrapper() -> None:
+    """``--can-send-message-group`` uses the PATCH wrapper."""
+    client = _update_client()
+    _ = update_channel(client, name="general", can_send_message_group="Members")
+    payload = client.last_patch["request"]
+    assert payload["can_send_message_group"] == {"new": 22}
+    assert "stream_post_policy" not in payload
+    assert "can_add_subscribers_group" not in payload
+    assert "can_administer_channel_group" not in payload
+
+
+def test_update_channel_combined_group_flags_fetch_groups_once() -> None:
+    """Update resolves combined group flags from one group listing."""
+    client = _update_client()
+    _ = update_channel(
+        client,
+        name="general",
+        allow_group="id:10",
+        can_remove_subscribers_group="Administrators",
+        can_add_subscribers_group="Members",
+        can_administer_channel_group="id:10",
+        can_send_message_group="design",
+    )
+    user_group_calls = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("url") == "user_groups"]
+    assert len(user_group_calls) == 1
+    payload = client.last_patch["request"]
+    assert payload["can_subscribe_group"] == {"new": 10}
+    assert payload["can_remove_subscribers_group"] == {"new": 20}
+    assert payload["can_add_subscribers_group"] == {"new": 22}
+    assert payload["can_administer_channel_group"] == {"new": 10}
+    assert payload["can_send_message_group"] == {"new": 30}
+
+
+def test_update_channel_can_send_message_group_complex_wrapper() -> None:
+    """Multiple send-message groups stay wrapped under ``new``."""
+    client = _update_client()
+    _ = update_channel(client, name="general", can_send_message_group="design, id:10")
+    payload = client.last_patch["request"]
+    assert payload["can_send_message_group"] == {"new": {"direct_members": [], "direct_subgroups": [30, 10]}}
+    assert "stream_post_policy" not in payload
+
+
+def test_update_channel_can_send_message_group_feature_level() -> None:
+    """``--can-send-message-group`` requires feature level 333."""
+    client = _update_client(feature_level=332)
+    with pytest.raises(ZulipFeatureLevelError) as exc:
+        _ = update_channel(
+            client,
+            name="general",
+            can_send_message_group="Members",
+        )
+    assert exc.value.required == FEATURE_LEVELS["can-send-message-group"]
+    assert client.call_endpoint.call_args_list == []
+
+
 def test_update_channel_topic_policy_feature_level() -> None:
     """``--topic-policy`` requires the documented feature level."""
     client = _update_client(feature_level=1)
@@ -3464,7 +3569,11 @@ def test_get_channel_detail_resolves_and_no_resolve_skips_calls() -> None:
         "setter": "--can-administer-channel-group",
         "notes": "FL 325",
     }
-    assert detail["annotations"]["can_send_message_group"]["status"] == "not exposed"
+    assert detail["annotations"]["can_send_message_group"] == {
+        "status": "via --flag",
+        "setter": "--can-send-message-group",
+        "notes": "FL 333",
+    }
 
     client = _detail_client()
     raw_detail = get_channel_detail(client, name="general", resolve=False)

@@ -75,7 +75,7 @@ CHANNEL_ANNOTATIONS: dict[str, SettableAnnotation] = {
     "can_remove_subscribers_group": SettableAnnotation("via --flag", "--can-remove-subscribers-group"),
     "can_add_subscribers_group": SettableAnnotation("via --flag", "--can-add-subscribers-group", "FL 342"),
     "can_administer_channel_group": SettableAnnotation("via --flag", "--can-administer-channel-group", "FL 325"),
-    "can_send_message_group": SettableAnnotation("not exposed", None, "server-settable FL 333"),
+    "can_send_message_group": SettableAnnotation("via --flag", "--can-send-message-group", "FL 333"),
     "can_delete_any_message_group": SettableAnnotation("not exposed", None, "server-settable FL 407"),
     "can_delete_own_message_group": SettableAnnotation("not exposed", None, "server-settable FL 407"),
     "can_move_messages_out_of_channel_group": SettableAnnotation("not exposed", None, "server-settable FL 396"),

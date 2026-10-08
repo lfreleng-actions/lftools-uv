@@ -203,7 +203,7 @@ The `zulip.Client` makes standard HTTP requests that can be intercepted by the
 
 ## Decision 9: Permission Group Flags and Inline Identification
 
-**Decision**: Use two distinct flags for group-based channel permissions:
+**Decision**: Use distinct flags for group-based channel permissions:
 
 - `--allow-group` — defines who is allowed to join the channel. Maps to
   Zulip API field `can_subscribe_group`. Valid on ALL channel types (server
@@ -211,9 +211,17 @@ The `zulip.Client` makes standard HTTP requests that can be intercepted by the
 - `--can-remove-subscribers-group` — defines who can remove subscribers.
   Maps to Zulip API field `can_remove_subscribers_group`. Valid on ALL
   channel types. Requires feature-level detection per FR-019.
+- `--can-add-subscribers-group` — defines who can add subscribers. Maps to
+  Zulip API field `can_add_subscribers_group`. Requires Zulip feature level
+  342.
+- `--can-administer-channel-group` — defines who can administer the channel.
+  Maps to Zulip API field `can_administer_channel_group`. Requires Zulip
+  feature level 325.
+- `--can-send-message-group` — defines who can send messages. Maps to Zulip
+  API field `can_send_message_group`. Requires Zulip feature level 333.
 
-Both flags accept a comma-separated, quoted string value with inline
-group identification:
+All permission group flags accept a comma-separated, quoted string value with
+inline group identification:
 
 - Default interpretation: group name (case-insensitive)
 - `id:NUM` prefix: force ID lookup
@@ -248,19 +256,19 @@ permission flag contexts. Those flags remain only for
 
 **Rationale**: The spec clarifies that `--allow-group` has ONE consistent
 meaning ("who can join") on ALL channel types, not two different meanings
-depending on channel type. A separate `--can-remove-subscribers-group`
-flag avoids overloading `--allow-group` with administrative permissions.
-The comma-separated inline syntax is more ergonomic than requiring
-separate `--group-name`/`--group-id` modifier flags for each permission
-flag, especially when both `--allow-group` and
-`--can-remove-subscribers-group` appear in the same command.
+depending on channel type. Separate permission group flags avoid overloading
+`--allow-group` with administrative/content permissions. The comma-separated
+inline syntax is more ergonomic than requiring separate `--group-name`/
+`--group-id` modifier flags for each group-setting flag, especially when
+`--allow-group` and one or more permission group flags appear in the same
+command.
 
 **Alternatives Considered**:
 
 - Single `--allow-group` with multiple meanings per channel type: Rejected
   — confusing semantics, violates principle of least surprise.
 - Separate `--group-name`/`--group-id` modifier flags for permission
-  contexts: Rejected — awkward when two permission flags coexist in one
+  contexts: Rejected — awkward when multiple group-setting flags coexist in one
   command; which modifier applies to which flag is ambiguous.
 - Repeated `--allow-group` flags instead of comma-separated: Rejected —
   spec mandates comma-separated inline syntax with prefix disambiguation.

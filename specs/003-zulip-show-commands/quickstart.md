@@ -108,13 +108,14 @@ Field                  Value        Settable             Notes
 name                   general      via --flag           setter --name
 folder_id              10           via --flag           setter --folder
 is_archived            false        via command          channel archive/unarchive
-can_send_message_group Members      not exposed          server-settable FL 333
+can_send_message_group Members via --flag setter --can-send-message-group
 subscriber_count       125          no
 ```
 
 `via command` identifies an existing subcommand-based setter. `not exposed`
 means Zulip has an API setting but lftools-uv does not yet expose a write flag
-or command. This specification does not add those write flags.
+or command. Permission-group fields added by later feature layers show their
+specific setter flags when lftools-uv exposes them.
 
 ## Error Handling
 
