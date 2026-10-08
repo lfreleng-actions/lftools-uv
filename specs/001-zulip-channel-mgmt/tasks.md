@@ -290,8 +290,8 @@ SPDX-FileCopyrightText: 2026 The Linux Foundation
 - [x] T064 [P] Add CLI help text and docstrings to all commands in lftools_uv/typer_apps/zulip/ — ensure `--help` output is clear and complete for all subcommands
 - [x] T065 [P] Add inline documentation and type annotations to all public functions in lftools_uv/api/endpoints/zulip/
 - [x] T066 [P] Update REUSE.toml if needed — ensure new files have correct license annotations
-- [x] T067 Run full test suite and fix any failures — `uv run pytest tests/ -x -q`
-- [x] T068 Run pre-commit hooks (ruff lint + format) and fix any issues across all new files
+- [x] T067 Run full test suite and fix any failures — `uv run pytest -x -q`
+- [x] T068 Run pre-commit hooks (ruff lint + format) and fix any issues across all new files — `pre-commit run --all-files`
 - [ ] T069 Run quickstart.md validation — N/A: cannot be automated because it requires a live Zulip server and credentials that CI and agents do not have; a maintainer must perform it manually. Quickstarts exist for all four features (`specs/001-zulip-channel-mgmt/quickstart.md` through `specs/004-zulip-channel-permission-groups/quickstart.md`).
 
 ---
