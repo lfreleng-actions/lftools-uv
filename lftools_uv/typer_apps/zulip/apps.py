@@ -21,11 +21,57 @@ from pathlib import Path
 from typing import Any
 
 import typer
+from typer._click.core import Command as ClickCommand
 from typer._click.exceptions import UsageError
-from typer.core import TyperCommand
+from typer.core import TyperCommand, TyperGroup
 
 from lftools_uv.typer_apps import zulip as zulip_cli
 from lftools_uv.typer_apps.zulip.helpers import MISSING_EXTRA_MESSAGE, zuliprc_callback
+
+
+def _missing_extra_exit() -> None:
+    """Emit the canonical missing-extra message and abort."""
+    typer.echo(MISSING_EXTRA_MESSAGE, err=True)
+    raise typer.Exit(code=1)
+
+
+def _help_requested(opts: dict[str, Any], param_order: list[Any]) -> bool:
+    """Return whether Click parsed a real help option."""
+    return any(getattr(param, "name", None) == "help" and bool(opts.get("help")) for param in param_order)
+
+
+class ZulipGroup(TyperGroup):
+    """Guard Zulip group parse failures without blocking group help."""
+
+    def parse_args(self, ctx: Any, args: list[str]) -> list[str]:
+        if ctx.resilient_parsing or not args:
+            parsed_args: list[str] = super().parse_args(ctx, args)
+            return parsed_args
+        parser = self.make_parser(ctx)
+        try:
+            opts, _, param_order = parser.parse_args(args=list(args))
+        except UsageError:
+            if not zulip_cli.zulip_available():
+                _missing_extra_exit()
+            raise
+        if _help_requested(opts, param_order):
+            parsed_args = super().parse_args(ctx, args)
+            return parsed_args
+        parsed_args = super().parse_args(ctx, args)
+        return parsed_args
+
+    def resolve_command(
+        self,
+        ctx: Any,
+        args: list[str],
+    ) -> tuple[str | None, ClickCommand | None, list[str]]:
+        try:
+            resolved: tuple[str | None, ClickCommand | None, list[str]] = super().resolve_command(ctx, args)
+            return resolved
+        except UsageError:
+            if not zulip_cli.zulip_available():
+                _missing_extra_exit()
+            raise
 
 
 class ZulipCommand(TyperCommand):
@@ -40,20 +86,16 @@ class ZulipCommand(TyperCommand):
             opts, _, param_order = parser.parse_args(args=list(args))
         except UsageError:
             if not zulip_cli.zulip_available():
-                typer.echo(MISSING_EXTRA_MESSAGE, err=True)
-                raise typer.Exit(code=1) from None
+                _missing_extra_exit()
             raise
-        help_requested = any(getattr(param, "name", None) == "help" and bool(opts.get("help")) for param in param_order)
-        if not help_requested and not zulip_cli.zulip_available():
-            typer.echo(MISSING_EXTRA_MESSAGE, err=True)
-            raise typer.Exit(code=1)
+        if not _help_requested(opts, param_order) and not zulip_cli.zulip_available():
+            _missing_extra_exit()
         parsed_args = super().parse_args(ctx, args)
         return parsed_args
 
     def invoke(self, ctx: Any) -> Any:
         if not zulip_cli.zulip_available():
-            typer.echo(MISSING_EXTRA_MESSAGE, err=True)
-            raise typer.Exit(code=1)
+            _missing_extra_exit()
         return super().invoke(ctx)
 
 
@@ -61,6 +103,7 @@ zulip_app = typer.Typer(
     name="zulip",
     help="Manage Zulip channels, users, and groups.",
     no_args_is_help=True,
+    cls=ZulipGroup,
 )
 
 
@@ -96,6 +139,7 @@ channel_app = typer.Typer(
     name="channel",
     help="Manage Zulip channels.",
     no_args_is_help=True,
+    cls=ZulipGroup,
 )
 zulip_app.add_typer(channel_app, name="channel")
 
@@ -103,6 +147,7 @@ folder_app = typer.Typer(
     name="folder",
     help="Manage Zulip channel folders.",
     no_args_is_help=True,
+    cls=ZulipGroup,
 )
 zulip_app.add_typer(folder_app, name="folder")
 
@@ -111,6 +156,7 @@ user_app = typer.Typer(
     name="user",
     help="Inspect Zulip users.",
     no_args_is_help=True,
+    cls=ZulipGroup,
 )
 zulip_app.add_typer(user_app, name="user")
 
@@ -119,5 +165,6 @@ group_app = typer.Typer(
     name="group",
     help="Inspect Zulip user groups.",
     no_args_is_help=True,
+    cls=ZulipGroup,
 )
 zulip_app.add_typer(group_app, name="group")

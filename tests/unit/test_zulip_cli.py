@@ -456,6 +456,8 @@ def test_channel_list_include_archived_adds_status_column(
         ["channel", "list", "--bad"],
         ["channel", "create"],
         ["channel", "archive", "general"],
+        ["channel", "--bad"],
+        ["channel", "unknown"],
         ["folder", "create", "--name", "--help"],
     ],
 )

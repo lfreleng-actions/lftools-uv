@@ -68,6 +68,7 @@ from lftools_uv.api.endpoints.zulip import (
 )
 from lftools_uv.typer_apps.zulip.apps import (
     ZulipCommand,
+    ZulipGroup,
     channel_app,
     folder_app,
     group_app,
@@ -131,6 +132,7 @@ log = logging.getLogger(__name__)
 __all__ = [
     "MISSING_EXTRA_MESSAGE",
     "ZulipCommand",
+    "ZulipGroup",
     "ChannelType",
     "IdMode",
     "TopicPolicy",
