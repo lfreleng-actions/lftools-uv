@@ -66,8 +66,13 @@ def test_zulip_app_registered() -> None:
     assert "zulip" in result.stdout.lower()
 
 
-def test_zulip_help_omits_spec_identifiers() -> None:
+@pytest.mark.parametrize("extra_available", [True, False])
+def test_zulip_help_omits_spec_identifiers(
+    monkeypatch: pytest.MonkeyPatch,
+    extra_available: bool,
+) -> None:
     """Zulip help output must not expose internal spec identifiers."""
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: extra_available)
     runner = CliRunner()
     command = typer.main.get_command(zulip_app)
 
@@ -84,18 +89,29 @@ def test_missing_extra_message_is_canonical() -> None:
 
 
 def test_zulip_help_works_without_extra(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``--help`` for the zulip group must render even when the extra is gone.
-
-    Typer walks the command tree with ``resilient_parsing=True`` while
-    rendering help, so the top-level callback must short-circuit before
-    enforcing the FR-022 extra-required guard. Otherwise users could not
-    discover commands until after installing the extra.
-    """
+    """Every Zulip ``--help`` path must render when the extra is gone."""
     monkeypatch.setattr(zulip_mod, "zulip_available", lambda: False)
     runner = CliRunner()
-    result = runner.invoke(zulip_app, ["--help"])
-    assert result.exit_code == 0
-    assert "zulip" in result.stdout.lower()
+    command = typer.main.get_command(zulip_app)
+
+    for path in _iter_help_paths(command):
+        result = runner.invoke(zulip_app, [*path, "--help"])
+        assert result.exit_code == 0, path
+        assert "Usage:" in clean_cli_output(result.stdout), path
+
+
+def test_zulip_resilient_parsing_skips_extra_guard(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Shell-completion parsing must not require the optional extra."""
+
+    def fail_available() -> bool:
+        raise AssertionError("zulip availability should not be checked")
+
+    monkeypatch.setattr(zulip_mod, "zulip_available", fail_available)
+    command = cast(Any, typer.main.get_command(zulip_app))
+    channel_list = command.commands["channel"].commands["list"]
+
+    with channel_list.make_context("list", ["--bad"], resilient_parsing=True) as ctx:
+        assert ctx.resilient_parsing is True
 
 
 # ---------------------------------------------------------------------------
@@ -433,13 +449,27 @@ def test_channel_list_include_archived_adds_status_column(
     assert seen_archived, "expected --include-archived to set include_archived=True on the API request"
 
 
-def test_channel_list_blocked_without_extra(monkeypatch: pytest.MonkeyPatch) -> None:
-    """When the zulip extra is missing, the FR-022 guard fires (exit code 1)."""
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["channel", "list"],
+        ["channel", "list", "--bad"],
+        ["channel", "create"],
+        ["channel", "archive", "general"],
+        ["folder", "create", "--name", "--help"],
+    ],
+)
+def test_zulip_commands_blocked_without_extra(
+    monkeypatch: pytest.MonkeyPatch,
+    args: list[str],
+) -> None:
+    """When the zulip extra is missing, execution fires the FR-022 guard."""
     monkeypatch.setattr(zulip_mod, "zulip_available", lambda: False)
     runner = CliRunner()
-    result = runner.invoke(zulip_app, ["channel", "list"])
+    result = runner.invoke(zulip_app, args)
     assert result.exit_code == 1
-    assert "zulip extra" in result.stderr or "zulip extra" in result.stdout
+    assert result.stdout == ""
+    assert result.stderr == f"{MISSING_EXTRA_MESSAGE}\n"
 
 
 def test_channel_list_empty_table(monkeypatch: pytest.MonkeyPatch) -> None:
