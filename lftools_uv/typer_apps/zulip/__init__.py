@@ -67,6 +67,8 @@ from lftools_uv.api.endpoints.zulip import (
     zulip_available,
 )
 from lftools_uv.typer_apps.zulip.apps import (
+    ZulipCommand,
+    ZulipGroup,
     channel_app,
     folder_app,
     group_app,
@@ -115,10 +117,22 @@ from lftools_uv.typer_apps.zulip.groups import group_list, group_show
 
 # isort: on
 
+
+def _guard_zulip_commands() -> None:
+    """Install the missing-extra guard on every concrete Zulip command."""
+    for app in (channel_app, folder_app, group_app, user_app):
+        for command in app.registered_commands:
+            command.cls = ZulipCommand
+
+
+_guard_zulip_commands()
+
 log = logging.getLogger(__name__)
 
 __all__ = [
     "MISSING_EXTRA_MESSAGE",
+    "ZulipCommand",
+    "ZulipGroup",
     "ChannelType",
     "IdMode",
     "TopicPolicy",
