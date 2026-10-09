@@ -18,11 +18,44 @@ modules is what fixes the order commands appear in ``--help``.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import typer
+from typer._click.exceptions import UsageError
+from typer.core import TyperCommand
 
 from lftools_uv.typer_apps import zulip as zulip_cli
 from lftools_uv.typer_apps.zulip.helpers import MISSING_EXTRA_MESSAGE, zuliprc_callback
+
+
+class ZulipCommand(TyperCommand):
+    """Guard Zulip command execution without blocking command help."""
+
+    def parse_args(self, ctx: Any, args: list[str]) -> list[str]:
+        if ctx.resilient_parsing:
+            parsed_args: list[str] = super().parse_args(ctx, args)
+            return parsed_args
+        parser = self.make_parser(ctx)
+        try:
+            opts, _, param_order = parser.parse_args(args=list(args))
+        except UsageError:
+            if not zulip_cli.zulip_available():
+                typer.echo(MISSING_EXTRA_MESSAGE, err=True)
+                raise typer.Exit(code=1) from None
+            raise
+        help_requested = any(getattr(param, "name", None) == "help" and bool(opts.get("help")) for param in param_order)
+        if not help_requested and not zulip_cli.zulip_available():
+            typer.echo(MISSING_EXTRA_MESSAGE, err=True)
+            raise typer.Exit(code=1)
+        parsed_args = super().parse_args(ctx, args)
+        return parsed_args
+
+    def invoke(self, ctx: Any) -> Any:
+        if not zulip_cli.zulip_available():
+            typer.echo(MISSING_EXTRA_MESSAGE, err=True)
+            raise typer.Exit(code=1)
+        return super().invoke(ctx)
+
 
 zulip_app = typer.Typer(
     name="zulip",
@@ -48,26 +81,15 @@ def zulip_callback(
 ) -> None:
     """Top-level callback for the Zulip command group.
 
-    When the optional ``zulip`` extra is not installed, abort
-    immediately with the canonical FR-022 error so that every
-    subcommand presents the same guidance to the user.
+    Help renders even when the optional ``zulip`` extra is not
+    installed. ``ZulipCommand`` enforces the canonical FR-022 error
+    before concrete command bodies run.
     """
     ctx.obj = {
         **(ctx.obj or {}),
         "zuliprc": zuliprc,
         "json_output": json_output,
     }
-    # Allow ``--help`` (including nested subcommand help) to render even
-    # when the optional extra is missing. Typer sets resilient_parsing
-    # while it is walking the command tree for help discovery.
-    if ctx.resilient_parsing:
-        return
-    if ctx.invoked_subcommand is None:
-        # Help / no-args path — let Typer print help without raising.
-        return
-    if not zulip_cli.zulip_available():
-        typer.echo(MISSING_EXTRA_MESSAGE, err=True)
-        raise typer.Exit(code=1)
 
 
 channel_app = typer.Typer(
