@@ -233,8 +233,14 @@ def delete_stale(os_cloud: str, jenkins_servers: list[str], min_age_hours: int =
     """Search Jenkins and OpenStack for orphaned stacks and remove them.
 
     An orphaned stack is a stack that is not known in any of the Jenkins
-    servers passed into this function.
+    servers passed into this function. Exits non-zero if any orphaned stack
+    could not be deleted.
     """
+    if not jenkins_servers:
+        # With no build list every stack looks orphaned.
+        log.error("No Jenkins servers given; refusing to treat every stack as stale.")
+        sys.exit(1)
+
     cloud = openstack.connection.from_config(cloud=os_cloud)
     stacks = cloud.search_stacks()
     if not stacks:
@@ -262,6 +268,7 @@ def delete_stale(os_cloud: str, jenkins_servers: list[str], min_age_hours: int =
             log.debug(f"    {build_name}")
             builds.append(build_name)
 
+    failed = []
     log.debug("Active stacks")
     for stack in stacks:
         if stack.status == "CREATE_COMPLETE" or stack.status == "CREATE_FAILED" or stack.status == "DELETE_FAILED":
@@ -280,7 +287,12 @@ def delete_stale(os_cloud: str, jenkins_servers: list[str], min_age_hours: int =
                     log.debug(f"        Skipping, only {age_hours:.1f}h old (< {min_age_hours}h)")
                 else:
                     log.debug("        >>>> Marked for deletion <<<<")
-                    delete(os_cloud, stack.id)
+                    if not delete(os_cloud, stack.id):
+                        failed.append(stack.name)
 
         else:
             continue
+
+    if failed:
+        log.error("Failed to delete %d stale stack(s): %s", len(failed), ", ".join(failed))
+        sys.exit(1)

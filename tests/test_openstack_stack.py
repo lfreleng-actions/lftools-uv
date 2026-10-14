@@ -226,7 +226,6 @@ def test_create_returns_without_exit_on_success(mock_from_config, mock_sleep):
     assert mock_cloud.create_stack.call_count == 1
 
 
-@pytest.mark.xfail(strict=True, reason="delete-stale with no Jenkins reaps every stack")
 @patch("lftools_uv.openstack.stack.delete")
 @patch("lftools_uv.openstack.stack.openstack.connection.from_config")
 def test_delete_stale_refuses_without_jenkins(mock_from_config, mock_delete):
@@ -242,7 +241,6 @@ def test_delete_stale_refuses_without_jenkins(mock_from_config, mock_delete):
     mock_delete.assert_not_called()
 
 
-@pytest.mark.xfail(strict=True, reason="delete-stale ignores failed deletes")
 @patch("lftools_uv.openstack.stack.delete", side_effect=[False, True])
 @patch("lftools_uv.openstack.stack.Jenkins")
 @patch("lftools_uv.openstack.stack.openstack.connection.from_config")
@@ -280,11 +278,7 @@ def _run_typer(args: list[str]) -> TyperResult:
 @pytest.mark.parametrize("run", [_run_click, _run_typer], ids=["click", "typer"])
 @pytest.mark.parametrize(
     ("delete_result", "expected"),
-    [
-        (True, 0),
-        (None, 0),
-        pytest.param(False, 1, marks=pytest.mark.xfail(strict=True, reason="stack delete exits 0 on timeout")),
-    ],
+    [(True, 0), (None, 0), (False, 1)],
     ids=["deleted", "forced", "timed-out"],
 )
 def test_stack_delete_exit_code(run, delete_result, expected):
@@ -299,14 +293,7 @@ def test_stack_delete_exit_code(run, delete_result, expected):
     assert result.exit_code == expected
 
 
-@pytest.mark.parametrize(
-    "run",
-    [
-        pytest.param(_run_click, marks=pytest.mark.xfail(strict=True, reason="Click accepts no Jenkins URLs")),
-        _run_typer,
-    ],
-    ids=["click", "typer"],
-)
+@pytest.mark.parametrize("run", [_run_click, _run_typer], ids=["click", "typer"])
 def test_delete_stale_requires_jenkins_urls(run):
     """Omitting the Jenkins URLs is a usage error, not a reap-everything run."""
     with patch("lftools_uv.openstack.stack.delete_stale") as mock_delete_stale:

@@ -172,7 +172,9 @@ def stack_delete(
     timeout: int = typer.Option(900, "--timeout", help="Stack delete timeout in seconds."),
 ) -> None:
     """Delete stack."""
-    os_stack.delete(state.os_cloud, name_or_id, force=force, timeout=timeout)
+    # delete() returns False on timeout, or None when --force asks to ignore it.
+    if os_stack.delete(state.os_cloud, name_or_id, force=force, timeout=timeout) is False:
+        raise typer.Exit(1)
 
 
 @stack_app.command("cost")
