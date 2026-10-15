@@ -30,7 +30,6 @@ PLACEHOLDER_ARGS = {
 }
 
 
-@pytest.mark.xfail(strict=True, reason="hints name lftools and non-existent commands")
 @pytest.mark.parametrize("command", PLACEHOLDER_ARGS)
 def test_placeholder_hint_names_a_runnable_command(command):
     """The hint matches what the Click front-end actually provides."""
