@@ -99,7 +99,6 @@ def _calls(env: dict[str, str]) -> list[str]:
     return Path(env["CALL_LOG"]).read_text().splitlines()
 
 
-@pytest.mark.xfail(strict=True, reason="yaml4info calls lftools")
 def test_yaml4info_reads_ldap_through_legacy_cli(sandbox):
     """``ldap csv`` exists only in the Click front-end."""
     result = _run("yaml4info", ["grp"], sandbox)
@@ -108,7 +107,6 @@ def test_yaml4info_reads_ldap_through_legacy_cli(sandbox):
     assert "- name: 'Alice Example'" in result.stdout
 
 
-@pytest.mark.xfail(strict=True, reason="inactivecommitters calls lftools")
 def test_inactivecommitters_reads_ldap_through_legacy_cli(sandbox):
     """``ldap csv`` exists only in the Click front-end."""
     _run("inactivecommitters", ["gerrit.example.org/gerrit", "grp"], sandbox)
@@ -116,7 +114,6 @@ def test_inactivecommitters_reads_ldap_through_legacy_cli(sandbox):
     assert _calls(sandbox) == ["1|ldap csv grp"]
 
 
-@pytest.mark.xfail(strict=True, reason="autocorrectinfofile calls lftools")
 def test_autocorrectinfofile_uses_legacy_cli_throughout(sandbox, tmp_path):
     """Every call reaches a real Click command, not a Typer stub.
 
@@ -142,7 +139,6 @@ def test_autocorrectinfofile_uses_legacy_cli_throughout(sandbox, tmp_path):
     )
 
 
-@pytest.mark.xfail(strict=True, reason="gerrit_create calls lftools")
 def test_gerrit_create_checks_ldap_group_with_lftools_uv(sandbox, tmp_path):
     """``lfidapi search-members`` works in the default Typer front-end."""
     args = ["-s", "gerrit.example.org", "-o", "grp", "-r", "foo/bar", "-u", "bot", "-w", str(tmp_path / "ws")]
@@ -152,7 +148,6 @@ def test_gerrit_create_checks_ldap_group_with_lftools_uv(sandbox, tmp_path):
     assert "|lfidapi search-members grp" in _calls(sandbox)
 
 
-@pytest.mark.xfail(strict=True, reason="usage text names lftools")
 @pytest.mark.parametrize("script", ["yaml4info", "autocorrectinfofile"])
 def test_usage_names_lftools_uv(sandbox, script):
     """Usage text points at the command that is installed.

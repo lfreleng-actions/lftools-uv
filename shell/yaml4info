@@ -31,7 +31,7 @@ cat << EOF
 EOF
     fi
 
-  done < <(lftools ldap csv "$1")
+  done < <(LEGACY_CLI=1 lftools-uv ldap csv "$1")
 
 }
 
@@ -41,7 +41,7 @@ Usage:
 
 $0 ldap-group-name
 
-calls lftools ldap --groups "\$1"
+calls LEGACY_CLI=1 lftools-uv ldap csv "\$1"
 where \$1 is the ldap-group(s) name you would like to build yaml for your INFO.yaml file
 Example: $0 'opnfv-gerrit-releng-*' (for multiple groups)
 

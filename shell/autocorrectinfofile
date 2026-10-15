@@ -93,7 +93,7 @@ main() {
   fi
   echo "    tmpdir = $DIR"
 
-  if lftools ldap yaml4info "$ldapgroup" 2>&- > "$DIR"/LDAP.yaml
+  if LEGACY_CLI=1 lftools-uv ldap yaml4info "$ldapgroup" 2>&- > "$DIR"/LDAP.yaml
     then
       echo "    LDAP lookup sucssesfull"
     else
@@ -106,7 +106,7 @@ main() {
     git clone -q "$gerritclonebase"/"$repo" "$DIR"/"$repo" || exit 1
   fi
 
-  diff="$(diff <(lftools infofile get-committers "$DIR"/LDAP.yaml 2>&-| sort) <(lftools infofile get-committers "$DIR"/"$repo"/INFO.yaml 2>&- | sort))"
+  diff="$(diff <(LEGACY_CLI=1 lftools-uv infofile get-committers "$DIR"/LDAP.yaml 2>&-| sort) <(LEGACY_CLI=1 lftools-uv infofile get-committers "$DIR"/"$repo"/INFO.yaml 2>&- | sort))"
   status="$?"
 
   diff_array=()
@@ -130,7 +130,7 @@ main() {
     for missing in "${onlyinINFO[@]}"; do
       if [ -n "$missing" ]; then
         echo "    DUMMY: sending invite to $missing"
-        lftools infofile get-committers --id "$missing" "$DIR"/"$repo"/INFO.yaml 2>&-
+        LEGACY_CLI=1 lftools-uv infofile get-committers --id "$missing" "$DIR"/"$repo"/INFO.yaml 2>&-
       fi
     done
   fi
@@ -138,8 +138,8 @@ main() {
   if ! [ "${#onlyinLDAP[@]}" -eq 0 ]; then
     echo "    These users are listed as committers in LDAP and not in the INFO.yaml"
     for missing in "${onlyinLDAP[@]}"; do
-      echo "    lftools infofile sync-committers $DIR/$repo/INFO.yaml $DIR/LDAP.yaml $missing --repo $repo 2>&-"
-      lftools infofile sync-committers "$DIR"/"$repo"/INFO.yaml "$DIR"/LDAP.yaml "$missing" --repo "$repo" 2>&-
+      echo "    LEGACY_CLI=1 lftools-uv infofile sync-committers $DIR/$repo/INFO.yaml $DIR/LDAP.yaml $missing --repo $repo 2>&-"
+      LEGACY_CLI=1 lftools-uv infofile sync-committers "$DIR"/"$repo"/INFO.yaml "$DIR"/LDAP.yaml "$missing" --repo "$repo" 2>&-
     done
 
   fi
@@ -151,8 +151,8 @@ main() {
 
 usage() {
 cat << EOF
-Must be called from lftools
-eg: lftools ldap autocorrectinfofile
+Must be called from lftools-uv
+eg: LEGACY_CLI=1 lftools-uv ldap autocorrectinfofile
 EOF
 exit 1
 }
