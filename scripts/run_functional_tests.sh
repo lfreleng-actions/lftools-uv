@@ -127,9 +127,9 @@ info() { log "${COLOR_BLUE}INFO${COLOR_RESET}" "$*"; }
 success() { log "${COLOR_GREEN}OK${COLOR_RESET}" "$*"; }
 
 ###############################################################################
-# Load lftools configuration and set defaults
+# Load lftools-uv configuration and set defaults
 ###############################################################################
-# Set up lftools configuration directory
+# Set up lftools-uv configuration directory
 LFTOOLS_CONFIG_DIR="${HOME}/.config/lftools"
 
 # Configure OpenStack clouds.yaml location
@@ -237,7 +237,7 @@ detect_lftools_cmd() {
 }
 
 LFTOOLS_CMD="$(detect_lftools_cmd)"
-vlog "Using lftools command wrapper: ${LFTOOLS_CMD}"
+vlog "Using lftools-uv command wrapper: ${LFTOOLS_CMD}"
 
 ###############################################################################
 # Test Definitions

@@ -287,9 +287,9 @@ def check_votes(ctx, info_file, endpoint, change_number, tsc, github_repo):
     For Github the endpoint is the organization name
 
     Examples:
-    lftools infofile check-votes /tmp/test/INFO.yaml lfit-sandbox 18 --github_repo test
+    LEGACY_CLI=1 lftools-uv infofile check-votes /tmp/test/INFO.yaml lfit-sandbox 18 --github_repo test
 
-    lftools infofile check-votes ~/lf/allrepos/onosfw/INFO.yaml https://gerrit.opnfv.org/gerrit/ 67302
+    LEGACY_CLI=1 lftools-uv infofile check-votes ~/lf/allrepos/onosfw/INFO.yaml https://gerrit.opnfv.org/gerrit/ 67302
 
     """
 

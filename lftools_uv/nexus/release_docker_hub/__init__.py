@@ -28,7 +28,7 @@ Set the repo to a str to find all projects that contains that string
     repo = "aa"
     repo = ""         # Find all projects
 
-lftools nexus docker releasedockerhub
+LEGACY_CLI=1 lftools-uv nexus docker releasedockerhub
 """
 
 from __future__ import annotations

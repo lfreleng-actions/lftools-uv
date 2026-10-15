@@ -3,9 +3,9 @@
 # SPDX-FileCopyrightText: 2025 The Linux Foundation
 
 ###############################################################################
-# LFTOOLS CONFIGURATION SETUP HELPER
+# LFTOOLS-UV CONFIGURATION SETUP HELPER
 #
-# This script helps set up lftools configuration files in the standard
+# This script helps set up lftools-uv configuration files in the standard
 # locations with proper permissions and example content.
 #
 # Usage:
@@ -49,9 +49,9 @@ success() { echo -e "${COLOR_GREEN}SUCCESS${COLOR_RESET} $*"; }
 # Show help
 show_help() {
     cat << EOF
-lftools Configuration Setup Helper
+lftools-uv Configuration Setup Helper
 
-This script helps set up lftools configuration files in the standard
+This script helps set up lftools-uv configuration files in the standard
 ~/.config/lftools/ directory.
 
 USAGE:
@@ -188,10 +188,10 @@ NEXT STEPS:
 
 3. ${COLOR_YELLOW}Test Your Configuration:${COLOR_RESET}
    # Test Jenkins connectivity
-   lftools jenkins -s onap-prod plugins list
+   lftools-uv jenkins -s onap-prod plugins list
 
    # Test OpenStack connectivity
-   lftools openstack --os-cloud production image list
+   lftools-uv openstack --os-cloud production image list
 
    # Run functional tests
    ./scripts/run_functional_tests.sh
@@ -220,7 +220,7 @@ EOF
 
 # Main execution
 main() {
-    info "Starting lftools configuration setup..."
+    info "Starting lftools-uv configuration setup..."
 
     # Verify example files exist
     check_example_files

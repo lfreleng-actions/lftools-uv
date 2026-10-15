@@ -8,7 +8,7 @@
 # http://www.eclipse.org/legal/epl-v10.html
 ##############################################################################
 
-"""lftools utils command."""
+"""lftools-uv utils command."""
 
 import logging
 

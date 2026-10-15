@@ -28,7 +28,7 @@ OUTPUT_FORMAT=json ./scripts/run_functional_tests.sh > test_results.json
 
 ## Configuration Requirements
 
-The harness leverages your lftools configuration from the standard locations.
+The harness leverages your lftools-uv configuration from the standard locations.
 Based on what commands you want to test, you'll need:
 
 ### Jenkins Tests (Working)

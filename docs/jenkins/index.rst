@@ -6,7 +6,7 @@
 Jenkins
 #######
 
-lftools is a collection of scripts written directly in python or externally via
+lftools-uv is a collection of scripts written directly in python or externally via
 bash. It supports the following Jenkins specific commands.
 
 .. toctree::

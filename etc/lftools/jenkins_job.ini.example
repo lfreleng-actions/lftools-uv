@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2025 The Linux Foundation
 #
-# Example Jenkins Job Builder Configuration for lftools
+# Example Jenkins Job Builder Configuration for lftools-uv
 #
 # This file should be copied to ~/.config/lftools/jenkins_job.ini and
 # customized with your actual Jenkins server credentials.
 #
 # Each section represents a Jenkins server configuration that can be
-# referenced by name in lftools commands.
+# referenced by name in lftools-uv commands.
 
 [job_builder]
 ignore_cache=True

@@ -544,7 +544,7 @@ test_lftools_integration() {
   if [[ -n "${UV_CMD}" ]]; then
     run_test_with_output "ldap.lftools.import" "Test lftools-uv LDAP import" \
       "${UV_CMD}" run --extra ldap "${PYTHON_CMD}" -c "
-# Test that we can import lftools LDAP modules with the ldap extra
+# Test that we can import lftools-uv LDAP modules with the ldap extra
 try:
     from lftools_uv.cli.ldap_cli import ldap_cli
     print('✓ lftools_uv LDAP CLI import successful')

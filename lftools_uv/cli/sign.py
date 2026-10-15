@@ -104,7 +104,7 @@ def sigul(ctx, directory, mode):
 def deploy_nexus(ctx, nexus_url, nexus_repo, staging_profile_id, sign_dir, sign_with, root_domain, mode):
     """Sign artifacts from a Nexus repo then upload to a staging repo.
 
-    This is a porcelain command that ties the lftools sign and deploy tools
+    This is a porcelain command that ties the lftools-uv sign and deploy tools
     together for easier use. It calls the sign-nexus command and then the
     deploy-nexus-stage command to create a signed staging repository in Nexus.
 

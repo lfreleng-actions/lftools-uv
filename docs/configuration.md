@@ -3,20 +3,22 @@ SPDX-License-Identifier: Apache-2.0
 SPDX-FileCopyrightText: 2025 The Linux Foundation
 -->
 
-# lftools Configuration
+# lftools-uv Configuration
 
-This document describes how to configure lftools for use with Jenkins,
+This document describes how to configure lftools-uv for use with Jenkins,
 OpenStack, and other services.
 
 ## Configuration Directory
 
-lftools uses the standard XDG configuration directory structure:
+lftools-uv uses the standard XDG configuration directory structure. The
+directory keeps the `lftools` name so that lftools-uv and legacy lftools
+share one configuration:
 
 ```bash
 ~/.config/lftools/
 ├── jenkins_job.ini     # Jenkins server configurations
 ├── clouds.yaml         # OpenStack cloud configurations
-└── lftools.ini         # General lftools settings (optional)
+└── lftools.ini         # General settings (optional)
 ```
 
 ## Jenkins Configuration
@@ -69,7 +71,7 @@ Each Jenkins server section must include:
 
 ### Common Server Sections
 
-Based on typical lftools usage, you may need these sections:
+Based on typical lftools-uv usage, you may need these sections:
 
 - `onap-prod` - ONAP production Jenkins
 - `onap-sandbox` - ONAP sandbox Jenkins
@@ -92,10 +94,10 @@ Reference Jenkins servers by section name:
 
 ```bash
 # Use specific server
-lftools jenkins -s onap-prod builds running
+lftools-uv jenkins -s onap-prod builds running
 
 # Use with config file override
-lftools jenkins -c /path/to/jenkins_job.ini -s onap-prod nodes list
+lftools-uv jenkins -c /path/to/jenkins_job.ini -s onap-prod nodes list
 ```
 
 ## OpenStack Configuration
@@ -150,16 +152,16 @@ Reference clouds by name:
 
 ```bash
 # Use specific cloud
-lftools openstack --os-cloud production image list
+lftools-uv openstack --os-cloud production image list
 
 # Set via environment variable
 export OS_CLOUD=production
-lftools openstack image cleanup --days 30
+lftools-uv openstack image cleanup --days 30
 ```
 
 ## Configuration Precedence
 
-lftools searches for configuration files in this order:
+lftools-uv searches for configuration files in this order:
 
 ### Jenkins Config Search Order
 
@@ -267,10 +269,10 @@ Edit the files to include your actual credentials and server details.
 
 ```bash
 # Test Jenkins connectivity
-lftools jenkins -s onap-prod plugins list
+lftools-uv jenkins -s onap-prod plugins list
 
 # Test OpenStack connectivity
-lftools openstack --os-cloud production image list
+lftools-uv openstack --os-cloud production image list
 ```
 
 ## Security Best Practices
@@ -315,10 +317,10 @@ lftools openstack --os-cloud production image list
 
 1. Check file paths and permissions
 2. Verify environment variables if using custom locations
-3. Enable verbose logging:
+3. Enable debug logging:
 
    ```bash
-   lftools --verbose jenkins -s onap-prod builds running
+   lftools-uv --debug jenkins -s onap-prod builds running
    ```
 
 ## Functional Testing
