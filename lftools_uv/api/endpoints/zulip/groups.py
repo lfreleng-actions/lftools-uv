@@ -236,7 +236,7 @@ def resolve_group_setting_specs(
 
 
 def _normalize_group(raw: dict[str, Any]) -> dict[str, Any]:
-    """Normalize a raw ``user_groups`` API entry to the lftools schema.
+    """Normalize a raw ``user_groups`` API entry to the lftools-uv schema.
 
     Maps system role groups to their display names per
     :data:`SYSTEM_ROLE_DISPLAY_NAMES`; custom group names pass through

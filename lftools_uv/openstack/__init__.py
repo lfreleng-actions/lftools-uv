@@ -7,6 +7,6 @@
 # which accompanies this distribution, and is available at
 # http://www.eclipse.org/legal/epl-v10.html
 ##############################################################################
-"""lftools openstack package."""
+"""lftools-uv openstack package."""
 
 __author__ = "Thanh Ha"

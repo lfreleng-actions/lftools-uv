@@ -8,24 +8,29 @@ Installation
 
 .. note::
 
-    LFtools requires python3 (3.8+) virtual environment.
-    https://virtualenv.pypa.io/en/stable/.
-    Not using a virtualenv can have serious negative side effects!
+    lftools-uv requires Python 3.11 or later. Install it into a virtual
+    environment, or with a tool that manages one for you such as ``uv``.
+    Installing into the system Python can have serious negative side effects!
 
 
 For Install
 ===========
 
-LFTools is available on pypi. LFtools has migrated to python3, ensure python3
-is available your system. To install LFTools, create a virtualenv,
-with `pip3 install lftools` in your shell.
+lftools-uv is available on PyPI. Install it with ``uv pip install lftools-uv``
+or ``pip install lftools-uv`` in your virtual environment. Optional features
+such as LDAP and OpenStack support are extras, for example
+``pip install "lftools-uv[ldap]"``.
+
+The package installs the ``lftools-uv`` command. It does not install the
+``lftools`` command from legacy lftools.
 
 
 For Development
 ===============
 
 Often during development you want to run tests and/or
-try code out locally as you change it.  To do this you
-need the installation of LFTools to be your local git repo.
-After doing `pip3 install -r requirements.txt` issue the
-command `pip3 install -e .`
+try code out locally as you change it. To do this you
+need the installation of lftools-uv to be your local git repo.
+From a clone of the repository, run ``make install-dev``, which runs
+``uv sync`` with the development, test, documentation, LDAP and OpenStack
+extras.

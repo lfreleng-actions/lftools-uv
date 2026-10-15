@@ -60,7 +60,7 @@ DEFAULT_USER_AGENT: str = "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100
 
 
 class Jenkins:
-    """lftools Jenkins object."""
+    """lftools-uv Jenkins object."""
 
     def __init__(
         self, server: str, user: str | None = None, password: str | None = None, config_file: str | None = None

@@ -72,7 +72,7 @@ main() {
      echo "  OK $id, $fullname, $email last submission or review $updated"
     fi
 
-  done < <(lftools ldap csv "$group")
+  done < <(LEGACY_CLI=1 lftools-uv ldap csv "$group")
 
 }
 

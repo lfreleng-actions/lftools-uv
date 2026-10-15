@@ -46,7 +46,7 @@ def deploy_nexus_zip(nexus_url: str, nexus_repo: str, nexus_path: str, zip_file:
         zip_file:     The zip to deploy. (Ex: /tmp/artifacts.zip)
 
     Sample:
-    lftools deploy nexus-zip \
+    lftools-uv deploy nexus-zip \
         192.168.1.26:8081/nexus \
         snapshots \
         tst_path \
@@ -77,7 +77,7 @@ def nexus_stage_repo_create(nexus_url: str, staging_profile_id: str) -> str:
     Returns:             staging_repo_id
 
     Sample:
-    lftools deploy nexus-stage-repo-create 192.168.1.26:8081/nexus/ 93fb68073c18
+    lftools-uv deploy nexus-stage-repo-create 192.168.1.26:8081/nexus/ 93fb68073c18
     """
     nexus_url = f"{_format_url(nexus_url)}/service/local/staging/profiles/{staging_profile_id}/start"
 
@@ -126,7 +126,7 @@ def nexus_stage_repo_close(nexus_url: str, staging_profile_id: str, staging_repo
     staging_repo_id:    The ID of the repo to close.
 
     Sample:
-    lftools deploy nexus-stage-repo-close 192.168.1.26:8081/nexsus/ 93fb68073c18 test1-1031
+    lftools-uv deploy nexus-stage-repo-close 192.168.1.26:8081/nexsus/ 93fb68073c18 test1-1031
     """
     nexus_url = f"{_format_url(nexus_url)}/service/local/staging/profiles/{staging_profile_id}/finish"
 
@@ -195,7 +195,7 @@ def upload_maven_file_to_nexus(
          classifier:    Maven classifier. (optional)
 
     Sample:
-        lftools deploy nexus \
+        lftools-uv deploy nexus \
             http://192.168.1.26:8081/nexus/content/repositories/releases \
             tests/fixtures/deploy/zip-test-files
     """
@@ -239,7 +239,7 @@ def deploy_nexus(nexus_repo_url: str, deploy_dir: str, snapshot: bool = False, w
         deploy_dir:     The directory to deploy. (Ex: /tmp/m2repo)
 
     Sample:
-        lftools deploy nexus \
+        lftools-uv deploy nexus \
             http://192.168.1.26:8081/nexus/content/repositories/releases \
             tests/fixtures/deploy/zip-test-files
     """
@@ -331,7 +331,7 @@ def deploy_nexus_stage(nexus_url: str, staging_profile_id: str, deploy_dir: str)
     deploy_dir:         The directory to deploy. (Ex: /tmp/m2repo)
 
     # Sample:
-        lftools deploy nexus-stage http://192.168.1.26:8081/nexus 4e6f95cd2344 /tmp/slask
+        lftools-uv deploy nexus-stage http://192.168.1.26:8081/nexus 4e6f95cd2344 /tmp/slask
             Deploying Maven artifacts to staging repo...
             Staging repository aaf-1005 created.
             /tmp/slask ~/LF/work/lftools-dev/lftools/shell

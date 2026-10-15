@@ -7,7 +7,7 @@
 # which accompanies this distribution, and is available at
 # http://www.eclipse.org/legal/epl-v10.html
 ##############################################################################
-"""Configuration subsystem for lftools."""
+"""Configuration subsystem for lftools-uv."""
 
 from __future__ import annotations
 

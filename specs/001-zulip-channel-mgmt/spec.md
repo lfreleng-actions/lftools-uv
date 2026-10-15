@@ -1324,7 +1324,7 @@ and verifying it reappears in the active channel list.
   internally; the CLI uses the user-facing term "channels" for clarity.
 - The Zulip client library handles HTTP connection management, retries,
   and rate limiting internally.
-- Human-readable table output will use a format consistent with other lftools
+- Human-readable table output will use a format consistent with other lftools-uv
   listing commands.
 - Zulip has no stable "username" field; the `full_name` field is used for
   name-based user identification via `--by-name`. Since `full_name` is not

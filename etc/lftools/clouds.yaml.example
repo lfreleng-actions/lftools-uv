@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2025 The Linux Foundation
 #
-# Example OpenStack clouds configuration for lftools
+# Example OpenStack clouds configuration for lftools-uv
 #
 # This file should be copied to ~/.config/lftools/clouds.yaml and
 # customized with your actual OpenStack cloud credentials.
 #
 # Each cloud entry represents an OpenStack environment that can be
-# referenced by name in lftools OpenStack commands.
+# referenced by name in lftools-uv OpenStack commands.
 
 clouds:
   # Production OpenStack cloud

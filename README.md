@@ -59,8 +59,9 @@ pip install lftools-uv
 
 ## Configuration
 
-lftools uses configuration files in the standard `~/.config/lftools/`
-directory for Jenkins, OpenStack, and other service credentials.
+lftools-uv uses configuration files in the standard `~/.config/lftools/`
+directory for Jenkins, OpenStack, and other service credentials. It shares
+this directory with legacy lftools.
 
 ### Quick Setup
 
@@ -106,10 +107,10 @@ Test your configuration with basic commands:
 
 ```bash
 # Test Jenkins connectivity
-lftools jenkins -s onap-prod plugins list
+lftools-uv jenkins -s onap-prod plugins list
 
 # Test OpenStack connectivity
-lftools openstack --os-cloud production image list
+lftools-uv openstack --os-cloud production image list
 
 # Run comprehensive functional tests (see Functional Testing section below)
 ./scripts/run_functional_tests.sh
@@ -141,7 +142,7 @@ TEST_CATEGORY=1 DEBUG=1 ./scripts/run_functional_tests.sh
 
 ### Configuration Requirements
 
-The functional tests work with standard lftools configuration files:
+The functional tests work with standard lftools-uv configuration files:
 
 #### Jenkins Tests
 
@@ -164,7 +165,7 @@ The functional tests work with standard lftools configuration files:
 #### GitHub Tests
 
 - **Environment**: `GITHUB_ORG` (default: `onap`), `GITHUB_TOKEN`
-- **File**: Can use lftools config for token storage
+- **File**: Can use lftools-uv config for token storage
 
 ### Test Categories
 
