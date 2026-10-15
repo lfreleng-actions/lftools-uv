@@ -7,9 +7,15 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
+from click.testing import CliRunner as ClickRunner
+from click.testing import Result as ClickResult
 from openstack.orchestration.v1.stack import Stack
+from typer.testing import CliRunner as TyperRunner
+from typer.testing import Result as TyperResult
 
+from lftools_uv.openstack import cmd as os_cmd
 from lftools_uv.openstack import stack as os_stack
+from lftools_uv.typer_apps.openstack import openstack_app
 
 
 @patch("lftools_uv.openstack.stack.openstack.connect")
@@ -218,3 +224,80 @@ def test_create_returns_without_exit_on_success(mock_from_config, mock_sleep):
     os_stack.create("test-cloud", "a-stack", "template.yaml", "params.yaml", timeout=1, tries=2)
 
     assert mock_cloud.create_stack.call_count == 1
+
+
+@patch("lftools_uv.openstack.stack.delete")
+@patch("lftools_uv.openstack.stack.openstack.connection.from_config")
+def test_delete_stale_refuses_without_jenkins(mock_from_config, mock_delete):
+    """No Jenkins servers means no build list, so every stack would look stale."""
+    mock_from_config.return_value.search_stacks.return_value = [
+        _heat_stack("id-orphan", "releng-csit-job-99", "CREATE_COMPLETE"),
+    ]
+
+    with pytest.raises(SystemExit) as exc_info:
+        os_stack.delete_stale("test-cloud", [])
+
+    assert exc_info.value.code == 1
+    mock_delete.assert_not_called()
+
+
+@patch("lftools_uv.openstack.stack.delete", side_effect=[False, True])
+@patch("lftools_uv.openstack.stack.Jenkins")
+@patch("lftools_uv.openstack.stack.openstack.connection.from_config")
+def test_delete_stale_exits_non_zero_when_a_delete_fails(mock_from_config, mock_jenkins, mock_delete, caplog):
+    """A stack that will not delete fails the run, after every stack is tried.
+
+    Exiting 0 let the cleanup cron pass while orphans kept consuming quota.
+    """
+    mock_cloud = MagicMock()
+    mock_from_config.return_value = mock_cloud
+    mock_cloud.search_stacks.return_value = [
+        _heat_stack("id-stuck", "releng-csit-job-99", "CREATE_COMPLETE"),
+        _heat_stack("id-orphan", "releng-csit-job-98", "CREATE_COMPLETE"),
+    ]
+    jenkins = mock_jenkins.return_value
+    jenkins.url = "https://jenkins.example.org/releng/"
+    jenkins.server.get_running_builds.return_value = []
+
+    with pytest.raises(SystemExit) as exc_info:
+        os_stack.delete_stale("test-cloud", ["https://jenkins.example.org/releng"])
+
+    assert exc_info.value.code == 1
+    assert [c.args[1] for c in mock_delete.call_args_list] == ["id-stuck", "id-orphan"]
+    assert "releng-csit-job-99" in caplog.text
+
+
+def _run_click(args: list[str]) -> ClickResult:
+    return ClickRunner().invoke(os_cmd.openstack, ["--os-cloud", "test-cloud", *args], obj={})
+
+
+def _run_typer(args: list[str]) -> TyperResult:
+    return TyperRunner().invoke(openstack_app, ["--os-cloud", "test-cloud", *args])
+
+
+@pytest.mark.parametrize("run", [_run_click, _run_typer], ids=["click", "typer"])
+@pytest.mark.parametrize(
+    ("delete_result", "expected"),
+    [(True, 0), (None, 0), (False, 1)],
+    ids=["deleted", "forced", "timed-out"],
+)
+def test_stack_delete_exit_code(run, delete_result, expected):
+    """A timed-out delete fails the command unless --force asked to ignore it.
+
+    delete() returns True on success, False on timeout, and None when --force
+    is set; only False is a failure.
+    """
+    with patch("lftools_uv.openstack.stack.delete", return_value=delete_result):
+        result = run(["stack", "delete", "a-stack"])
+
+    assert result.exit_code == expected
+
+
+@pytest.mark.parametrize("run", [_run_click, _run_typer], ids=["click", "typer"])
+def test_delete_stale_requires_jenkins_urls(run):
+    """Omitting the Jenkins URLs is a usage error, not a reap-everything run."""
+    with patch("lftools_uv.openstack.stack.delete_stale") as mock_delete_stale:
+        result = run(["stack", "delete-stale"])
+
+    assert result.exit_code == 2
+    mock_delete_stale.assert_not_called()

@@ -194,7 +194,9 @@ def create(ctx, name, template_file, parameter_file, timeout, tries):
 @click.pass_context
 def delete(ctx, name_or_id, force, timeout):
     """Delete stack."""
-    os_stack.delete(ctx.obj["os_cloud"], name_or_id, force=force, timeout=timeout)
+    # delete() returns False on timeout, or None when --force asks to ignore it.
+    if os_stack.delete(ctx.obj["os_cloud"], name_or_id, force=force, timeout=timeout) is False:
+        sys.exit(1)
 
 
 @click.command()
@@ -207,7 +209,7 @@ def cost(ctx, stack_name, timeout):
 
 
 @click.command(name="delete-stale")
-@click.argument("jenkins_urls", nargs=-1)
+@click.argument("jenkins_urls", nargs=-1, required=True)
 @click.option(
     "--min-age-hours",
     type=click.IntRange(min=0),
