@@ -1759,6 +1759,7 @@ def _subscribe_client(
     return client
 
 
+@pytest.mark.xfail(strict=True, reason="Issue #868: subscribe response is keyed by user ID or email")
 def test_subscribe_users_single_email_success() -> None:
     """Subscribing a single user by email returns a success bulk result."""
     client = _subscribe_client(
@@ -1766,7 +1767,7 @@ def test_subscribe_users_single_email_success() -> None:
         MEMBERS,
         {
             "result": "success",
-            "subscribed": {"general": ["bob@example.com"]},
+            "subscribed": {"200": ["general"]},
             "already_subscribed": {},
             "unauthorized": [],
         },
@@ -1794,6 +1795,7 @@ def test_subscribe_users_single_email_success() -> None:
     assert principals == ["bob@example.com"]
 
 
+@pytest.mark.xfail(strict=True, reason="Issue #868: subscribe response is keyed by user ID or email")
 def test_subscribe_users_bulk_mixed_outcomes() -> None:
     """Bulk subscribe with mixed subscribed/already_subscribed returns success."""
     client = _subscribe_client(
@@ -1801,8 +1803,8 @@ def test_subscribe_users_bulk_mixed_outcomes() -> None:
         MEMBERS,
         {
             "result": "success",
-            "subscribed": {"general": ["alice@example.com"]},
-            "already_subscribed": {"general": ["bob@example.com"]},
+            "subscribed": {"100": ["general"]},
+            "already_subscribed": {"200": ["general"]},
             "unauthorized": [],
         },
     )
@@ -1819,6 +1821,7 @@ def test_subscribe_users_bulk_mixed_outcomes() -> None:
     assert result["errors"] == []
 
 
+@pytest.mark.xfail(strict=True, reason="Issue #868: subscribe response is keyed by user ID or email")
 def test_subscribe_users_already_subscribed_only() -> None:
     """All already-subscribed users still produce status=success (no-op)."""
     client = _subscribe_client(
@@ -1827,7 +1830,7 @@ def test_subscribe_users_already_subscribed_only() -> None:
         {
             "result": "success",
             "subscribed": {},
-            "already_subscribed": {"general": ["bob@example.com"]},
+            "already_subscribed": {"200": ["general"]},
             "unauthorized": [],
         },
     )
@@ -1842,16 +1845,45 @@ def test_subscribe_users_already_subscribed_only() -> None:
     assert result["errors"] == []
 
 
-def test_subscribe_users_partial_unauthorized() -> None:
-    """Unauthorized users are reported in errors with overall status=partial."""
+@pytest.mark.xfail(strict=True, reason="Issue #868: subscribe response is keyed by user ID or email")
+def test_subscribe_users_channel_unauthorized_is_error_for_every_user() -> None:
+    """`unauthorized` lists channel names, so it fails every requested user."""
     client = _subscribe_client(
         _SUBSCRIBE_STREAMS,
         MEMBERS,
         {
             "result": "success",
-            "subscribed": {"general": ["alice@example.com"]},
+            "subscribed": {},
             "already_subscribed": {},
-            "unauthorized": ["bob@example.com"],
+            "unauthorized": ["general"],
+        },
+    )
+    result = subscribe_users(
+        client,
+        "general",
+        ["alice@example.com", "bob@example.com"],
+        id_mode="email",
+    )
+    assert result["status"] == "error"
+    assert result["results"] == []
+    errors = {e["user"]: e["error"] for e in result["errors"]}
+    assert errors == {
+        "alice@example.com": "unauthorized",
+        "bob@example.com": "unauthorized",
+    }
+
+
+@pytest.mark.xfail(strict=True, reason="Issue #868: subscribe response is keyed by user ID or email")
+def test_subscribe_users_unmentioned_user_is_partial() -> None:
+    """A user the server never mentioned stays a per-user error (partial)."""
+    client = _subscribe_client(
+        _SUBSCRIBE_STREAMS,
+        MEMBERS,
+        {
+            "result": "success",
+            "subscribed": {"100": ["general"]},
+            "already_subscribed": {},
+            "unauthorized": [],
         },
     )
     result = subscribe_users(
@@ -1863,10 +1895,69 @@ def test_subscribe_users_partial_unauthorized() -> None:
     assert result["status"] == "partial"
     by_user = {r["user"]: r for r in result["results"]}
     assert by_user["alice@example.com"]["status"] == "subscribed"
-    error_users = {e["user"] for e in result["errors"]}
-    assert "bob@example.com" in error_users
+    error_users = {e["user"]: e["error"] for e in result["errors"]}
+    assert error_users == {"bob@example.com": "no response from server"}
 
 
+@pytest.mark.xfail(strict=True, reason="Issue #868: subscribe response is keyed by user ID or email")
+def test_subscribe_users_email_keyed_response_still_resolves() -> None:
+    """Before feature level 289 the response keys were API email addresses."""
+    client = _subscribe_client(
+        _SUBSCRIBE_STREAMS,
+        MEMBERS,
+        {
+            "result": "success",
+            "subscribed": {"bob@example.com": ["general"]},
+            "already_subscribed": {},
+            "unauthorized": [],
+        },
+    )
+    result = subscribe_users(
+        client,
+        "general",
+        ["bob@example.com"],
+        id_mode="email",
+    )
+    assert result["status"] == "success"
+    assert result["results"] == [{"user": "bob@example.com", "status": "subscribed"}]
+
+
+@pytest.mark.xfail(strict=True, reason="Issue #868: subscribe response is keyed by user ID or email")
+def test_subscribe_users_api_email_keyed_response_when_delivery_email_differs() -> None:
+    """Before feature level 289 the response keys were API email addresses,
+    which differ from delivery_email when email visibility is restricted.
+    """
+    members = [
+        {
+            "user_id": 42,
+            "full_name": "Bob Restricted",
+            "email": "user42@zulip.example.com",
+            "delivery_email": "bob@corp.example.com",
+            "is_bot": False,
+            "is_active": True,
+        },
+    ]
+    client = _subscribe_client(
+        _SUBSCRIBE_STREAMS,
+        members,
+        {
+            "result": "success",
+            "subscribed": {"user42@zulip.example.com": ["general"]},
+            "already_subscribed": {},
+            "unauthorized": [],
+        },
+    )
+    result = subscribe_users(
+        client,
+        "general",
+        ["bob@corp.example.com"],
+        id_mode="email",
+    )
+    assert result["status"] == "success"
+    assert result["results"] == [{"user": "bob@corp.example.com", "status": "subscribed"}]
+
+
+@pytest.mark.xfail(strict=True, reason="Issue #868: subscribe response is keyed by user ID or email")
 def test_subscribe_users_by_id_resolves_to_email_principals() -> None:
     """``id_mode='id'`` resolves numeric IDs to user emails before send.
 
@@ -1881,7 +1972,7 @@ def test_subscribe_users_by_id_resolves_to_email_principals() -> None:
         MEMBERS,
         {
             "result": "success",
-            "subscribed": {"general": ["bob@example.com"]},
+            "subscribed": {"200": ["general"]},
             "already_subscribed": {},
             "unauthorized": [],
         },
@@ -1975,6 +2066,7 @@ def test_subscribe_users_api_error_response() -> None:
         _ = subscribe_users(client, "general", ["bob@example.com"], id_mode="email")
 
 
+@pytest.mark.xfail(strict=True, reason="Issue #868: subscribe response is keyed by user ID or email")
 def test_subscribe_users_skips_resolve_channel_when_stream_supplied() -> None:
     """`_resolved_stream=...` bypasses the internal resolve_channel call.
 
@@ -1996,7 +2088,7 @@ def test_subscribe_users_skips_resolve_channel_when_stream_supplied() -> None:
     }
     client.call_endpoint.return_value = {
         "result": "success",
-        "subscribed": {"general": ["bob@example.com"]},
+        "subscribed": {"7": ["general"]},
         "already_subscribed": {},
         "unauthorized": [],
     }
