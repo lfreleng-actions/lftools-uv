@@ -132,7 +132,18 @@ def test_resolve_config_malformed_file(tmp_path: Path) -> None:
         _ = resolve_config(zuliprc=rc)
 
 
-@pytest.mark.xfail(strict=True, reason="Issue #871: zuliprc missing key should fail at resolution")
+def test_resolve_config_interpolation_error(tmp_path: Path) -> None:
+    """Interpolation syntax errors in zuliprc options do not leak values (#871)."""
+    rc = tmp_path / "zuliprc"
+    _ = rc.write_text(
+        "[api]\nemail=bot@example.com\nkey=secret%value\nsite=https://zulip.example.com\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ZulipConfigError, match=r"Malformed Zulip config file") as exc_info:
+        _ = resolve_config(zuliprc=rc)
+    assert "secret%value" not in str(exc_info.value)
+
+
 def test_resolve_config_missing_key_option(tmp_path: Path) -> None:
     """A zuliprc without a key is rejected here, not inside zulip.Client (#871)."""
     rc = tmp_path / "zuliprc"
@@ -144,7 +155,6 @@ def test_resolve_config_missing_key_option(tmp_path: Path) -> None:
         _ = resolve_config(zuliprc=rc)
 
 
-@pytest.mark.xfail(strict=True, reason="Issue #871: zuliprc missing site should fail at resolution")
 def test_resolve_config_missing_site_option(tmp_path: Path) -> None:
     """A zuliprc without a site is rejected here, not as MissingURLError (#871)."""
     rc = tmp_path / "zuliprc"
@@ -156,7 +166,6 @@ def test_resolve_config_missing_site_option(tmp_path: Path) -> None:
         _ = resolve_config(zuliprc=rc)
 
 
-@pytest.mark.xfail(strict=True, reason="Issue #871: zuliprc missing email should fail at resolution")
 def test_resolve_config_missing_email_option(tmp_path: Path) -> None:
     """A zuliprc without an email is rejected here, not inside zulip.Client (#871)."""
     rc = tmp_path / "zuliprc"
@@ -176,7 +185,6 @@ def _fake_zulip_module(client: mock.Mock, error_cls: type[BaseException] | None 
     return module
 
 
-@pytest.mark.xfail(strict=True, reason="Issue #871: NoOptionError should be wrapped in ZulipConfigError")
 def test_get_client_wraps_no_option_error(zuliprc_file: Path) -> None:
     """zulip's configparser.NoOptionError becomes a ZulipConfigError (#871)."""
     client = mock.Mock(side_effect=configparser.NoOptionError("option 'key'", "section: 'api'"))
@@ -189,7 +197,6 @@ def test_get_client_wraps_no_option_error(zuliprc_file: Path) -> None:
     assert str(zuliprc_file) in str(exc_info.value)
 
 
-@pytest.mark.xfail(strict=True, reason="Issue #871: MissingURLError should be wrapped in ZulipConfigError")
 def test_get_client_wraps_zulip_error(zuliprc_file: Path) -> None:
     """zulip.MissingURLError becomes a ZulipConfigError with the source (#871)."""
     base_error = type("ZulipError", (Exception,), {})
@@ -202,7 +209,6 @@ def test_get_client_wraps_zulip_error(zuliprc_file: Path) -> None:
             _ = get_client(zuliprc=zuliprc_file)
 
 
-@pytest.mark.xfail(strict=True, reason="Issue #871: credentials ZulipError should be wrapped in ZulipConfigError")
 def test_get_client_wraps_zulip_error_for_credentials() -> None:
     """The credentials path gets the same wrapping as the config-file path."""
     base_error = type("ZulipError", (Exception,), {})
