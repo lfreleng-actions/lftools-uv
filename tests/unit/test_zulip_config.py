@@ -11,13 +11,16 @@
 
 from __future__ import annotations
 
+import configparser
 from pathlib import Path
 from unittest import mock
 
 import pytest
 
 from lftools_uv.api.endpoints.zulip import (
+    ZulipConfig,
     ZulipConfigError,
+    get_client,
     resolve_config,
 )
 
@@ -127,3 +130,103 @@ def test_resolve_config_malformed_file(tmp_path: Path) -> None:
     _ = rc.write_text("[other]\nfoo=bar\n", encoding="utf-8")
     with pytest.raises(ZulipConfigError, match=r"missing required \[api\] section"):
         _ = resolve_config(zuliprc=rc)
+
+
+@pytest.mark.xfail(strict=True, reason="Issue #871: zuliprc missing key should fail at resolution")
+def test_resolve_config_missing_key_option(tmp_path: Path) -> None:
+    """A zuliprc without a key is rejected here, not inside zulip.Client (#871)."""
+    rc = tmp_path / "zuliprc"
+    _ = rc.write_text(
+        "[api]\nemail=bot@example.com\nsite=https://zulip.example.com\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ZulipConfigError, match=r"missing required key option"):
+        _ = resolve_config(zuliprc=rc)
+
+
+@pytest.mark.xfail(strict=True, reason="Issue #871: zuliprc missing site should fail at resolution")
+def test_resolve_config_missing_site_option(tmp_path: Path) -> None:
+    """A zuliprc without a site is rejected here, not as MissingURLError (#871)."""
+    rc = tmp_path / "zuliprc"
+    _ = rc.write_text(
+        "[api]\nemail=bot@example.com\nkey=apikey1234\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ZulipConfigError, match=r"missing required site option"):
+        _ = resolve_config(zuliprc=rc)
+
+
+@pytest.mark.xfail(strict=True, reason="Issue #871: zuliprc missing email should fail at resolution")
+def test_resolve_config_missing_email_option(tmp_path: Path) -> None:
+    """A zuliprc without an email is rejected here, not inside zulip.Client (#871)."""
+    rc = tmp_path / "zuliprc"
+    _ = rc.write_text(
+        "[api]\nkey=apikey1234\nsite=https://zulip.example.com\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ZulipConfigError, match=r"missing required email option"):
+        _ = resolve_config(zuliprc=rc)
+
+
+def _fake_zulip_module(client: mock.Mock, error_cls: type[BaseException] | None = None) -> mock.Mock:
+    """A stand-in for the ``zulip`` package: its error surface, our client."""
+    module = mock.Mock()
+    module.ZulipError = type("ZulipError", (Exception,), {}) if error_cls is None else error_cls
+    module.Client = client
+    return module
+
+
+@pytest.mark.xfail(strict=True, reason="Issue #871: NoOptionError should be wrapped in ZulipConfigError")
+def test_get_client_wraps_no_option_error(zuliprc_file: Path) -> None:
+    """zulip's configparser.NoOptionError becomes a ZulipConfigError (#871)."""
+    client = mock.Mock(side_effect=configparser.NoOptionError("option 'key'", "section: 'api'"))
+    with mock.patch(
+        "lftools_uv.api.endpoints.zulip._require_zulip",
+        return_value=_fake_zulip_module(client),
+    ):
+        with pytest.raises(ZulipConfigError, match="Cannot construct Zulip client from") as exc_info:
+            _ = get_client(zuliprc=zuliprc_file)
+    assert str(zuliprc_file) in str(exc_info.value)
+
+
+@pytest.mark.xfail(strict=True, reason="Issue #871: MissingURLError should be wrapped in ZulipConfigError")
+def test_get_client_wraps_zulip_error(zuliprc_file: Path) -> None:
+    """zulip.MissingURLError becomes a ZulipConfigError with the source (#871)."""
+    base_error = type("ZulipError", (Exception,), {})
+    missing_url = type("MissingURLError", (base_error,), {})
+    client = mock.Mock(side_effect=missing_url("Missing Zulip server URL"))
+    module = _fake_zulip_module(client, error_cls=base_error)
+    module.MissingURLError = missing_url
+    with mock.patch("lftools_uv.api.endpoints.zulip._require_zulip", return_value=module):
+        with pytest.raises(ZulipConfigError, match="Missing Zulip server URL"):
+            _ = get_client(zuliprc=zuliprc_file)
+
+
+@pytest.mark.xfail(strict=True, reason="Issue #871: credentials ZulipError should be wrapped in ZulipConfigError")
+def test_get_client_wraps_zulip_error_for_credentials() -> None:
+    """The credentials path gets the same wrapping as the config-file path."""
+    base_error = type("ZulipError", (Exception,), {})
+    client = mock.Mock(side_effect=base_error("bad key"))
+    module = _fake_zulip_module(client, error_cls=base_error)
+    config = ZulipConfig(
+        email="bot@example.com",
+        api_key="apikey1234",
+        site="https://zulip.example.com",
+        source="lftools.ini[zulip]",
+    )
+    with mock.patch("lftools_uv.api.endpoints.zulip._require_zulip", return_value=module):
+        with pytest.raises(ZulipConfigError, match=r"lftools\.ini\[zulip\]") as exc_info:
+            _ = get_client(config=config)
+    assert "bad key" in str(exc_info.value)
+
+
+def test_get_client_returns_the_client_for_a_complete_file(zuliprc_file: Path) -> None:
+    """A complete zuliprc reaches zulip.Client unchanged."""
+    sentinel = object()
+    client = mock.Mock(return_value=sentinel)
+    with mock.patch(
+        "lftools_uv.api.endpoints.zulip._require_zulip",
+        return_value=_fake_zulip_module(client),
+    ):
+        assert get_client(zuliprc=zuliprc_file) is sentinel
+    client.assert_called_once_with(config_file=str(zuliprc_file))
