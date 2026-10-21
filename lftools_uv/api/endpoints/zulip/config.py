@@ -51,9 +51,10 @@ def _load_zuliprc(path: Path) -> ZulipConfig:
     """Validate a zuliprc-format file and return a :class:`ZulipConfig`.
 
     The file is not parsed here for credential extraction — the
-    ``zulip.Client`` consumes the file directly. Parsing only validates
-    that the file is readable and contains the expected ``[api]``
-    section, producing a clear error otherwise.
+    ``zulip.Client`` consumes the file directly. Parsing validates that
+    the file is readable and contains the required ``[api]`` section with
+    ``email``, ``key``, and ``site`` options, producing a clear error
+    otherwise.
     """
     parser = configparser.ConfigParser()
     try:
@@ -66,6 +67,25 @@ def _load_zuliprc(path: Path) -> ZulipConfig:
 
     if not parser.has_section(_ZULIPRC_API_SECTION):
         raise ZulipConfigError(f"Zulip config file {path} is missing required [api] section")
+
+    # ``zulip.Client`` parses this file itself and raises its own raw
+    # exceptions (``configparser.NoOptionError``, ``zulip.MissingURLError``)
+    # for a missing option, so the file is checked here first to fail with
+    # one clear message instead of the traceback the client produces (#871).
+    try:
+        missing_options = [
+            option
+            for option in ("email", "key", "site")
+            if not parser.get(_ZULIPRC_API_SECTION, option, fallback="").strip()
+        ]
+    except configparser.Error as exc:
+        raise ZulipConfigError(
+            f"Malformed Zulip config file {path}: error parsing options in [{_ZULIPRC_API_SECTION}] section"
+        ) from exc
+    if missing_options:
+        raise ZulipConfigError(
+            f"Zulip config file {path} is missing required {', '.join(missing_options)} option(s) in [api] section"
+        )
     return ZulipConfig(config_path=path, source=str(path))
 
 
@@ -138,6 +158,27 @@ def resolve_config(
     )
 
 
+def _build_client(zulip_module: Any, source: str, **client_kwargs: Any) -> Any:
+    """Build a ``zulip.Client``, turning its configuration faults into
+    :class:`ZulipConfigError`.
+
+    ``zulip.Client`` reads and validates the credentials itself, and its
+    failures (``configparser.NoOptionError`` for a missing option,
+    ``zulip.MissingURLError`` for a missing server URL) are not
+    :class:`ZulipError` subclasses, so no command handler catches them and
+    the user gets a full traceback (#871). Wrap the call so the fault is
+    reported with the configuration source it came from.
+    """
+    caught: tuple[type[BaseException], ...] = (configparser.Error, KeyError)
+    zulip_error = getattr(zulip_module, "ZulipError", None)
+    if isinstance(zulip_error, type) and issubclass(zulip_error, BaseException):
+        caught = caught + (zulip_error,)
+    try:
+        return zulip_module.Client(**client_kwargs)
+    except caught as exc:
+        raise ZulipConfigError(f"Cannot construct Zulip client from {source}: {exc}") from exc
+
+
 def get_client(zuliprc: Path | None = None, *, config: ZulipConfig | None = None) -> Any:
     """Instantiate a ``zulip.Client`` from the resolved configuration.
 
@@ -154,7 +195,11 @@ def get_client(zuliprc: Path | None = None, *, config: ZulipConfig | None = None
     resolved = config or resolve_config(zuliprc)
     if resolved.config_path is not None:
         zulip_module = _require_zulip()
-        return zulip_module.Client(config_file=str(resolved.config_path))
+        return _build_client(
+            zulip_module,
+            str(resolved.config_path),
+            config_file=str(resolved.config_path),
+        )
     # No zuliprc file — all three credential fields must be populated.
     missing: list[str] = []
     if not (isinstance(resolved.email, str) and resolved.email.strip()):
@@ -166,7 +211,9 @@ def get_client(zuliprc: Path | None = None, *, config: ZulipConfig | None = None
     if missing:
         raise ZulipConfigError(f"Incomplete Zulip credentials from {resolved.source}: missing {', '.join(missing)}")
     zulip_module = _require_zulip()
-    return zulip_module.Client(
+    return _build_client(
+        zulip_module,
+        resolved.source,
         email=resolved.email,
         api_key=resolved.api_key,
         site=resolved.site,
