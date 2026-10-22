@@ -125,6 +125,9 @@ This translation is transparent to the user.
 
 **Constraints**:
 
+- The name MUST NOT match an existing channel, active or archived
+  (names compare case-insensitively). A conflict is an error: nothing
+  is created or changed, and the command exits 1.
 - Private channels MUST specify `--subscribe` or `--allow-group`.
   Note: `--allow-group 'Nobody'` does NOT satisfy lockout prevention
   for private channels — it disables the permission entirely, leaving

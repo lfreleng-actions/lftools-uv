@@ -1111,7 +1111,6 @@ def test_channel_create_not_found_after_create_warns_and_exits_one() -> None:
     assert "could not locate" in result.stderr
 
 
-@pytest.mark.xfail(strict=True, reason="#867: create does not check for an existing channel")
 @pytest.mark.parametrize(
     ("existing", "expected"),
     [

@@ -1790,7 +1790,6 @@ def test_create_channel_stream_not_found_without_topic_policy_partial() -> None:
     assert "topic_policy_applied" not in result
 
 
-@pytest.mark.xfail(strict=True, reason="#867: create does not check for an existing channel")
 @pytest.mark.parametrize(
     ("existing", "requested", "expected"),
     [
