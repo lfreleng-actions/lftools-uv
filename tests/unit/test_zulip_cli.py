@@ -1077,6 +1077,26 @@ def test_channel_create_public_json_output() -> None:
     assert "channel_id" in payload
 
 
+@pytest.mark.xfail(strict=True, reason="#870: a missing channel ID exits 0")
+def test_channel_create_not_found_after_create_json_exits_one() -> None:
+    """A channel missing after create is partial and exits 1 (#870)."""
+    # The mocked listing holds only "new-project", so "fresh" is never found.
+    result = _invoke_create(["fresh"], json_output=True)
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "partial"
+    assert payload["channel_id"] is None
+    assert any("could not locate" in w for w in payload["warnings"])
+
+
+@pytest.mark.xfail(strict=True, reason="#870: a missing channel ID exits 0")
+def test_channel_create_not_found_after_create_warns_and_exits_one() -> None:
+    """Without --json, the missing channel is a warning and exit 1 (#870)."""
+    result = _invoke_create(["fresh"])
+    assert result.exit_code == 1, result.output
+    assert "could not locate" in result.stderr
+
+
 def test_channel_create_private_with_subscribe() -> None:
     """Private channel with --subscribe succeeds (lockout prevention met)."""
     result = _invoke_create(

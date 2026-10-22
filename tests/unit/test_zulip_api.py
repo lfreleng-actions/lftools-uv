@@ -1715,6 +1715,19 @@ def test_create_channel_stream_not_found_with_topic_policy_partial() -> None:
     assert any("could not locate" in w for w in result["warnings"])
 
 
+@pytest.mark.xfail(strict=True, reason="#870: a missing channel ID is reported as success")
+def test_create_channel_stream_not_found_without_topic_policy_partial() -> None:
+    """A channel missing after create is partial even without topic_policy (#870)."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client(streams_response=[])
+    result = create_channel(client, name="new-channel")
+    assert result["status"] == "partial"
+    assert result["channel_id"] is None
+    assert any("could not locate" in w for w in result["warnings"])
+    assert "topic_policy_applied" not in result
+
+
 # ---------------------------------------------------------------------------
 # T037 — Subscribe users (US5)
 # ---------------------------------------------------------------------------
