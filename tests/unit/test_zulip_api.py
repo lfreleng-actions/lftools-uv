@@ -294,6 +294,56 @@ def test_resolve_channel_rejects_missing_target() -> None:
         _ = resolve_channel(client, name="x", channel_id=1)
 
 
+def _documented_streams_client(streams: list[dict[str, Any]]) -> Any:
+    """Return a client whose ``GET streams`` follows the documented API.
+
+    Archived channels are returned only when ``exclude_archived`` is
+    explicitly false; it defaults to true, and unknown parameters are
+    ignored (https://zulip.com/api/get-streams).
+    """
+    client = mock.MagicMock()
+
+    def side_effect(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
+        assert (url, method) == ("streams", "GET")
+        exclude_archived = (request or {}).get("exclude_archived", True)
+        visible = [s for s in streams if not (exclude_archived and s.get("is_archived"))]
+        return {"result": "success", "streams": visible}
+
+    client.call_endpoint.side_effect = side_effect
+    return client
+
+
+@pytest.mark.xfail(strict=True, reason="GET /streams takes exclude_archived, not include_archived")
+def test_fetch_streams_requests_archived_with_documented_parameter() -> None:
+    """``include_archived`` maps to ``exclude_archived=False`` on the wire."""
+    from lftools_uv.api.endpoints.zulip.channels import _fetch_streams
+
+    client = _documented_streams_client(ARCHIVED_STREAMS)
+    _ = _fetch_streams(client, include_archived=True)
+    request = client.call_endpoint.call_args.kwargs["request"]
+    assert request["exclude_archived"] is False
+    assert "include_archived" not in request
+
+
+def test_fetch_streams_active_only_keeps_server_default() -> None:
+    """An active-only listing leaves the server's default exclusion in place."""
+    from lftools_uv.api.endpoints.zulip.channels import _fetch_streams
+
+    client = _documented_streams_client(ARCHIVED_STREAMS)
+    streams = _fetch_streams(client, include_archived=False)
+    assert [s["stream_id"] for s in streams] == [1, 2]
+
+
+@pytest.mark.xfail(strict=True, reason="GET /streams takes exclude_archived, not include_archived")
+def test_archived_channels_reachable_from_documented_server() -> None:
+    """Archived lookups work against a server that follows the documented API."""
+    client = _documented_streams_client(ARCHIVED_STREAMS)
+    assert resolve_channel(client, name="old-channel", include_archived=True)["stream_id"] == 99
+    assert 99 in {c["stream_id"] for c in list_channels(client, include_archived=True)}
+    with pytest.raises(ZulipNotFoundError, match="--include-archived"):
+        _ = resolve_channel(client, name="old-channel")
+
+
 # ---------------------------------------------------------------------------
 # T018 — Group resolution
 # ---------------------------------------------------------------------------
