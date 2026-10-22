@@ -373,7 +373,10 @@ archived channels.").
 **Description**: Unsubscribe users from a channel.
 
 Same interface as `subscribe` but with `"operation": "unsubscribe"`.
-Same `[channel]`/`--channel-id` constraint applies.
+Same `[channel]`/`--channel-id` constraint applies. Users are removed
+one at a time; a failure for one user is reported in `errors` and the
+remaining users are still processed, so the result lists every
+requested user.
 
 **Exit Codes**: 0 = all succeeded (including no-ops), 1 = any error
 

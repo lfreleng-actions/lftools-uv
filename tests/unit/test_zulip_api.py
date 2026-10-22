@@ -2499,7 +2499,6 @@ def test_unsubscribe_users_rejects_more_than_fifty_users() -> None:
         )
 
 
-@pytest.mark.xfail(strict=True, reason="#869: a failed DELETE aborts the batch")
 def test_unsubscribe_users_single_failure_is_error() -> None:
     """A non-success response is a per-user error, not an exception (#869)."""
     client = _unsubscribe_client(
@@ -2520,7 +2519,6 @@ def test_unsubscribe_users_single_failure_is_error() -> None:
     assert "Boom" in payload["errors"][0]["error"]
 
 
-@pytest.mark.xfail(strict=True, reason="#869: a failed DELETE aborts the batch")
 def test_unsubscribe_users_mid_batch_failure_keeps_other_results() -> None:
     """A failure mid-batch keeps earlier results and still tries later users (#869)."""
     client = _unsubscribe_client(
@@ -2547,7 +2545,6 @@ def test_unsubscribe_users_mid_batch_failure_keeps_other_results() -> None:
     assert len(deletes) == 3
 
 
-@pytest.mark.xfail(strict=True, reason="#869: a failed DELETE aborts the batch")
 def test_unsubscribe_users_transport_error_keeps_other_results() -> None:
     """A transport error for one user is recorded and the batch continues (#869)."""
     client = _unsubscribe_client(

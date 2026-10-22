@@ -2324,7 +2324,6 @@ def test_channel_unsubscribe_json_error_after_channel_resolved(
     assert payload["errors"] and "Boom" in payload["errors"][0]["error"]
 
 
-@pytest.mark.xfail(strict=True, reason="#869: a failed DELETE aborts the batch")
 def test_channel_unsubscribe_mid_batch_failure_reports_all_users(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

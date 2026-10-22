@@ -339,7 +339,9 @@ def unsubscribe_users(
     and ``not_removed`` for users who were not subscribed in the first
     place — the latter is reported as a ``not_subscribed`` no-op,
     consistent with the CLI contract "exit 0 = all succeeded (including
-    no-ops)".
+    no-ops)". A request that fails for one user (an error response or a
+    transport error) is reported in ``errors`` for that user, and the
+    remaining users are still processed.
 
     Pass ``resolved_channel`` (a stream dict as returned by
     :func:`resolve_channel`) to skip the internal channel resolution
@@ -425,7 +427,9 @@ def unsubscribe_users(
 
     # The DELETE response reports removed/not_removed by stream, not by
     # principal, so request one principal at a time to preserve per-user
-    # results and partial-failure reporting.
+    # results and partial-failure reporting. A failed request is recorded
+    # against its user and the batch continues, so the report still shows
+    # who was already removed and who was never attempted (#869).
     for original, principal in resolved_pairs:
         try:
             response = client.call_endpoint(
@@ -436,12 +440,14 @@ def unsubscribe_users(
                     "principals": json.dumps([principal]),
                 },
             )
-        except Exception as exc:  # pragma: no cover - network errors
-            raise ZulipAPIError(f"Failed to unsubscribe users: {exc}") from exc
+        except Exception as exc:
+            errors.append({"user": original, "error": f"Failed to unsubscribe: {exc}"})
+            continue
 
         if not isinstance(response, dict) or response.get("result") != "success":
-            msg = (response or {}).get("msg") if isinstance(response, dict) else None
-            raise ZulipAPIError(f"Unexpected unsubscribe response: {msg or response!r}")
+            msg = response.get("msg") if isinstance(response, dict) else None
+            errors.append({"user": original, "error": msg or f"Unexpected unsubscribe response: {response!r}"})
+            continue
 
         removed_set = {str(item) for item in response.get("removed", []) or []}
         not_removed_set = {str(item) for item in response.get("not_removed", []) or []}
