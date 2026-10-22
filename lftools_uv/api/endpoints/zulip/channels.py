@@ -24,7 +24,9 @@ from .errors import ZulipAPIError, ZulipNotFoundError, ZulipValidationError
 def _fetch_streams(client: Any, include_archived: bool) -> list[dict[str, Any]]:
     """Return the raw stream listing from the Zulip server.
 
-    Includes archived streams when ``include_archived`` is ``True``.
+    Includes archived streams when ``include_archived`` is ``True``. The
+    endpoint excludes them by default and takes ``exclude_archived``;
+    it ignores an unknown ``include_archived`` parameter.
     """
     request: dict[str, Any] = {
         "include_public": True,
@@ -32,7 +34,7 @@ def _fetch_streams(client: Any, include_archived: bool) -> list[dict[str, Any]]:
         "include_all_active": True,
     }
     if include_archived:
-        request["include_archived"] = True
+        request["exclude_archived"] = False
     try:
         response = client.call_endpoint(url="streams", method="GET", request=request)
     except Exception as exc:  # pragma: no cover - network errors

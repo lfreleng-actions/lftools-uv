@@ -428,7 +428,7 @@ def test_channel_list_include_archived_adds_status_column(
     def _side_effect(*, url: str, method: str, request: dict[str, Any] | None = None) -> dict[str, Any]:
         assert url == "streams"
         assert method == "GET"
-        if request and request.get("include_archived"):
+        if request and request.get("exclude_archived") is False:
             return {"result": "success", "streams": active + [archived_extra]}
         return {"result": "success", "streams": active}
 
@@ -444,9 +444,10 @@ def test_channel_list_include_archived_adds_status_column(
     assert "archived" in result.stdout
     # The CLI must have propagated the flag to the API request.
     seen_archived = any(
-        (call.kwargs.get("request") or {}).get("include_archived") is True for call in fake.call_endpoint.call_args_list
+        (call.kwargs.get("request") or {}).get("exclude_archived") is False
+        for call in fake.call_endpoint.call_args_list
     )
-    assert seen_archived, "expected --include-archived to set include_archived=True on the API request"
+    assert seen_archived, "expected --include-archived to set exclude_archived=False on the API request"
 
 
 @pytest.mark.parametrize(

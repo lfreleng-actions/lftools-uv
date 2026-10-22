@@ -234,15 +234,15 @@ ARCHIVED_STREAMS = ACTIVE_STREAMS + [
 def _streams_client(active: list[dict[str, Any]], archived: list[dict[str, Any]]) -> Any:
     """Return a client whose ``streams`` endpoint returns the given lists.
 
-    The first call (without ``include_archived``) returns ``active``;
-    subsequent calls (with ``include_archived`` true) return ``archived``.
+    Requests without ``exclude_archived=False`` return ``active``;
+    requests with it return ``archived``.
     """
     client = mock.MagicMock()
 
     def side_effect(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
         assert url == "streams"
         assert method == "GET"
-        if request and request.get("include_archived"):
+        if request and request.get("exclude_archived") is False:
             return {"result": "success", "streams": archived}
         return {"result": "success", "streams": active}
 
@@ -313,7 +313,6 @@ def _documented_streams_client(streams: list[dict[str, Any]]) -> Any:
     return client
 
 
-@pytest.mark.xfail(strict=True, reason="GET /streams takes exclude_archived, not include_archived")
 def test_fetch_streams_requests_archived_with_documented_parameter() -> None:
     """``include_archived`` maps to ``exclude_archived=False`` on the wire."""
     from lftools_uv.api.endpoints.zulip.channels import _fetch_streams
@@ -334,7 +333,6 @@ def test_fetch_streams_active_only_keeps_server_default() -> None:
     assert [s["stream_id"] for s in streams] == [1, 2]
 
 
-@pytest.mark.xfail(strict=True, reason="GET /streams takes exclude_archived, not include_archived")
 def test_archived_channels_reachable_from_documented_server() -> None:
     """Archived lookups work against a server that follows the documented API."""
     client = _documented_streams_client(ARCHIVED_STREAMS)
@@ -728,14 +726,14 @@ def _subscribers_client(
     """Return a mock client that serves streams, subscribers, and members.
 
     ``streams_active`` is returned for unfiltered streams requests, and
-    ``streams_archived`` for ``include_archived=True``. The
+    ``streams_archived`` for ``exclude_archived=False``. The
     ``streams/{id}/members`` endpoint returns ``subscribers_by_stream``.
     """
     client = mock.MagicMock()
 
     def side_effect(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
         if url == "streams" and method == "GET":
-            if request and request.get("include_archived"):
+            if request and request.get("exclude_archived") is False:
                 return {"result": "success", "streams": streams_archived}
             return {"result": "success", "streams": streams_active}
         if url.startswith("streams/") and url.endswith("/members") and method == "GET":
@@ -2698,7 +2696,7 @@ def _update_client(
 
     def call_endpoint(*, url: str, method: str = "GET", request: dict[str, Any] | None = None) -> Any:
         if url == "streams" and method == "GET":
-            if request and request.get("include_archived"):
+            if request and request.get("exclude_archived") is False:
                 return {"result": "success", "streams": archived_streams}
             return {"result": "success", "streams": streams}
         if url == "user_groups" and method == "GET":
@@ -3136,8 +3134,8 @@ def _archive_client(
 ) -> Any:
     """Return a client whose stream listings and DELETE responses are mocked.
 
-    GET /streams returns ``active`` or ``archived`` per the
-    ``include_archived`` request flag. DELETE /streams/{id} returns the
+    GET /streams returns ``active``, or ``archived`` when the request
+    sets ``exclude_archived=False``. DELETE /streams/{id} returns the
     configured ``delete_response`` (or raises ``delete_error``).
     """
     client = mock.MagicMock()
@@ -3146,7 +3144,7 @@ def _archive_client(
 
     def side_effect(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
         if method == "GET" and url == "streams":
-            if request and request.get("include_archived"):
+            if request and request.get("exclude_archived") is False:
                 return {"result": "success", "streams": archived}
             return {"result": "success", "streams": active}
         if method == "DELETE" and url.startswith("streams/"):
@@ -3323,7 +3321,7 @@ def _unarchive_client(
 
     * ``server_settings`` returns the chosen ``feature_level``.
     * ``streams`` GETs return ``active`` by default, or the combined
-      active + archived listing when ``include_archived`` is requested
+      active + archived listing when ``exclude_archived=False`` is sent
       (matching the foundation ``_fetch_streams`` contract).
     * ``streams/<id>`` PATCHes with ``is_archived=False`` return
       ``reactivate_response`` when provided, else a success stub.
@@ -3340,7 +3338,7 @@ def _unarchive_client(
 
     def side_effect(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
         if url == "streams" and method == "GET":
-            if request and request.get("include_archived"):
+            if request and request.get("exclude_archived") is False:
                 return {"result": "success", "streams": active_list + archived_list}
             return {"result": "success", "streams": active_list}
         if url.startswith("streams/") and method == "PATCH" and request == {"is_archived": False}:
