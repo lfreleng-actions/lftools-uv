@@ -2196,14 +2196,15 @@ def _unsubscribe_client(
     *,
     removed: list[Any] | None = None,
     not_removed: list[Any] | None = None,
-    result: str = "success",
-    msg: str = "",
+    failures: dict[Any, str | Exception] | None = None,
 ) -> Any:
     """Build a mock client supporting streams + members + unsubscribe.
 
     The first ``streams`` call returns the active streams. The
     ``DELETE users/me/subscriptions`` call returns the configured
-    ``removed`` / ``not_removed`` payload.
+    ``removed`` / ``not_removed`` payload. ``failures`` maps a principal
+    to an error message (an error response for that principal) or an
+    exception (raised by the transport for that principal).
     """
     client = mock.MagicMock()
 
@@ -2216,11 +2217,16 @@ def _unsubscribe_client(
             principals = _json.loads(request.get("principals", "[]"))
             subscription = (subscriptions or [""])[0]
             principal = (principals or [None])[0]
+            failure = (failures or {}).get(principal)
+            if isinstance(failure, Exception):
+                raise failure
+            if failure is not None:
+                return {"result": "error", "msg": failure}
             removed_streams = [subscription] if principal in (removed or []) else []
             not_removed_streams = [subscription] if principal in (not_removed or []) else []
             return {
-                "result": result,
-                "msg": msg,
+                "result": "success",
+                "msg": "",
                 "removed": removed_streams,
                 "not_removed": not_removed_streams,
             }
@@ -2493,23 +2499,73 @@ def test_unsubscribe_users_rejects_more_than_fifty_users() -> None:
         )
 
 
-def test_unsubscribe_users_api_error_raises() -> None:
-    """A non-success Zulip response surfaces as :class:`ZulipAPIError`."""
+@pytest.mark.xfail(strict=True, reason="#869: a failed DELETE aborts the batch")
+def test_unsubscribe_users_single_failure_is_error() -> None:
+    """A non-success response is a per-user error, not an exception (#869)."""
     client = _unsubscribe_client(
         ACTIVE_STREAMS,
         MEMBERS,
-        removed=[],
-        not_removed=[],
-        result="error",
-        msg="Boom",
+        failures={"bob@example.com": "Boom"},
     )
-    with pytest.raises(ZulipAPIError, match="Boom"):
-        _ = unsubscribe_users(
-            client,
-            channel="general",
-            users=["bob@example.com"],
-            id_mode="email",
-        )
+    payload = unsubscribe_users(
+        client,
+        channel="general",
+        users=["bob@example.com"],
+        id_mode="email",
+    )
+    assert payload["status"] == "error"
+    assert payload["results"] == []
+    assert len(payload["errors"]) == 1
+    assert payload["errors"][0]["user"] == "bob@example.com"
+    assert "Boom" in payload["errors"][0]["error"]
+
+
+@pytest.mark.xfail(strict=True, reason="#869: a failed DELETE aborts the batch")
+def test_unsubscribe_users_mid_batch_failure_keeps_other_results() -> None:
+    """A failure mid-batch keeps earlier results and still tries later users (#869)."""
+    client = _unsubscribe_client(
+        ACTIVE_STREAMS,
+        MEMBERS,
+        removed=["alice@example.com", "bob@example.com"],
+        failures={"alice2@example.com": "Insufficient permission"},
+    )
+    payload = unsubscribe_users(
+        client,
+        channel="general",
+        users=["alice@example.com", "alice2@example.com", "bob@example.com"],
+        id_mode="email",
+    )
+    assert payload["status"] == "partial"
+    assert payload["results"] == [
+        {"user": "alice@example.com", "status": "unsubscribed"},
+        {"user": "bob@example.com", "status": "unsubscribed"},
+    ]
+    assert len(payload["errors"]) == 1
+    assert payload["errors"][0]["user"] == "alice2@example.com"
+    assert "Insufficient permission" in payload["errors"][0]["error"]
+    deletes = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("method") == "DELETE"]
+    assert len(deletes) == 3
+
+
+@pytest.mark.xfail(strict=True, reason="#869: a failed DELETE aborts the batch")
+def test_unsubscribe_users_transport_error_keeps_other_results() -> None:
+    """A transport error for one user is recorded and the batch continues (#869)."""
+    client = _unsubscribe_client(
+        ACTIVE_STREAMS,
+        MEMBERS,
+        removed=["bob@example.com"],
+        failures={"alice@example.com": ConnectionError("connection reset")},
+    )
+    payload = unsubscribe_users(
+        client,
+        channel="general",
+        users=["alice@example.com", "bob@example.com"],
+        id_mode="email",
+    )
+    assert payload["status"] == "partial"
+    assert payload["results"] == [{"user": "bob@example.com", "status": "unsubscribed"}]
+    assert payload["errors"][0]["user"] == "alice@example.com"
+    assert "connection reset" in payload["errors"][0]["error"]
 
 
 def test_unsubscribe_users_resolved_channel_skips_resolution() -> None:

@@ -2294,8 +2294,8 @@ def test_channel_unsubscribe_json_error_after_channel_resolved(
     with the resolved channel_id and channel_name.
 
     Exercises the ``except ZulipError`` branch of the CLI's mutation
-    call: the Zulip DELETE endpoint returns a non-success response,
-    which surfaces as ZulipAPIError. The contract requires the JSON
+    call: the member listing fails after the channel resolves, which
+    surfaces as ZulipAPIError. The contract requires the JSON
     payload to report the resolved channel info (because the channel
     *was* resolved) — ``channel_id: null`` is reserved for the case
     where the channel itself could not be resolved.
@@ -2305,14 +2305,10 @@ def test_channel_unsubscribe_json_error_after_channel_resolved(
     def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
         if url == "streams" and method == "GET":
             return {"result": "success", "streams": _STREAMS}
-        if url == "users/me/subscriptions" and method == "DELETE":
-            # The Zulip server rejected the call; this surfaces as
-            # ZulipAPIError from unsubscribe_users().
-            return {"result": "error", "msg": "Boom", "removed": [], "not_removed": []}
         raise AssertionError(f"Unexpected endpoint: {method} {url}")
 
     client.call_endpoint.side_effect = call_endpoint
-    client.get_members.return_value = {"result": "success", "members": _MEMBERS}
+    client.get_members.return_value = {"result": "error", "msg": "Boom"}
 
     result = _invoke_unsubscribe(
         monkeypatch,
@@ -2326,6 +2322,43 @@ def test_channel_unsubscribe_json_error_after_channel_resolved(
     assert payload["channel_id"] == 1
     assert payload["channel_name"] == "general"
     assert payload["errors"] and "Boom" in payload["errors"][0]["error"]
+
+
+@pytest.mark.xfail(strict=True, reason="#869: a failed DELETE aborts the batch")
+def test_channel_unsubscribe_mid_batch_failure_reports_all_users(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A DELETE failure mid-batch still reports every user and exits 1 (#869)."""
+    client = _build_client(removed=["alice@example.com", "bob@example.com"], not_removed=[])
+    delete_ok = client.call_endpoint.side_effect
+
+    def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
+        if method == "DELETE" and json.loads((request or {}).get("principals", "[]")) == ["alice2@example.com"]:
+            return {"result": "error", "msg": "Insufficient permission"}
+        return delete_ok(url=url, method=method, request=request)
+
+    client.call_endpoint.side_effect = call_endpoint
+    result = _invoke_unsubscribe(
+        monkeypatch,
+        client,
+        [
+            "general",
+            "alice@example.com",
+            "alice2@example.com",
+            "bob@example.com",
+            "--by-email",
+            "--json",
+        ],
+    )
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "partial"
+    assert payload["channel_id"] == 1
+    assert payload["results"] == [
+        {"user": "alice@example.com", "status": "unsubscribed"},
+        {"user": "bob@example.com", "status": "unsubscribed"},
+    ]
+    assert payload["errors"] == [{"user": "alice2@example.com", "error": "Insufficient permission"}]
 
 
 def test_channel_unsubscribe_json_error_client_init_failure(
