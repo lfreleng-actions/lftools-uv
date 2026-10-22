@@ -167,7 +167,12 @@ This translation is transparent to the user.
 }
 ```
 
-**Exit Codes**: 0 = success, 1 = error
+When the channel is created but a follow-up step fails (the channel
+cannot be located afterwards to read its ID, or the requested topic
+policy cannot be applied), `status` is `"partial"`, a `warnings` list
+explains what failed, and the command exits 1.
+
+**Exit Codes**: 0 = success, 1 = error or partial
 
 ---
 

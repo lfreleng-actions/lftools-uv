@@ -271,10 +271,13 @@ def create_channel(
         stream = resolve_channel(client, name=name)
         stream_id = stream["stream_id"]
     except ZulipNotFoundError:
-        # Channel was created but we can't find it - unusual edge case
+        # Channel was created but we can't find it - unusual edge case. A
+        # null channel ID is not a success: callers act on the ID (#870).
         stream_id = None
         if topic_policy is not None:
             warnings.append(f"Channel created but could not locate to apply topic-policy '{topic_policy}'")
+        else:
+            warnings.append("Channel created but could not locate it to report its ID")
 
     # If topic_policy was requested, apply it via PATCH using the topics_policy field
     # (introduced in Zulip feature level 334)
