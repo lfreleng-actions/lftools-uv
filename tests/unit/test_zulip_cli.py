@@ -1009,11 +1009,18 @@ def _create_cli_client(
     *,
     feature_level: int = 400,
     streams: list[dict[str, Any]] | None = None,
+    existing_streams: list[dict[str, Any]] | None = None,
     members: list[dict[str, Any]] | None = None,
     groups: list[dict[str, Any]] | None = None,
     subscribe_response: dict[str, Any] | None = None,
 ) -> Any:
-    """Return a mock client for channel create CLI tests."""
+    """Return a mock client for channel create CLI tests.
+
+    Like the server, the stream listing changes when the create call
+    succeeds: before it, ``GET streams`` returns ``existing_streams``
+    (archived entries only when the request sends ``exclude_archived=False``,
+    as on the server); after it, ``streams`` (default :data:`CREATE_STREAMS`).
+    """
     client = mock.MagicMock()
     client.get_server_settings.return_value = {
         "result": "success",
@@ -1023,12 +1030,20 @@ def _create_cli_client(
         "result": "success",
         "members": members or CREATE_MEMBERS,
     }
+    created = False
 
     def call_endpoint_side_effect(*, url: str, method: str, request: Any = None) -> Any:
+        nonlocal created
         if url == "users/me/subscriptions" and method == "POST":
-            return subscribe_response or {"result": "success", "subscribed": {}}
+            response = subscribe_response or {"result": "success", "subscribed": {}}
+            created = created or response.get("result") == "success"
+            return response
         if url == "streams" and method == "GET":
-            return {"result": "success", "streams": streams or CREATE_STREAMS}
+            if created:
+                return {"result": "success", "streams": streams or CREATE_STREAMS}
+            include_archived = (request or {}).get("exclude_archived") is False
+            visible = [s for s in existing_streams or [] if include_archived or not s.get("is_archived")]
+            return {"result": "success", "streams": visible}
         if url == "user_groups" and method == "GET":
             return {"result": "success", "user_groups": groups or CREATE_CLI_GROUPS}
         if url.startswith("streams/") and method == "PATCH":
@@ -1094,6 +1109,30 @@ def test_channel_create_not_found_after_create_warns_and_exits_one() -> None:
     result = _invoke_create(["fresh"])
     assert result.exit_code == 1, result.output
     assert "could not locate" in result.stderr
+
+
+@pytest.mark.xfail(strict=True, reason="#867: create does not check for an existing channel")
+@pytest.mark.parametrize(
+    ("existing", "expected"),
+    [
+        ({"stream_id": 7, "name": "general", "is_archived": False}, "already exists"),
+        ({"stream_id": 7, "name": "general", "is_archived": True}, "archived channel"),
+    ],
+)
+@pytest.mark.parametrize("json_output", [False, True])
+def test_channel_create_existing_name_exits_one(existing: dict[str, Any], expected: str, json_output: bool) -> None:
+    """An existing channel name is a conflict: exit 1, nothing changed (#867)."""
+    client = _create_cli_client(existing_streams=[existing])
+    result = _invoke_create(
+        ["general", "--type", "private", "--subscribe", "alice@example.com", "--by-email", "--topic-policy", "deny"],
+        client=client,
+        json_output=json_output,
+    )
+    assert result.exit_code == 1, result.output
+    assert expected in result.stderr
+    assert "Created" not in result.stdout
+    mutations = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("method") in ("POST", "PATCH")]
+    assert mutations == []
 
 
 def test_channel_create_private_with_subscribe() -> None:

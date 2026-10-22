@@ -1328,21 +1328,36 @@ def _create_channel_client(
     feature_level: int = 400,
     subscribe_response: dict[str, Any] | None = None,
     streams_response: list[dict[str, Any]] | None = None,
+    existing_streams: list[dict[str, Any]] | None = None,
     groups: list[dict[str, Any]] | None = None,
     patch_response: dict[str, Any] | None = None,
 ) -> Any:
-    """Return a mock client for create_channel tests."""
+    """Return a mock client for create_channel tests.
+
+    Like the server, the stream listing changes when the create call
+    succeeds: before it, ``GET streams`` returns ``existing_streams``
+    (archived entries only when the request sends ``exclude_archived=False``,
+    as on the server); after it, ``streams_response`` (default :data:`CREATE_ACTIVE_STREAMS`).
+    """
     client = mock.MagicMock()
     client.get_server_settings.return_value = {
         "result": "success",
         "zulip_feature_level": feature_level,
     }
+    created = False
 
     def call_endpoint_side_effect(*, url: str, method: str, request: Any = None) -> Any:
+        nonlocal created
         if url == "users/me/subscriptions" and method == "POST":
-            return subscribe_response or {"result": "success", "subscribed": {}}
+            response = subscribe_response or {"result": "success", "subscribed": {}}
+            created = created or response.get("result") == "success"
+            return response
         if url == "streams" and method == "GET":
-            streams = CREATE_ACTIVE_STREAMS if streams_response is None else streams_response
+            if created:
+                streams = CREATE_ACTIVE_STREAMS if streams_response is None else streams_response
+            else:
+                include_archived = (request or {}).get("exclude_archived") is False
+                streams = [s for s in existing_streams or [] if include_archived or not s.get("is_archived")]
             return {"result": "success", "streams": streams}
         if url == "user_groups" and method == "GET":
             return {"result": "success", "user_groups": groups or CREATE_GROUPS}
@@ -1773,6 +1788,38 @@ def test_create_channel_stream_not_found_without_topic_policy_partial() -> None:
     assert result["channel_id"] is None
     assert any("could not locate" in w for w in result["warnings"])
     assert "topic_policy_applied" not in result
+
+
+@pytest.mark.xfail(strict=True, reason="#867: create does not check for an existing channel")
+@pytest.mark.parametrize(
+    ("existing", "requested", "expected"),
+    [
+        ({"stream_id": 7, "name": "general", "is_archived": False}, "general", "already exists"),
+        ({"stream_id": 7, "name": "general", "is_archived": False}, "General", "already exists"),
+        # The server strips surrounding whitespace from channel names.
+        ({"stream_id": 7, "name": "general", "is_archived": False}, " general ", "already exists"),
+        ({"stream_id": 8, "name": "old-team", "is_archived": True}, "old-team", "archived channel"),
+    ],
+)
+def test_create_channel_existing_name_rejected(existing: dict[str, Any], requested: str, expected: str) -> None:
+    """A name taken by an active or archived channel is a conflict (#867)."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client(existing_streams=[existing])
+    with pytest.raises(ZulipValidationError, match=expected):
+        _ = create_channel(client, name=requested, topic_policy="deny")
+    mutations = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("method") in ("POST", "PATCH")]
+    assert mutations == []
+
+
+def test_create_channel_checks_names_before_creating() -> None:
+    """A free name still creates the channel and reads back its ID."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client(existing_streams=[{"stream_id": 7, "name": "general", "is_archived": False}])
+    result = create_channel(client, name="new-channel")
+    assert result["status"] == "success"
+    assert result["channel_id"] == 100
 
 
 # ---------------------------------------------------------------------------
