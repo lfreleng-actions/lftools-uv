@@ -235,36 +235,56 @@ def subscribe_users(
             f"Malformed subscribe response: 'unauthorized' must be a list, got {type(unauthorized_raw).__name__}"
         )
 
-    def _channel_users(field_name: str, mapping: dict[str, Any]) -> set[str]:
-        users = mapping.get(channel_name, [])
-        if not isinstance(users, list):
-            raise ZulipAPIError(
-                f"Malformed subscribe response: '{field_name}[{channel_name}]' must be a list, "
-                f"got {type(users).__name__}"
-            )
-        return {str(user) for user in users}
+    # The subscribe response maps each *user* to the channels that user was
+    # subscribed to: keys are user IDs, and before feature level 289 they
+    # were the users' API email addresses -- never the channel names the
+    # older channel-keyed lookup assumed (#868). `unauthorized` lists
+    # channel names the sender could not subscribe anyone to.
+    def _user_keys() -> dict[str, str]:
+        keys: dict[str, str] = {}
+        for user, email in zip(resolved_users, user_emails, strict=True):
+            user_id = user.get("user_id")
+            if user_id is not None:
+                keys[str(user_id)] = email
+            keys.setdefault(email, email)
+            # Before feature level 289 the keys were the *API* email, which
+            # differs from delivery_email when email visibility is restricted.
+            api_email = user.get("email")
+            if isinstance(api_email, str) and api_email:
+                keys.setdefault(api_email, email)
+        return keys
 
-    subscribed = _channel_users("subscribed", subscribed_raw)
-    already = _channel_users("already_subscribed", already_raw)
-    unauthorized: list[Any] = unauthorized_raw
+    user_keys = _user_keys()
+
+    def _users_on_channel(field_name: str, mapping: dict[str, Any]) -> set[str]:
+        users: set[str] = set()
+        for key, channels in mapping.items():
+            if not isinstance(channels, list):
+                raise ZulipAPIError(
+                    f"Malformed subscribe response: '{field_name}[{key!r}]' must be a list, "
+                    f"got {type(channels).__name__}"
+                )
+            email = user_keys.get(str(key))
+            if email is not None and channel_name in {str(c) for c in channels}:
+                users.add(email)
+        return users
+
+    subscribed = _users_on_channel("subscribed", subscribed_raw)
+    already = _users_on_channel("already_subscribed", already_raw)
+    channel_unauthorized = any(str(name) == channel_name for name in unauthorized_raw)
 
     results: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
-    accounted: set[str] = set()
     for email in user_emails:
         if email in subscribed:
             results.append({"user": email, "status": "subscribed"})
-            accounted.add(email)
         elif email in already:
             results.append({"user": email, "status": "already_subscribed"})
-            accounted.add(email)
-        elif email in unauthorized:
+        elif channel_unauthorized:
             errors.append({"user": email, "error": "unauthorized"})
-            accounted.add(email)
-    # Any user not mentioned in either map is treated as an error so
-    # callers can detect silent partial failures.
-    for email in user_emails:
-        if email not in accounted:
+        else:
+            # A user the server never mentioned is an error so callers can
+            # detect silent partial failures.
             errors.append({"user": email, "error": "no response from server"})
 
     if errors and not results:
