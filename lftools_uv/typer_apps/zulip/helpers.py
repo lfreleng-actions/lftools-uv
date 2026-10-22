@@ -25,7 +25,7 @@ from typing import Any, Literal, cast
 import typer
 from tabulate import tabulate
 
-from lftools_uv.api.endpoints.zulip import ZulipError
+from lftools_uv.api.endpoints.zulip import ZulipError, ZulipValidationError
 
 #: Canonical error message displayed when the ``zulip`` extra is missing
 #: (FR-022). Matches the wording in ``contracts/cli-commands.md``.
@@ -167,15 +167,14 @@ def _validate_id_mode_flags(
     selected and there are users to process, or ``None`` when no users are
     supplied (flags are optional in that case).
 
-    Raises ``typer.Exit`` via ``emit_error`` when validation fails.
+    Raises :class:`ZulipValidationError` when validation fails, so the
+    caller reports it in the command's output format.
     """
     selected = sum([by_email, by_id, by_name])
     if subscribe_users and selected == 0:
-        emit_error("--subscribe requires exactly one of --by-email, --by-id, or --by-name")
-        raise typer.Exit(code=1)
+        raise ZulipValidationError("--subscribe requires exactly one of --by-email, --by-id, or --by-name")
     if selected > 1:
-        emit_error("--by-email, --by-id, and --by-name are mutually exclusive")
-        raise typer.Exit(code=1)
+        raise ZulipValidationError("--by-email, --by-id, and --by-name are mutually exclusive")
     if not subscribe_users:
         return None
     if by_email:

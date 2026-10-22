@@ -1128,10 +1128,44 @@ def test_channel_create_existing_name_exits_one(existing: dict[str, Any], expect
         json_output=json_output,
     )
     assert result.exit_code == 1, result.output
-    assert expected in result.stderr
-    assert "Created" not in result.stdout
+    if json_output:
+        payload = json.loads(result.stdout)
+        assert payload["status"] == "error"
+        assert payload["operation"] == "create"
+        assert payload["channel_id"] is None
+        assert payload["channel_name"] == "general"
+        assert payload["type"] == "private"
+        assert expected in payload["error"]
+        assert result.stderr == ""
+    else:
+        assert expected in result.stderr
+        assert "Created" not in result.stdout
     mutations = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("method") in ("POST", "PATCH")]
     assert mutations == []
+
+
+@pytest.mark.parametrize(
+    ("args", "feature_level", "expected"),
+    [
+        (["new-project", "--type", "secret"], 400, "Invalid channel type"),
+        (["new-project", "--announce", "--no-announce"], 400, "mutually exclusive"),
+        (["new-project", "--topic-policy", "maybe"], 400, "Invalid --topic-policy"),
+        (["new-project", "--subscribe", "alice@example.com"], 400, "--subscribe requires"),
+        (["new-project", "--type", "private"], 400, "lockout"),
+        (["new-project", "--type", "web-public"], 10, "feature level"),
+    ],
+)
+def test_channel_create_json_errors_emit_payload(args: list[str], feature_level: int, expected: str) -> None:
+    """Every create failure under --json is an FR-008 error payload on stdout."""
+    result = _invoke_create(args, feature_level=feature_level, json_output=True)
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["operation"] == "create"
+    assert payload["channel_id"] is None
+    assert payload["channel_name"] == "new-project"
+    assert expected.lower() in payload["error"].lower()
+    assert result.stderr == ""
 
 
 def test_channel_create_private_with_subscribe() -> None:
@@ -1588,6 +1622,18 @@ def test_channel_create_user_ambiguity_error() -> None:
     assert result.exit_code == 1
     combined = result.output + (getattr(result, "stderr", "") or "")
     assert "ambig" in combined.lower() or "alice" in combined.lower()
+
+    client = _create_cli_client(members=ambiguous_members)
+    result = _invoke_create(
+        ["new-project", "--type", "private", "--subscribe", "Alice Smith", "--by-name"],
+        client=client,
+        json_output=True,
+    )
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["operation"] == "create"
+    assert {m["user_id"] for m in payload["matches"]} == {m["user_id"] for m in ambiguous_members}
 
 
 def test_channel_create_help_renders(monkeypatch: pytest.MonkeyPatch) -> None:

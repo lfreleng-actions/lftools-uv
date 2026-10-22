@@ -175,6 +175,21 @@ cannot be located afterwards to read its ID, or the requested topic
 policy cannot be applied), `status` is `"partial"`, a `warnings` list
 explains what failed, and the command exits 1.
 
+**JSON Output** (error): any failure, including a name conflict, emits
+the error payload on stdout and nothing on stderr. An ambiguous user
+or group identifier adds a `matches` list of the candidates.
+
+```json
+{
+  "status": "error",
+  "channel_id": null,
+  "channel_name": "general",
+  "operation": "create",
+  "type": "public",
+  "error": "A channel named 'general' already exists (ID: 7); ..."
+}
+```
+
 **Exit Codes**: 0 = success, 1 = error or partial
 
 ---

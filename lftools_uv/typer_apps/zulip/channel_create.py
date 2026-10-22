@@ -16,7 +16,7 @@ from typing import Any
 
 import typer
 
-from lftools_uv.api.endpoints.zulip import ZulipAmbiguityError, ZulipError
+from lftools_uv.api.endpoints.zulip import ZulipAmbiguityError, ZulipError, ZulipValidationError
 from lftools_uv.typer_apps import zulip as zulip_cli
 from lftools_uv.typer_apps.zulip.apps import channel_app
 from lftools_uv.typer_apps.zulip.helpers import (
@@ -24,7 +24,7 @@ from lftools_uv.typer_apps.zulip.helpers import (
     emit_error,
     emit_json,
     emit_warning,
-    handle_zulip_error,
+    mutation_result,
 )
 
 _NAME = typer.Argument(..., help="Channel name")
@@ -91,16 +91,15 @@ class _CreateInputs:
 def _validate_flags(channel_type: str, announce: bool, no_announce: bool, topic_policy: str | None) -> None:
     """Reject flag values and combinations the command cannot act on."""
     if channel_type not in ("public", "private", "web-public"):
-        emit_error(f"Invalid channel type: {channel_type!r}. Valid types: public, private, web-public")
-        raise typer.Exit(code=1)
+        raise ZulipValidationError(f"Invalid channel type: {channel_type!r}. Valid types: public, private, web-public")
 
     if announce and no_announce:
-        emit_error("--announce and --no-announce are mutually exclusive")
-        raise typer.Exit(code=1)
+        raise ZulipValidationError("--announce and --no-announce are mutually exclusive")
 
     if topic_policy is not None and topic_policy not in ("allow", "deny", "follow-default"):
-        emit_error(f"Invalid --topic-policy value: {topic_policy!r}. Valid values: allow, deny, follow-default")
-        raise typer.Exit(code=1)
+        raise ZulipValidationError(
+            f"Invalid --topic-policy value: {topic_policy!r}. Valid values: allow, deny, follow-default"
+        )
 
 
 def _create(options: dict[str, Any], inputs: _CreateInputs) -> dict[str, Any]:
@@ -152,23 +151,30 @@ def _create(options: dict[str, Any], inputs: _CreateInputs) -> dict[str, Any]:
     )
 
 
-def _report_failure(exc: ZulipError) -> typer.Exit:
-    """Report a failed create and return the ``typer.Exit`` to raise."""
-    from lftools_uv.api.endpoints.zulip import ZulipLockoutError, ZulipValidationError
+def _report_failure(options: dict[str, Any], exc: ZulipError, *, name: str, channel_type: str) -> typer.Exit:
+    """Report a failed create and return the ``typer.Exit`` to raise.
 
-    if isinstance(exc, ZulipAmbiguityError):
-        emit_error(str(exc))
-        for match in exc.matches:
-            typer.echo(
-                f"  - {match.get('full_name', match.get('name', '<unknown>'))} "
-                f"(id={match.get('user_id', match.get('id', match.get('group_id')))})",
-                err=True,
-            )
+    With ``--json`` the failure is the FR-008 mutation error payload on
+    stdout, so automation always receives an outcome; otherwise it is an
+    error line on stderr, followed by the candidates for an ambiguous
+    identifier.
+    """
+    matches = exc.matches if isinstance(exc, ZulipAmbiguityError) else None
+    if options.get("json_output"):
+        extra: dict[str, Any] = {"type": channel_type, "error": str(exc)}
+        if matches is not None:
+            extra["matches"] = matches
+        emit_json(mutation_result(status="error", operation="create", channel_id=None, channel_name=name, extra=extra))
         return typer.Exit(code=1)
-    if isinstance(exc, (ZulipLockoutError, ZulipValidationError)):
-        emit_error(str(exc))
-        return typer.Exit(code=1)
-    return handle_zulip_error(exc)
+
+    emit_error(str(exc))
+    for match in matches or []:
+        typer.echo(
+            f"  - {match.get('full_name', match.get('name', '<unknown>'))} "
+            f"(id={match.get('user_id', match.get('id', match.get('group_id')))})",
+            err=True,
+        )
+    return typer.Exit(code=1)
 
 
 def _report_result(options: dict[str, Any], result: dict[str, Any], inputs: _CreateInputs) -> None:
@@ -212,26 +218,26 @@ def channel_create(
     require at least one --subscribe user or a non-Nobody --allow-group.
     """
     options = ctx.obj or {}
-    _validate_flags(channel_type, announce, no_announce, topic_policy)
-    inputs = _CreateInputs(
-        name=name,
-        description=description,
-        channel_type=channel_type,
-        subscribe=subscribe,
-        id_mode=_validate_id_mode_flags(by_email, by_id, by_name, subscribe),
-        groups={
-            "allow": allow_group,
-            "remove": can_remove_subscribers_group,
-            "add": can_add_subscribers_group,
-            "administer": can_administer_channel_group,
-            "send": can_send_message_group,
-        },
-        folder=folder,
-        announce=True if announce else (False if no_announce else None),
-        topic_policy=topic_policy,
-    )
     try:
+        _validate_flags(channel_type, announce, no_announce, topic_policy)
+        inputs = _CreateInputs(
+            name=name,
+            description=description,
+            channel_type=channel_type,
+            subscribe=subscribe,
+            id_mode=_validate_id_mode_flags(by_email, by_id, by_name, subscribe),
+            groups={
+                "allow": allow_group,
+                "remove": can_remove_subscribers_group,
+                "add": can_add_subscribers_group,
+                "administer": can_administer_channel_group,
+                "send": can_send_message_group,
+            },
+            folder=folder,
+            announce=True if announce else (False if no_announce else None),
+            topic_policy=topic_policy,
+        )
         result = _create(options, inputs)
     except ZulipError as exc:
-        raise _report_failure(exc) from exc
+        raise _report_failure(options, exc, name=name, channel_type=channel_type) from exc
     _report_result(options, result, inputs)
