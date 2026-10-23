@@ -125,6 +125,9 @@ This translation is transparent to the user.
 
 **Constraints**:
 
+- The name MUST NOT match an existing channel, active or archived
+  (names compare case-insensitively). A conflict is an error: nothing
+  is created or changed, and the command exits 1.
 - Private channels MUST specify `--subscribe` or `--allow-group`.
   Note: `--allow-group 'Nobody'` does NOT satisfy lockout prevention
   for private channels — it disables the permission entirely, leaving
@@ -167,7 +170,27 @@ This translation is transparent to the user.
 }
 ```
 
-**Exit Codes**: 0 = success, 1 = error
+When the channel is created but a follow-up step fails (the channel
+cannot be located afterwards to read its ID, or the requested topic
+policy cannot be applied), `status` is `"partial"`, a `warnings` list
+explains what failed, and the command exits 1.
+
+**JSON Output** (error): any failure, including a name conflict, emits
+the error payload on stdout and nothing on stderr. An ambiguous user
+or group identifier adds a `matches` list of the candidates.
+
+```json
+{
+  "status": "error",
+  "channel_id": null,
+  "channel_name": "general",
+  "operation": "create",
+  "type": "public",
+  "error": "A channel named 'general' already exists (ID: 7); ..."
+}
+```
+
+**Exit Codes**: 0 = success, 1 = error or partial
 
 ---
 
@@ -368,7 +391,10 @@ archived channels.").
 **Description**: Unsubscribe users from a channel.
 
 Same interface as `subscribe` but with `"operation": "unsubscribe"`.
-Same `[channel]`/`--channel-id` constraint applies.
+Same `[channel]`/`--channel-id` constraint applies. Users are removed
+one at a time; a failure for one user is reported in `errors` and the
+remaining users are still processed, so the result lists every
+requested user.
 
 **Exit Codes**: 0 = all succeeded (including no-ops), 1 = any error
 

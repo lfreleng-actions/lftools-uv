@@ -428,7 +428,7 @@ def test_channel_list_include_archived_adds_status_column(
     def _side_effect(*, url: str, method: str, request: dict[str, Any] | None = None) -> dict[str, Any]:
         assert url == "streams"
         assert method == "GET"
-        if request and request.get("include_archived"):
+        if request and request.get("exclude_archived") is False:
             return {"result": "success", "streams": active + [archived_extra]}
         return {"result": "success", "streams": active}
 
@@ -444,9 +444,10 @@ def test_channel_list_include_archived_adds_status_column(
     assert "archived" in result.stdout
     # The CLI must have propagated the flag to the API request.
     seen_archived = any(
-        (call.kwargs.get("request") or {}).get("include_archived") is True for call in fake.call_endpoint.call_args_list
+        (call.kwargs.get("request") or {}).get("exclude_archived") is False
+        for call in fake.call_endpoint.call_args_list
     )
-    assert seen_archived, "expected --include-archived to set include_archived=True on the API request"
+    assert seen_archived, "expected --include-archived to set exclude_archived=False on the API request"
 
 
 @pytest.mark.parametrize(
@@ -1008,11 +1009,18 @@ def _create_cli_client(
     *,
     feature_level: int = 400,
     streams: list[dict[str, Any]] | None = None,
+    existing_streams: list[dict[str, Any]] | None = None,
     members: list[dict[str, Any]] | None = None,
     groups: list[dict[str, Any]] | None = None,
     subscribe_response: dict[str, Any] | None = None,
 ) -> Any:
-    """Return a mock client for channel create CLI tests."""
+    """Return a mock client for channel create CLI tests.
+
+    Like the server, the stream listing changes when the create call
+    succeeds: before it, ``GET streams`` returns ``existing_streams``
+    (archived entries only when the request sends ``exclude_archived=False``,
+    as on the server); after it, ``streams`` (default :data:`CREATE_STREAMS`).
+    """
     client = mock.MagicMock()
     client.get_server_settings.return_value = {
         "result": "success",
@@ -1022,12 +1030,20 @@ def _create_cli_client(
         "result": "success",
         "members": members or CREATE_MEMBERS,
     }
+    created = False
 
     def call_endpoint_side_effect(*, url: str, method: str, request: Any = None) -> Any:
+        nonlocal created
         if url == "users/me/subscriptions" and method == "POST":
-            return subscribe_response or {"result": "success", "subscribed": {}}
+            response = subscribe_response or {"result": "success", "subscribed": {}}
+            created = created or response.get("result") == "success"
+            return response
         if url == "streams" and method == "GET":
-            return {"result": "success", "streams": streams or CREATE_STREAMS}
+            if created:
+                return {"result": "success", "streams": streams or CREATE_STREAMS}
+            include_archived = (request or {}).get("exclude_archived") is False
+            visible = [s for s in existing_streams or [] if include_archived or not s.get("is_archived")]
+            return {"result": "success", "streams": visible}
         if url == "user_groups" and method == "GET":
             return {"result": "success", "user_groups": groups or CREATE_CLI_GROUPS}
         if url.startswith("streams/") and method == "PATCH":
@@ -1075,6 +1091,81 @@ def test_channel_create_public_json_output() -> None:
     assert payload["operation"] == "create"
     assert payload["type"] == "public"
     assert "channel_id" in payload
+
+
+def test_channel_create_not_found_after_create_json_exits_one() -> None:
+    """A channel missing after create is partial and exits 1 (#870)."""
+    # The mocked listing holds only "new-project", so "fresh" is never found.
+    result = _invoke_create(["fresh"], json_output=True)
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "partial"
+    assert payload["channel_id"] is None
+    assert any("could not locate" in w for w in payload["warnings"])
+
+
+def test_channel_create_not_found_after_create_warns_and_exits_one() -> None:
+    """Without --json, the missing channel is a warning and exit 1 (#870)."""
+    result = _invoke_create(["fresh"])
+    assert result.exit_code == 1, result.output
+    assert "could not locate" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("existing", "expected"),
+    [
+        ({"stream_id": 7, "name": "general", "is_archived": False}, "already exists"),
+        ({"stream_id": 7, "name": "general", "is_archived": True}, "archived channel"),
+    ],
+)
+@pytest.mark.parametrize("json_output", [False, True])
+def test_channel_create_existing_name_exits_one(existing: dict[str, Any], expected: str, json_output: bool) -> None:
+    """An existing channel name is a conflict: exit 1, nothing changed (#867)."""
+    client = _create_cli_client(existing_streams=[existing])
+    result = _invoke_create(
+        ["general", "--type", "private", "--subscribe", "alice@example.com", "--by-email", "--topic-policy", "deny"],
+        client=client,
+        json_output=json_output,
+    )
+    assert result.exit_code == 1, result.output
+    if json_output:
+        payload = json.loads(result.stdout)
+        assert payload["status"] == "error"
+        assert payload["operation"] == "create"
+        assert payload["channel_id"] is None
+        assert payload["channel_name"] == "general"
+        assert payload["type"] == "private"
+        assert expected in payload["error"]
+        assert result.stderr == ""
+    else:
+        assert expected in result.stderr
+        assert "Created" not in result.stdout
+    mutations = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("method") in ("POST", "PATCH")]
+    assert mutations == []
+
+
+@pytest.mark.parametrize(
+    ("args", "feature_level", "expected"),
+    [
+        (["new-project", "--type", "secret"], 400, "Invalid channel type"),
+        (["new-project", "--announce", "--no-announce"], 400, "mutually exclusive"),
+        (["new-project", "--topic-policy", "maybe"], 400, "Invalid --topic-policy"),
+        (["new-project", "--subscribe", "alice@example.com"], 400, "--subscribe requires"),
+        (["new-project", "--type", "private"], 400, "lockout"),
+        (["new-project", "--type", "web-public"], 10, "feature level"),
+    ],
+)
+def test_channel_create_json_errors_emit_payload(args: list[str], feature_level: int, expected: str) -> None:
+    """Every create failure under --json is an FR-008 error payload on stdout."""
+    result = _invoke_create(args, feature_level=feature_level, json_output=True)
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["operation"] == "create"
+    assert payload["channel_id"] is None
+    assert payload["channel_name"] == "new-project"
+    assert expected.lower() in payload["error"].lower()
+    assert result.stderr == ""
 
 
 def test_channel_create_private_with_subscribe() -> None:
@@ -1531,6 +1622,18 @@ def test_channel_create_user_ambiguity_error() -> None:
     assert result.exit_code == 1
     combined = result.output + (getattr(result, "stderr", "") or "")
     assert "ambig" in combined.lower() or "alice" in combined.lower()
+
+    client = _create_cli_client(members=ambiguous_members)
+    result = _invoke_create(
+        ["new-project", "--type", "private", "--subscribe", "Alice Smith", "--by-name"],
+        client=client,
+        json_output=True,
+    )
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["operation"] == "create"
+    assert {m["user_id"] for m in payload["matches"]} == {m["user_id"] for m in ambiguous_members}
 
 
 def test_channel_create_help_renders(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -2276,8 +2379,8 @@ def test_channel_unsubscribe_json_error_after_channel_resolved(
     with the resolved channel_id and channel_name.
 
     Exercises the ``except ZulipError`` branch of the CLI's mutation
-    call: the Zulip DELETE endpoint returns a non-success response,
-    which surfaces as ZulipAPIError. The contract requires the JSON
+    call: the member listing fails after the channel resolves, which
+    surfaces as ZulipAPIError. The contract requires the JSON
     payload to report the resolved channel info (because the channel
     *was* resolved) — ``channel_id: null`` is reserved for the case
     where the channel itself could not be resolved.
@@ -2287,14 +2390,10 @@ def test_channel_unsubscribe_json_error_after_channel_resolved(
     def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
         if url == "streams" and method == "GET":
             return {"result": "success", "streams": _STREAMS}
-        if url == "users/me/subscriptions" and method == "DELETE":
-            # The Zulip server rejected the call; this surfaces as
-            # ZulipAPIError from unsubscribe_users().
-            return {"result": "error", "msg": "Boom", "removed": [], "not_removed": []}
         raise AssertionError(f"Unexpected endpoint: {method} {url}")
 
     client.call_endpoint.side_effect = call_endpoint
-    client.get_members.return_value = {"result": "success", "members": _MEMBERS}
+    client.get_members.return_value = {"result": "error", "msg": "Boom"}
 
     result = _invoke_unsubscribe(
         monkeypatch,
@@ -2308,6 +2407,42 @@ def test_channel_unsubscribe_json_error_after_channel_resolved(
     assert payload["channel_id"] == 1
     assert payload["channel_name"] == "general"
     assert payload["errors"] and "Boom" in payload["errors"][0]["error"]
+
+
+def test_channel_unsubscribe_mid_batch_failure_reports_all_users(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A DELETE failure mid-batch still reports every user and exits 1 (#869)."""
+    client = _build_client(removed=["alice@example.com", "bob@example.com"], not_removed=[])
+    delete_ok = client.call_endpoint.side_effect
+
+    def call_endpoint(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
+        if method == "DELETE" and json.loads((request or {}).get("principals", "[]")) == ["alice2@example.com"]:
+            return {"result": "error", "msg": "Insufficient permission"}
+        return delete_ok(url=url, method=method, request=request)
+
+    client.call_endpoint.side_effect = call_endpoint
+    result = _invoke_unsubscribe(
+        monkeypatch,
+        client,
+        [
+            "general",
+            "alice@example.com",
+            "alice2@example.com",
+            "bob@example.com",
+            "--by-email",
+            "--json",
+        ],
+    )
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "partial"
+    assert payload["channel_id"] == 1
+    assert payload["results"] == [
+        {"user": "alice@example.com", "status": "unsubscribed"},
+        {"user": "bob@example.com", "status": "unsubscribed"},
+    ]
+    assert payload["errors"] == [{"user": "alice2@example.com", "error": "Insufficient permission"}]
 
 
 def test_channel_unsubscribe_json_error_client_init_failure(

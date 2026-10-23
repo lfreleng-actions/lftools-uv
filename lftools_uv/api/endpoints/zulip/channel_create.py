@@ -116,6 +116,25 @@ def _build_create_request(payload: _CreatePayload) -> dict[str, Any]:
     return request
 
 
+def _reject_existing_channel(client: Any, name: str) -> None:
+    """Raise when ``name`` already belongs to a channel, active or archived.
+
+    The create endpoint only creates a channel that does not exist; for
+    an existing one it subscribes the principals, ignores the creation
+    settings and still answers success (#867). Archived channels count:
+    the name stays taken while the channel is archived.
+    """
+    try:
+        existing = resolve_channel(client, name=name, include_archived=True)
+    except ZulipNotFoundError:
+        return
+    kind = "An archived channel" if existing.get("is_archived") else "A channel"
+    raise ZulipValidationError(
+        f"{kind} named '{existing.get('name', name)}' already exists "
+        f"(ID: {existing.get('stream_id')}); choose a different name"
+    )
+
+
 def _apply_topic_policy_after_create(
     client: Any,
     *,
@@ -202,7 +221,9 @@ def create_channel(
     Raises
     ------
     ZulipValidationError
-        For client-side validation failures (e.g. invalid topic-policy value).
+        For client-side validation failures (e.g. invalid topic-policy
+        value), or when an active or archived channel already has the
+        requested name.
     ZulipLockoutError
         When creating a private channel without subscribers and allow-group
         is either missing or only contains ``Nobody``.
@@ -219,6 +240,10 @@ def create_channel(
         raise ZulipValidationError(
             f"Invalid topic-policy value: {topic_policy!r}. Valid values are: {', '.join(sorted(VALID_TOPIC_POLICIES))}"
         )
+
+    # The server strips surrounding whitespace from channel names, so the
+    # conflict check and the lookups must compare the name it will use.
+    name = name.strip()
 
     payload = _CreatePayload(
         name=name,
@@ -247,6 +272,8 @@ def create_channel(
 
     _validate_private_create_lockout(payload)
 
+    _reject_existing_channel(client, name)
+
     request = _build_create_request(payload)
 
     # Make the API call
@@ -271,10 +298,13 @@ def create_channel(
         stream = resolve_channel(client, name=name)
         stream_id = stream["stream_id"]
     except ZulipNotFoundError:
-        # Channel was created but we can't find it - unusual edge case
+        # Channel was created but we can't find it - unusual edge case. A
+        # null channel ID is not a success: callers act on the ID (#870).
         stream_id = None
         if topic_policy is not None:
             warnings.append(f"Channel created but could not locate to apply topic-policy '{topic_policy}'")
+        else:
+            warnings.append("Channel created but could not locate it to report its ID")
 
     # If topic_policy was requested, apply it via PATCH using the topics_policy field
     # (introduced in Zulip feature level 334)

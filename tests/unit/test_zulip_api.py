@@ -234,15 +234,15 @@ ARCHIVED_STREAMS = ACTIVE_STREAMS + [
 def _streams_client(active: list[dict[str, Any]], archived: list[dict[str, Any]]) -> Any:
     """Return a client whose ``streams`` endpoint returns the given lists.
 
-    The first call (without ``include_archived``) returns ``active``;
-    subsequent calls (with ``include_archived`` true) return ``archived``.
+    Requests without ``exclude_archived=False`` return ``active``;
+    requests with it return ``archived``.
     """
     client = mock.MagicMock()
 
     def side_effect(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
         assert url == "streams"
         assert method == "GET"
-        if request and request.get("include_archived"):
+        if request and request.get("exclude_archived") is False:
             return {"result": "success", "streams": archived}
         return {"result": "success", "streams": active}
 
@@ -292,6 +292,54 @@ def test_resolve_channel_rejects_missing_target() -> None:
         _ = resolve_channel(client)
     with pytest.raises(ZulipValidationError):
         _ = resolve_channel(client, name="x", channel_id=1)
+
+
+def _documented_streams_client(streams: list[dict[str, Any]]) -> Any:
+    """Return a client whose ``GET streams`` follows the documented API.
+
+    Archived channels are returned only when ``exclude_archived`` is
+    explicitly false; it defaults to true, and unknown parameters are
+    ignored (https://zulip.com/api/get-streams).
+    """
+    client = mock.MagicMock()
+
+    def side_effect(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
+        assert (url, method) == ("streams", "GET")
+        exclude_archived = (request or {}).get("exclude_archived", True)
+        visible = [s for s in streams if not (exclude_archived and s.get("is_archived"))]
+        return {"result": "success", "streams": visible}
+
+    client.call_endpoint.side_effect = side_effect
+    return client
+
+
+def test_fetch_streams_requests_archived_with_documented_parameter() -> None:
+    """``include_archived`` maps to ``exclude_archived=False`` on the wire."""
+    from lftools_uv.api.endpoints.zulip.channels import _fetch_streams
+
+    client = _documented_streams_client(ARCHIVED_STREAMS)
+    _ = _fetch_streams(client, include_archived=True)
+    request = client.call_endpoint.call_args.kwargs["request"]
+    assert request["exclude_archived"] is False
+    assert "include_archived" not in request
+
+
+def test_fetch_streams_active_only_keeps_server_default() -> None:
+    """An active-only listing leaves the server's default exclusion in place."""
+    from lftools_uv.api.endpoints.zulip.channels import _fetch_streams
+
+    client = _documented_streams_client(ARCHIVED_STREAMS)
+    streams = _fetch_streams(client, include_archived=False)
+    assert [s["stream_id"] for s in streams] == [1, 2]
+
+
+def test_archived_channels_reachable_from_documented_server() -> None:
+    """Archived lookups work against a server that follows the documented API."""
+    client = _documented_streams_client(ARCHIVED_STREAMS)
+    assert resolve_channel(client, name="old-channel", include_archived=True)["stream_id"] == 99
+    assert 99 in {c["stream_id"] for c in list_channels(client, include_archived=True)}
+    with pytest.raises(ZulipNotFoundError, match="--include-archived"):
+        _ = resolve_channel(client, name="old-channel")
 
 
 # ---------------------------------------------------------------------------
@@ -678,14 +726,14 @@ def _subscribers_client(
     """Return a mock client that serves streams, subscribers, and members.
 
     ``streams_active`` is returned for unfiltered streams requests, and
-    ``streams_archived`` for ``include_archived=True``. The
+    ``streams_archived`` for ``exclude_archived=False``. The
     ``streams/{id}/members`` endpoint returns ``subscribers_by_stream``.
     """
     client = mock.MagicMock()
 
     def side_effect(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
         if url == "streams" and method == "GET":
-            if request and request.get("include_archived"):
+            if request and request.get("exclude_archived") is False:
                 return {"result": "success", "streams": streams_archived}
             return {"result": "success", "streams": streams_active}
         if url.startswith("streams/") and url.endswith("/members") and method == "GET":
@@ -1280,21 +1328,36 @@ def _create_channel_client(
     feature_level: int = 400,
     subscribe_response: dict[str, Any] | None = None,
     streams_response: list[dict[str, Any]] | None = None,
+    existing_streams: list[dict[str, Any]] | None = None,
     groups: list[dict[str, Any]] | None = None,
     patch_response: dict[str, Any] | None = None,
 ) -> Any:
-    """Return a mock client for create_channel tests."""
+    """Return a mock client for create_channel tests.
+
+    Like the server, the stream listing changes when the create call
+    succeeds: before it, ``GET streams`` returns ``existing_streams``
+    (archived entries only when the request sends ``exclude_archived=False``,
+    as on the server); after it, ``streams_response`` (default :data:`CREATE_ACTIVE_STREAMS`).
+    """
     client = mock.MagicMock()
     client.get_server_settings.return_value = {
         "result": "success",
         "zulip_feature_level": feature_level,
     }
+    created = False
 
     def call_endpoint_side_effect(*, url: str, method: str, request: Any = None) -> Any:
+        nonlocal created
         if url == "users/me/subscriptions" and method == "POST":
-            return subscribe_response or {"result": "success", "subscribed": {}}
+            response = subscribe_response or {"result": "success", "subscribed": {}}
+            created = created or response.get("result") == "success"
+            return response
         if url == "streams" and method == "GET":
-            streams = CREATE_ACTIVE_STREAMS if streams_response is None else streams_response
+            if created:
+                streams = CREATE_ACTIVE_STREAMS if streams_response is None else streams_response
+            else:
+                include_archived = (request or {}).get("exclude_archived") is False
+                streams = [s for s in existing_streams or [] if include_archived or not s.get("is_archived")]
             return {"result": "success", "streams": streams}
         if url == "user_groups" and method == "GET":
             return {"result": "success", "user_groups": groups or CREATE_GROUPS}
@@ -1713,6 +1776,49 @@ def test_create_channel_stream_not_found_with_topic_policy_partial() -> None:
     assert result["channel_id"] is None
     assert "warnings" in result
     assert any("could not locate" in w for w in result["warnings"])
+
+
+def test_create_channel_stream_not_found_without_topic_policy_partial() -> None:
+    """A channel missing after create is partial even without topic_policy (#870)."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client(streams_response=[])
+    result = create_channel(client, name="new-channel")
+    assert result["status"] == "partial"
+    assert result["channel_id"] is None
+    assert any("could not locate" in w for w in result["warnings"])
+    assert "topic_policy_applied" not in result
+
+
+@pytest.mark.parametrize(
+    ("existing", "requested", "expected"),
+    [
+        ({"stream_id": 7, "name": "general", "is_archived": False}, "general", "already exists"),
+        ({"stream_id": 7, "name": "general", "is_archived": False}, "General", "already exists"),
+        # The server strips surrounding whitespace from channel names.
+        ({"stream_id": 7, "name": "general", "is_archived": False}, " general ", "already exists"),
+        ({"stream_id": 8, "name": "old-team", "is_archived": True}, "old-team", "archived channel"),
+    ],
+)
+def test_create_channel_existing_name_rejected(existing: dict[str, Any], requested: str, expected: str) -> None:
+    """A name taken by an active or archived channel is a conflict (#867)."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client(existing_streams=[existing])
+    with pytest.raises(ZulipValidationError, match=expected):
+        _ = create_channel(client, name=requested, topic_policy="deny")
+    mutations = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("method") in ("POST", "PATCH")]
+    assert mutations == []
+
+
+def test_create_channel_checks_names_before_creating() -> None:
+    """A free name still creates the channel and reads back its ID."""
+    from lftools_uv.api.endpoints.zulip import create_channel
+
+    client = _create_channel_client(existing_streams=[{"stream_id": 7, "name": "general", "is_archived": False}])
+    result = create_channel(client, name="new-channel")
+    assert result["status"] == "success"
+    assert result["channel_id"] == 100
 
 
 # ---------------------------------------------------------------------------
@@ -2184,14 +2290,15 @@ def _unsubscribe_client(
     *,
     removed: list[Any] | None = None,
     not_removed: list[Any] | None = None,
-    result: str = "success",
-    msg: str = "",
+    failures: dict[Any, str | Exception] | None = None,
 ) -> Any:
     """Build a mock client supporting streams + members + unsubscribe.
 
     The first ``streams`` call returns the active streams. The
     ``DELETE users/me/subscriptions`` call returns the configured
-    ``removed`` / ``not_removed`` payload.
+    ``removed`` / ``not_removed`` payload. ``failures`` maps a principal
+    to an error message (an error response for that principal) or an
+    exception (raised by the transport for that principal).
     """
     client = mock.MagicMock()
 
@@ -2204,11 +2311,16 @@ def _unsubscribe_client(
             principals = _json.loads(request.get("principals", "[]"))
             subscription = (subscriptions or [""])[0]
             principal = (principals or [None])[0]
+            failure = (failures or {}).get(principal)
+            if isinstance(failure, Exception):
+                raise failure
+            if failure is not None:
+                return {"result": "error", "msg": failure}
             removed_streams = [subscription] if principal in (removed or []) else []
             not_removed_streams = [subscription] if principal in (not_removed or []) else []
             return {
-                "result": result,
-                "msg": msg,
+                "result": "success",
+                "msg": "",
                 "removed": removed_streams,
                 "not_removed": not_removed_streams,
             }
@@ -2481,23 +2593,70 @@ def test_unsubscribe_users_rejects_more_than_fifty_users() -> None:
         )
 
 
-def test_unsubscribe_users_api_error_raises() -> None:
-    """A non-success Zulip response surfaces as :class:`ZulipAPIError`."""
+def test_unsubscribe_users_single_failure_is_error() -> None:
+    """A non-success response is a per-user error, not an exception (#869)."""
     client = _unsubscribe_client(
         ACTIVE_STREAMS,
         MEMBERS,
-        removed=[],
-        not_removed=[],
-        result="error",
-        msg="Boom",
+        failures={"bob@example.com": "Boom"},
     )
-    with pytest.raises(ZulipAPIError, match="Boom"):
-        _ = unsubscribe_users(
-            client,
-            channel="general",
-            users=["bob@example.com"],
-            id_mode="email",
-        )
+    payload = unsubscribe_users(
+        client,
+        channel="general",
+        users=["bob@example.com"],
+        id_mode="email",
+    )
+    assert payload["status"] == "error"
+    assert payload["results"] == []
+    assert len(payload["errors"]) == 1
+    assert payload["errors"][0]["user"] == "bob@example.com"
+    assert "Boom" in payload["errors"][0]["error"]
+
+
+def test_unsubscribe_users_mid_batch_failure_keeps_other_results() -> None:
+    """A failure mid-batch keeps earlier results and still tries later users (#869)."""
+    client = _unsubscribe_client(
+        ACTIVE_STREAMS,
+        MEMBERS,
+        removed=["alice@example.com", "bob@example.com"],
+        failures={"alice2@example.com": "Insufficient permission"},
+    )
+    payload = unsubscribe_users(
+        client,
+        channel="general",
+        users=["alice@example.com", "alice2@example.com", "bob@example.com"],
+        id_mode="email",
+    )
+    assert payload["status"] == "partial"
+    assert payload["results"] == [
+        {"user": "alice@example.com", "status": "unsubscribed"},
+        {"user": "bob@example.com", "status": "unsubscribed"},
+    ]
+    assert len(payload["errors"]) == 1
+    assert payload["errors"][0]["user"] == "alice2@example.com"
+    assert "Insufficient permission" in payload["errors"][0]["error"]
+    deletes = [c for c in client.call_endpoint.call_args_list if c.kwargs.get("method") == "DELETE"]
+    assert len(deletes) == 3
+
+
+def test_unsubscribe_users_transport_error_keeps_other_results() -> None:
+    """A transport error for one user is recorded and the batch continues (#869)."""
+    client = _unsubscribe_client(
+        ACTIVE_STREAMS,
+        MEMBERS,
+        removed=["bob@example.com"],
+        failures={"alice@example.com": ConnectionError("connection reset")},
+    )
+    payload = unsubscribe_users(
+        client,
+        channel="general",
+        users=["alice@example.com", "bob@example.com"],
+        id_mode="email",
+    )
+    assert payload["status"] == "partial"
+    assert payload["results"] == [{"user": "bob@example.com", "status": "unsubscribed"}]
+    assert payload["errors"][0]["user"] == "alice@example.com"
+    assert "connection reset" in payload["errors"][0]["error"]
 
 
 def test_unsubscribe_users_resolved_channel_skips_resolution() -> None:
@@ -2583,7 +2742,7 @@ def _update_client(
 
     def call_endpoint(*, url: str, method: str = "GET", request: dict[str, Any] | None = None) -> Any:
         if url == "streams" and method == "GET":
-            if request and request.get("include_archived"):
+            if request and request.get("exclude_archived") is False:
                 return {"result": "success", "streams": archived_streams}
             return {"result": "success", "streams": streams}
         if url == "user_groups" and method == "GET":
@@ -3021,8 +3180,8 @@ def _archive_client(
 ) -> Any:
     """Return a client whose stream listings and DELETE responses are mocked.
 
-    GET /streams returns ``active`` or ``archived`` per the
-    ``include_archived`` request flag. DELETE /streams/{id} returns the
+    GET /streams returns ``active``, or ``archived`` when the request
+    sets ``exclude_archived=False``. DELETE /streams/{id} returns the
     configured ``delete_response`` (or raises ``delete_error``).
     """
     client = mock.MagicMock()
@@ -3031,7 +3190,7 @@ def _archive_client(
 
     def side_effect(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
         if method == "GET" and url == "streams":
-            if request and request.get("include_archived"):
+            if request and request.get("exclude_archived") is False:
                 return {"result": "success", "streams": archived}
             return {"result": "success", "streams": active}
         if method == "DELETE" and url.startswith("streams/"):
@@ -3208,7 +3367,7 @@ def _unarchive_client(
 
     * ``server_settings`` returns the chosen ``feature_level``.
     * ``streams`` GETs return ``active`` by default, or the combined
-      active + archived listing when ``include_archived`` is requested
+      active + archived listing when ``exclude_archived=False`` is sent
       (matching the foundation ``_fetch_streams`` contract).
     * ``streams/<id>`` PATCHes with ``is_archived=False`` return
       ``reactivate_response`` when provided, else a success stub.
@@ -3225,7 +3384,7 @@ def _unarchive_client(
 
     def side_effect(*, url: str, method: str, request: dict[str, Any] | None = None) -> Any:
         if url == "streams" and method == "GET":
-            if request and request.get("include_archived"):
+            if request and request.get("exclude_archived") is False:
                 return {"result": "success", "streams": active_list + archived_list}
             return {"result": "success", "streams": active_list}
         if url.startswith("streams/") and method == "PATCH" and request == {"is_archived": False}:

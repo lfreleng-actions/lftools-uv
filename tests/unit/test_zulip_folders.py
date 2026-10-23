@@ -68,8 +68,13 @@ def _folder_client(
     folder_response: dict[str, Any] | None = None,
     limits: dict[str, int] | None = None,
     streams: list[dict[str, Any]] | None = None,
+    created_stream: dict[str, Any] | None = None,
 ) -> mock.MagicMock:
-    """Return a mock Zulip client wired for folder operations."""
+    """Return a mock Zulip client wired for folder operations.
+
+    ``created_stream`` joins the stream listing once a channel create
+    call has been made, as it would on the server.
+    """
     client = mock.MagicMock()
     client.get_server_settings.return_value = {
         "result": "success",
@@ -94,7 +99,10 @@ def _folder_client(
         if url.startswith("channel_folders/") and method == "PATCH":
             return folder_response or {"result": "success"}
         if url == "streams" and method == "GET":
-            return {"result": "success", "streams": streams_list}
+            created = created_stream is not None and any(
+                call["url"] == "users/me/subscriptions" and call["method"] == "POST" for call in client.last_requests
+            )
+            return {"result": "success", "streams": [*streams_list, created_stream] if created else streams_list}
         if url.startswith("streams/") and method == "PATCH":
             client.last_patch = {"url": url, "request": request}
             return {"result": "success"}
@@ -207,10 +215,12 @@ def test_resolve_channel_folder_token_ambiguity() -> None:
 
 def test_create_channel_with_folder_id_in_subscription() -> None:
     """Channel create includes folder_id in the subscription payload."""
-    client = _folder_client(streams=[{"stream_id": 42, "name": "general", "is_archived": False}])
-    result = create_channel(client, name="general", folder_id=10, folder_id_specified=True)
+    client = _folder_client(created_stream={"stream_id": 42, "name": "new-project", "is_archived": False})
+    result = create_channel(client, name="new-project", folder_id=10, folder_id_specified=True)
+    assert result["status"] == "success"
+    assert result["channel_id"] == 42
     assert result["folder_id"] == 10
-    assert client.last_create["request"]["subscriptions"] == [{"name": "general", "folder_id": 10}]
+    assert client.last_create["request"]["subscriptions"] == [{"name": "new-project", "folder_id": 10}]
 
 
 @pytest.mark.parametrize("bad_folder_id", [0, -1, True, False])
@@ -323,7 +333,7 @@ def test_folder_cli_feature_level_error(monkeypatch: pytest.MonkeyPatch) -> None
 
 def test_channel_create_cli_folder_name(monkeypatch: pytest.MonkeyPatch) -> None:
     """Channel create --folder resolves names and sends folder_id."""
-    client = _folder_client(streams=[{"stream_id": 42, "name": "new-project", "is_archived": False}])
+    client = _folder_client(created_stream={"stream_id": 42, "name": "new-project", "is_archived": False})
     _patch_cli_client(monkeypatch, client)
     result = CliRunner().invoke(zulip_app, ["--json", "channel", "create", "new-project", "--folder", "Projects"])
     assert result.exit_code == 0, result.output

@@ -213,7 +213,7 @@ def channel_unsubscribe(
     client = _connect(options, channel_name)
 
     # Pre-resolve the channel so that any failure inside
-    # ``unsubscribe_users`` (e.g. the DELETE call returning an error
+    # ``unsubscribe_users`` (e.g. the member listing returning an error
     # response) can still report the resolved channel_id/channel_name
     # in the --json error payload. The contract documents
     # ``channel_id: null`` only for the case where the channel itself
@@ -242,7 +242,8 @@ def channel_unsubscribe(
         # FR-008: mutation commands emit the canonical JSON schema even
         # on error. The channel was successfully resolved above, so we
         # report the resolved channel_id/name here (the failure is
-        # downstream — e.g. the DELETE call itself returned an error).
+        # downstream — e.g. the member listing failed). Per-user DELETE
+        # failures do not raise; they arrive in the payload's errors.
         raise _fail_request(
             options,
             exc,
