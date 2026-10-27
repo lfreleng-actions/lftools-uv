@@ -13,6 +13,7 @@ import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 import responses
 
 from lftools_uv.openstack import cluster as os_cluster
@@ -488,3 +489,95 @@ def test_cleanup_list_clusters_error(mock_from_config, mock_fetch_builds, caplog
     assert exc_info.value.code == 1
     assert "Failed to list clusters" in caplog.text
     assert any(record.levelno >= logging.ERROR for record in caplog.records)
+
+
+JENKINS_URL = "https://jenkins.example.org"
+JENKINS_API_URL = f"{JENKINS_URL}/computer/api/json"
+
+
+def _mock_cloud(mock_from_config, names):
+    """Return a mocked cloud whose cluster listing holds ``names``."""
+    mock_cloud = MagicMock()
+    mock_from_config.return_value = mock_cloud
+    clusters = []
+    for name in names:
+        cluster = MagicMock()
+        cluster.name = name
+        clusters.append(cluster)
+    mock_cloud.list_coe_clusters.return_value = clusters
+    return mock_cloud
+
+
+@pytest.mark.xfail(strict=True, reason="#826: a failing Jenkins is treated as idle and clusters are deleted")
+@pytest.mark.parametrize(
+    "reply",
+    [
+        {"body": requests.exceptions.ConnectionError("connection refused")},
+        {"json": {"error": "unavailable"}, "status": 503},
+        {"json": {"computer": None}, "status": 200},
+    ],
+    ids=["unreachable", "status-503", "null-computer"],
+)
+@patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
+@responses.activate
+def test_cleanup_aborts_when_jenkins_fails(mock_from_config, reply, caplog):
+    """A Jenkins that cannot report its builds aborts cleanup before any delete."""
+    _mock_cloud(mock_from_config, ["csit-job-12", "other-job-7", "x-managed-prod-k8s-1"])
+    responses.add(responses.GET, JENKINS_API_URL, **reply)
+
+    with pytest.raises(SystemExit) as exc_info:
+        os_cluster.cleanup("test-cloud", jenkins_urls=JENKINS_URL)
+
+    assert exc_info.value.code == 1
+    mock_from_config.assert_not_called()
+    assert any(record.levelno >= logging.ERROR for record in caplog.records)
+
+
+@pytest.mark.xfail(strict=True, reason="#826: builds from the healthy Jenkins are taken as complete")
+@patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
+@responses.activate
+def test_cleanup_aborts_when_any_jenkins_fails(mock_from_config):
+    """One failing Jenkins among several aborts cleanup before any delete."""
+    healthy = "https://jenkins.example.io"
+    _mock_cloud(mock_from_config, ["csit-job-12", "other-job-7"])
+    responses.add(responses.GET, f"{healthy}/computer/api/json", json={"computer": []}, status=200)
+    responses.add(responses.GET, JENKINS_API_URL, json={"error": "boom"}, status=500)
+
+    with pytest.raises(SystemExit) as exc_info:
+        os_cluster.cleanup("test-cloud", jenkins_urls=f"{healthy} {JENKINS_URL}")
+
+    assert exc_info.value.code == 1
+    mock_from_config.assert_not_called()
+
+
+@patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
+@responses.activate
+def test_cleanup_proceeds_when_jenkins_is_idle(mock_from_config):
+    """A Jenkins that answers with no active builds lets cleanup proceed."""
+    mock_cloud = _mock_cloud(mock_from_config, ["csit-job-12", "x-managed-prod-k8s-1"])
+    responses.add(responses.GET, JENKINS_API_URL, json={"computer": []}, status=200)
+
+    os_cluster.cleanup("test-cloud", jenkins_urls=JENKINS_URL)
+
+    mock_cloud.delete_coe_cluster.assert_called_once_with("csit-job-12")
+
+
+@pytest.mark.xfail(strict=True, reason="#827: a failed cluster delete still exits 0")
+@patch("lftools_uv.openstack.cluster._fetch_jenkins_builds", return_value=[])
+@patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
+def test_cleanup_exits_1_after_failed_delete(mock_from_config, _mock_fetch_builds, caplog):
+    """A failed delete does not stop the others, and the run exits 1."""
+    from openstack.cloud.exc import OpenStackCloudException
+
+    mock_cloud = _mock_cloud(mock_from_config, ["csit-job-12", "other-job-7"])
+    mock_cloud.delete_coe_cluster.side_effect = [OpenStackCloudException("Delete failed"), None]
+
+    with pytest.raises(SystemExit) as exc_info:
+        os_cluster.cleanup("test-cloud", jenkins_urls=JENKINS_URL)
+
+    assert exc_info.value.code == 1
+    assert mock_cloud.delete_coe_cluster.call_count == 2
+    mock_cloud.delete_coe_cluster.assert_any_call("csit-job-12")
+    mock_cloud.delete_coe_cluster.assert_any_call("other-job-7")
+    assert "Failed to delete cluster csit-job-12" in caplog.text
+    assert "Failed to delete 1 orphaned cluster(s): csit-job-12" in caplog.text
