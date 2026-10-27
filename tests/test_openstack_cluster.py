@@ -13,6 +13,7 @@ import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 import responses
 
 from lftools_uv.openstack import cluster as os_cluster
@@ -119,9 +120,8 @@ def test_fetch_jenkins_builds_http_error():
         status=404,
     )
 
-    builds = os_cluster._fetch_jenkins_builds([jenkins_url])
-
-    assert len(builds) == 0
+    with pytest.raises(os_cluster.JenkinsBuildsUnavailableError, match="status code 404"):
+        os_cluster._fetch_jenkins_builds([jenkins_url])
 
 
 @pytest.mark.parametrize(
@@ -135,12 +135,11 @@ def test_fetch_jenkins_builds_http_error():
     ids=["null-computer", "null-executors", "non-string-url", "top-level-list"],
 )
 @responses.activate
-def test_fetch_jenkins_builds_malformed_shape(payload, caplog):
-    """A valid JSON body with an unexpected shape yields no builds.
+def test_fetch_jenkins_builds_malformed_shape(payload):
+    """A valid JSON body with an unexpected shape raises.
 
-    Cluster cleanup treats an unusable Jenkins as having no active builds, so
-    a surprising response shape must report the problem and carry on rather
-    than aborting the whole cleanup run.
+    The builds of such a Jenkins are unknown, so cluster cleanup must not
+    treat it as having no active builds and delete clusters still in use.
     """
     jenkins_url = "https://jenkins.example.org"
     responses.add(
@@ -150,14 +149,12 @@ def test_fetch_jenkins_builds_malformed_shape(payload, caplog):
         status=200,
     )
 
-    builds = os_cluster._fetch_jenkins_builds([jenkins_url])
-
-    assert builds == []
-    assert any(record.levelno >= logging.ERROR for record in caplog.records)
+    with pytest.raises(os_cluster.JenkinsBuildsUnavailableError, match="Unexpected response shape"):
+        os_cluster._fetch_jenkins_builds([jenkins_url])
 
 
 @responses.activate
-def test_fetch_jenkins_builds_timeout(caplog):
+def test_fetch_jenkins_builds_timeout():
     """Test handling of timeout when fetching Jenkins builds."""
     jenkins_url = "https://jenkins.example.org"
     api_url = f"{jenkins_url}/computer/api/json"
@@ -168,14 +165,12 @@ def test_fetch_jenkins_builds_timeout(caplog):
         body=Exception("Timeout"),
     )
 
-    builds = os_cluster._fetch_jenkins_builds([jenkins_url])
-
-    assert len(builds) == 0
-    assert any(record.levelno >= logging.ERROR for record in caplog.records)
+    with pytest.raises(os_cluster.JenkinsBuildsUnavailableError, match="Timeout"):
+        os_cluster._fetch_jenkins_builds([jenkins_url])
 
 
 @responses.activate
-def test_fetch_jenkins_builds_invalid_json(caplog):
+def test_fetch_jenkins_builds_invalid_json():
     """Test handling of invalid JSON response."""
     jenkins_url = "https://jenkins.example.org"
     api_url = f"{jenkins_url}/computer/api/json"
@@ -187,10 +182,8 @@ def test_fetch_jenkins_builds_invalid_json(caplog):
         status=200,
     )
 
-    builds = os_cluster._fetch_jenkins_builds([jenkins_url])
-
-    assert len(builds) == 0
-    assert any(record.levelno >= logging.ERROR for record in caplog.records)
+    with pytest.raises(os_cluster.JenkinsBuildsUnavailableError, match="Failed to parse JSON"):
+        os_cluster._fetch_jenkins_builds([jenkins_url])
 
 
 @responses.activate
@@ -431,8 +424,10 @@ def test_cleanup_delete_error(mock_from_config, mock_fetch_builds, caplog):
     # Make delete raise an error
     mock_cloud.delete_coe_cluster.side_effect = OpenStackCloudException("Delete failed")
 
-    # Call cleanup - should not exit, just log error
-    os_cluster.cleanup("test-cloud", jenkins_urls="https://jenkins.example.org")
+    with pytest.raises(SystemExit) as exc_info:
+        os_cluster.cleanup("test-cloud", jenkins_urls="https://jenkins.example.org")
+
+    assert exc_info.value.code == 1
 
     assert "Failed to delete cluster orphaned-cluster" in caplog.text
     assert any(record.levelno >= logging.ERROR for record in caplog.records)
@@ -488,3 +483,92 @@ def test_cleanup_list_clusters_error(mock_from_config, mock_fetch_builds, caplog
     assert exc_info.value.code == 1
     assert "Failed to list clusters" in caplog.text
     assert any(record.levelno >= logging.ERROR for record in caplog.records)
+
+
+JENKINS_URL = "https://jenkins.example.org"
+JENKINS_API_URL = f"{JENKINS_URL}/computer/api/json"
+
+
+def _mock_cloud(mock_from_config, names):
+    """Return a mocked cloud whose cluster listing holds ``names``."""
+    mock_cloud = MagicMock()
+    mock_from_config.return_value = mock_cloud
+    clusters = []
+    for name in names:
+        cluster = MagicMock()
+        cluster.name = name
+        clusters.append(cluster)
+    mock_cloud.list_coe_clusters.return_value = clusters
+    return mock_cloud
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        {"body": requests.exceptions.ConnectionError("connection refused")},
+        {"json": {"error": "unavailable"}, "status": 503},
+        {"json": {"computer": None}, "status": 200},
+    ],
+    ids=["unreachable", "status-503", "null-computer"],
+)
+@patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
+@responses.activate
+def test_cleanup_aborts_when_jenkins_fails(mock_from_config, reply, caplog):
+    """A Jenkins that cannot report its builds aborts cleanup before any delete."""
+    _mock_cloud(mock_from_config, ["csit-job-12", "other-job-7", "x-managed-prod-k8s-1"])
+    responses.add(responses.GET, JENKINS_API_URL, **reply)
+
+    with pytest.raises(SystemExit) as exc_info:
+        os_cluster.cleanup("test-cloud", jenkins_urls=JENKINS_URL)
+
+    assert exc_info.value.code == 1
+    mock_from_config.assert_not_called()
+    assert any(record.levelno >= logging.ERROR for record in caplog.records)
+
+
+@patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
+@responses.activate
+def test_cleanup_aborts_when_any_jenkins_fails(mock_from_config):
+    """One failing Jenkins among several aborts cleanup before any delete."""
+    healthy = "https://jenkins.example.io"
+    _mock_cloud(mock_from_config, ["csit-job-12", "other-job-7"])
+    responses.add(responses.GET, f"{healthy}/computer/api/json", json={"computer": []}, status=200)
+    responses.add(responses.GET, JENKINS_API_URL, json={"error": "boom"}, status=500)
+
+    with pytest.raises(SystemExit) as exc_info:
+        os_cluster.cleanup("test-cloud", jenkins_urls=f"{healthy} {JENKINS_URL}")
+
+    assert exc_info.value.code == 1
+    mock_from_config.assert_not_called()
+
+
+@patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
+@responses.activate
+def test_cleanup_proceeds_when_jenkins_is_idle(mock_from_config):
+    """A Jenkins that answers with no active builds lets cleanup proceed."""
+    mock_cloud = _mock_cloud(mock_from_config, ["csit-job-12", "x-managed-prod-k8s-1"])
+    responses.add(responses.GET, JENKINS_API_URL, json={"computer": []}, status=200)
+
+    os_cluster.cleanup("test-cloud", jenkins_urls=JENKINS_URL)
+
+    mock_cloud.delete_coe_cluster.assert_called_once_with("csit-job-12")
+
+
+@patch("lftools_uv.openstack.cluster._fetch_jenkins_builds", return_value=[])
+@patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
+def test_cleanup_exits_1_after_failed_delete(mock_from_config, _mock_fetch_builds, caplog):
+    """A failed delete does not stop the others, and the run exits 1."""
+    from openstack.cloud.exc import OpenStackCloudException
+
+    mock_cloud = _mock_cloud(mock_from_config, ["csit-job-12", "other-job-7"])
+    mock_cloud.delete_coe_cluster.side_effect = [OpenStackCloudException("Delete failed"), None]
+
+    with pytest.raises(SystemExit) as exc_info:
+        os_cluster.cleanup("test-cloud", jenkins_urls=JENKINS_URL)
+
+    assert exc_info.value.code == 1
+    assert mock_cloud.delete_coe_cluster.call_count == 2
+    mock_cloud.delete_coe_cluster.assert_any_call("csit-job-12")
+    mock_cloud.delete_coe_cluster.assert_any_call("other-job-7")
+    assert "Failed to delete cluster csit-job-12" in caplog.text
+    assert "Failed to delete 1 orphaned cluster(s): csit-job-12" in caplog.text
