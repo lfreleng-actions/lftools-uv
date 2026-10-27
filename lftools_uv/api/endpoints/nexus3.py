@@ -18,6 +18,8 @@ import json
 import logging
 from typing import cast
 
+import requests
+
 import lftools_uv.api.client as client
 from lftools_uv import config, helpers
 from lftools_uv.api.client import ApiResponse
@@ -346,10 +348,10 @@ class Nexus3(client.RestApi):
 
         if resp.status_code == 204:
             return f"Successfully deleted user {username}"
-        if isinstance(response, tuple):
-            return f"Failed to delete user {username} with error: {response[1]}"
+        log.error("Failed to delete user %s: %s", username, resp.text)
         resp.raise_for_status()
-        return f"Failed to delete user {username}"
+        msg: str = f"Failed to delete user {username}: unexpected HTTP status {resp.status_code}"
+        raise requests.HTTPError(msg, response=resp)
 
     def list_user(self, username: str) -> list[list[object]]:
         """Show user details.

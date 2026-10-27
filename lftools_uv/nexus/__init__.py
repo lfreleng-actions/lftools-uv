@@ -282,7 +282,9 @@ class Nexus:
         """Get the repository ID for a repo group that has a specific name."""
         url = os.path.join(self.baseurl, "repo_groups")
 
-        repos = requests.get(url, auth=self.auth, headers=self.headers).json()
+        response = requests.get(url, auth=self.auth, headers=self.headers)
+        response.raise_for_status()
+        repos = response.json()
 
         for repo in repos["data"]:
             if repo["name"] == name:
@@ -294,7 +296,9 @@ class Nexus:
         """Get the current configuration of a given repo group with a specific ID."""
         url = os.path.join(self.baseurl, "repo_groups", repoId)
 
-        return requests.get(url, auth=self.auth, headers=self.headers).json()["data"]
+        response = requests.get(url, auth=self.auth, headers=self.headers)
+        response.raise_for_status()
+        return response.json()["data"]
 
     def update_repo_group_details(self, repoId: str, data: object) -> None:
         """Update the given repo group with new configuration."""
@@ -304,7 +308,8 @@ class Nexus:
 
         json_data = json.dumps(repo).encode(encoding="utf-8")
 
-        _ = requests.put(url, auth=self.auth, headers=self.headers, data=json_data)
+        response = requests.put(url, auth=self.auth, headers=self.headers, data=json_data)
+        response.raise_for_status()
 
     def get_all_images(self, repo: str) -> list[object]:
         """Get a list of all images in the given repository."""

@@ -150,7 +150,6 @@ def repo_group_nexus(mocker):
     return nexus, mock_requests
 
 
-@pytest.mark.xfail(strict=True, reason="#843: the repo group PUT ignores the HTTP status")
 def test_update_repo_group_details_raises_on_error(repo_group_nexus):
     """A rejected repo group update raises ``HTTPError``."""
     nexus, mock_requests = repo_group_nexus
@@ -159,7 +158,6 @@ def test_update_repo_group_details_raises_on_error(repo_group_nexus):
         nexus.update_repo_group_details("staging", {"repositories": []})
 
 
-@pytest.mark.xfail(strict=True, reason="#843: the repo group GETs ignore the HTTP status")
 @pytest.mark.parametrize(
     "call",
     [

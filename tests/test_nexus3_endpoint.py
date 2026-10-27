@@ -45,7 +45,6 @@ def test_delete_user_success(nexus3):
         assert nexus3.delete_user("alice") == "Successfully deleted user alice"
 
 
-@pytest.mark.xfail(strict=True, reason="#842: a rejected delete returns a 'Failed to delete' string")
 @pytest.mark.parametrize(
     "resp",
     [
