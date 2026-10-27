@@ -82,7 +82,6 @@ def test_release_staging_repos(datafiles, responses, mocker, nexus2_obj_create, 
     cmd.release_staging_repos(tuple(repos), False)
 
 
-@pytest.mark.xfail(strict=True, reason="#837: release stops at an already-released repo")
 @pytest.mark.datafiles(os.path.join(FIXTURE_DIR, "nexus"))
 def test_release_staging_repos_skips_released(datafiles, responses, mocker, nexus2_obj_create, mock_get_credentials):
     """A released repository is skipped and the rest are still promoted."""
@@ -93,8 +92,6 @@ def test_release_staging_repos_skips_released(datafiles, responses, mocker, nexu
     closed_return = open("staging_activities_closed.xml").read()
 
     mocker.patch.object(cmd, "sleep")
-    # Before the fix the run stops at A and never uses B's responses.
-    responses.assert_all_requests_are_fired = False
 
     responses.add(responses.GET, f"{baseurl}/staging/repository/A/activity", released_return, status=200)
     responses.add(responses.GET, f"{baseurl}/staging/repository/B/activity", closed_return, status=200)
@@ -108,7 +105,6 @@ def test_release_staging_repos_skips_released(datafiles, responses, mocker, nexu
     assert json.loads(promotes[0].body) == {"data": {"stagedRepositoryIds": ["B"]}}
 
 
-@pytest.mark.xfail(strict=True, reason="#837: release exits at the first released repo")
 @pytest.mark.datafiles(os.path.join(FIXTURE_DIR, "nexus"))
 def test_release_staging_repos_all_released(datafiles, responses, mocker, nexus2_obj_create, mock_get_credentials):
     """With every repository already released, nothing is promoted."""
@@ -117,8 +113,6 @@ def test_release_staging_repos_all_released(datafiles, responses, mocker, nexus2
     released_return = open("staging_activities_released.xml").read()
 
     mocker.patch.object(cmd, "sleep")
-    # Before the fix the run stops at A and never uses B's response.
-    responses.assert_all_requests_are_fired = False
 
     responses.add(responses.GET, f"{baseurl}/staging/repository/A/activity", released_return, status=200)
     responses.add(responses.GET, f"{baseurl}/staging/repository/B/activity", released_return, status=200)
