@@ -151,7 +151,7 @@ def delete_images(ctx, settings, server, repo, pattern, yes):
 
 @nexus.command()
 @click.pass_context
-@click.argument("REPOS", type=str, nargs=-1)
+@click.argument("REPOS", type=str, nargs=-1, required=True)
 @click.option("-v", "--verify-only", "verify", is_flag=True, required=False)
 @click.option(
     "-s",

@@ -128,7 +128,6 @@ def test_release_staging_repos_all_released(datafiles, responses, mocker, nexus2
     assert not [call for call in responses.calls if call.request.method == "POST"]
 
 
-@pytest.mark.xfail(strict=True, reason="#844: nexus release accepts no repository IDs")
 def test_release_cli_requires_repos(cli_runner, mocker):
     """``nexus release`` with no repository IDs is a usage error."""
     release = mocker.patch("lftools_uv.nexus.cmd.release_staging_repos")
