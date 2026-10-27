@@ -30,6 +30,10 @@ from lftools_uv.output import echo
 log = logging.getLogger(__name__)
 
 
+class JenkinsBuildsUnavailableError(RuntimeError):
+    """A Jenkins server could not report its active builds."""
+
+
 def _silo_name(jenkins: str) -> str:
     """Derive the silo label used to namespace build identifiers."""
     if "jenkins." in jenkins and (".org" in jenkins or ".io" in jenkins):
@@ -59,9 +63,11 @@ def _build_id(silo: str, executable_url: str) -> str | None:
 def _fetch_builds_from(jenkins: str) -> list[str]:
     """Return the active build identifiers reported by a single Jenkins.
 
-    Returns an empty list when the server cannot be reached or its reply
-    cannot be parsed; the caller treats an unreachable Jenkins as having
-    no active builds.
+    Returns an empty list only when the server answers with a well-formed
+    reply that holds no builds.
+
+    :raises JenkinsBuildsUnavailableError: if the server cannot be reached,
+        answers with an error status, or its reply cannot be parsed.
     """
     params = "tree=computer[executors[currentExecutable[url]],oneOffExecutors[currentExecutable[url]]]"
     params += "&xpath=//url&wrapper=builds"
@@ -73,35 +79,31 @@ def _fetch_builds_from(jenkins: str) -> list[str]:
             headers={"Content-Type": "application/json"},
             timeout=30,
         )
-    except requests.exceptions.Timeout:
-        log.error("Timeout fetching data from %s", jenkins_url)
-        return []
+    except requests.exceptions.Timeout as e:
+        raise JenkinsBuildsUnavailableError(f"Timeout fetching data from {jenkins_url}") from e
     except requests.exceptions.RequestException as e:
-        log.error("Request failed for %s: %s", jenkins_url, e)
-        return []
+        raise JenkinsBuildsUnavailableError(f"Request failed for {jenkins_url}: {e}") from e
     except Exception as e:
-        log.error("Unexpected error fetching from %s: %s", jenkins_url, e)
-        return []
+        raise JenkinsBuildsUnavailableError(f"Unexpected error fetching from {jenkins_url}: {e}") from e
 
     if response.status_code != 200:
-        log.error("Failed to fetch data from %s with status code %s", jenkins_url, response.status_code)
-        return []
+        raise JenkinsBuildsUnavailableError(
+            f"Failed to fetch data from {jenkins_url} with status code {response.status_code}"
+        )
 
     try:
         data = response.json()
     except json.JSONDecodeError as e:
-        log.error("Failed to parse JSON from %s: %s", jenkins_url, e)
-        return []
+        raise JenkinsBuildsUnavailableError(f"Failed to parse JSON from {jenkins_url}: {e}") from e
 
     silo = _silo_name(jenkins)
     try:
         return [build for url in _executable_urls(data) if (build := _build_id(silo, url)) is not None]
     except (AttributeError, TypeError) as e:
         # A syntactically valid reply can still have an unexpected shape, for
-        # example {"computer": null}. Keep the documented fallback of treating
-        # such a server as having no active builds.
-        log.error("Unexpected response shape from %s: %s", jenkins_url, e)
-        return []
+        # example {"computer": null}. Its builds are unknown, so it cannot be
+        # treated as idle.
+        raise JenkinsBuildsUnavailableError(f"Unexpected response shape from {jenkins_url}: {e}") from e
 
 
 def _fetch_jenkins_builds(jenkins_urls: list[str]) -> list[str]:
@@ -109,6 +111,8 @@ def _fetch_jenkins_builds(jenkins_urls: list[str]) -> list[str]:
 
     :arg list jenkins_urls: List of Jenkins URLs to check.
     :returns: List of active build identifiers (silo-job-build format).
+    :raises JenkinsBuildsUnavailableError: if any server cannot report its
+        builds, since the builds from the others are not a complete list.
     """
     builds: list[str] = []
     for jenkins in jenkins_urls:
@@ -171,7 +175,12 @@ def cleanup(os_cloud: str, jenkins_urls: str | None = None) -> None:
 
     log.info("Checking Jenkins URLs for active builds: %s", " ".join(jenkins_url_list))
 
-    active_builds = _fetch_jenkins_builds(jenkins_url_list)
+    try:
+        active_builds = _fetch_jenkins_builds(jenkins_url_list)
+    except JenkinsBuildsUnavailableError as e:
+        log.error("%s", e)
+        log.error("Cannot determine active builds, no cluster was deleted")
+        sys.exit(1)
     log.info("Found %d active builds in Jenkins", len(active_builds))
 
     cloud = openstack.connection.from_config(cloud=os_cloud)

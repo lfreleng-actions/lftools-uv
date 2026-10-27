@@ -120,9 +120,8 @@ def test_fetch_jenkins_builds_http_error():
         status=404,
     )
 
-    builds = os_cluster._fetch_jenkins_builds([jenkins_url])
-
-    assert len(builds) == 0
+    with pytest.raises(os_cluster.JenkinsBuildsUnavailableError, match="status code 404"):
+        os_cluster._fetch_jenkins_builds([jenkins_url])
 
 
 @pytest.mark.parametrize(
@@ -136,12 +135,11 @@ def test_fetch_jenkins_builds_http_error():
     ids=["null-computer", "null-executors", "non-string-url", "top-level-list"],
 )
 @responses.activate
-def test_fetch_jenkins_builds_malformed_shape(payload, caplog):
-    """A valid JSON body with an unexpected shape yields no builds.
+def test_fetch_jenkins_builds_malformed_shape(payload):
+    """A valid JSON body with an unexpected shape raises.
 
-    Cluster cleanup treats an unusable Jenkins as having no active builds, so
-    a surprising response shape must report the problem and carry on rather
-    than aborting the whole cleanup run.
+    The builds of such a Jenkins are unknown, so cluster cleanup must not
+    treat it as having no active builds and delete clusters still in use.
     """
     jenkins_url = "https://jenkins.example.org"
     responses.add(
@@ -151,14 +149,12 @@ def test_fetch_jenkins_builds_malformed_shape(payload, caplog):
         status=200,
     )
 
-    builds = os_cluster._fetch_jenkins_builds([jenkins_url])
-
-    assert builds == []
-    assert any(record.levelno >= logging.ERROR for record in caplog.records)
+    with pytest.raises(os_cluster.JenkinsBuildsUnavailableError, match="Unexpected response shape"):
+        os_cluster._fetch_jenkins_builds([jenkins_url])
 
 
 @responses.activate
-def test_fetch_jenkins_builds_timeout(caplog):
+def test_fetch_jenkins_builds_timeout():
     """Test handling of timeout when fetching Jenkins builds."""
     jenkins_url = "https://jenkins.example.org"
     api_url = f"{jenkins_url}/computer/api/json"
@@ -169,14 +165,12 @@ def test_fetch_jenkins_builds_timeout(caplog):
         body=Exception("Timeout"),
     )
 
-    builds = os_cluster._fetch_jenkins_builds([jenkins_url])
-
-    assert len(builds) == 0
-    assert any(record.levelno >= logging.ERROR for record in caplog.records)
+    with pytest.raises(os_cluster.JenkinsBuildsUnavailableError, match="Timeout"):
+        os_cluster._fetch_jenkins_builds([jenkins_url])
 
 
 @responses.activate
-def test_fetch_jenkins_builds_invalid_json(caplog):
+def test_fetch_jenkins_builds_invalid_json():
     """Test handling of invalid JSON response."""
     jenkins_url = "https://jenkins.example.org"
     api_url = f"{jenkins_url}/computer/api/json"
@@ -188,10 +182,8 @@ def test_fetch_jenkins_builds_invalid_json(caplog):
         status=200,
     )
 
-    builds = os_cluster._fetch_jenkins_builds([jenkins_url])
-
-    assert len(builds) == 0
-    assert any(record.levelno >= logging.ERROR for record in caplog.records)
+    with pytest.raises(os_cluster.JenkinsBuildsUnavailableError, match="Failed to parse JSON"):
+        os_cluster._fetch_jenkins_builds([jenkins_url])
 
 
 @responses.activate
@@ -508,7 +500,6 @@ def _mock_cloud(mock_from_config, names):
     return mock_cloud
 
 
-@pytest.mark.xfail(strict=True, reason="#826: a failing Jenkins is treated as idle and clusters are deleted")
 @pytest.mark.parametrize(
     "reply",
     [
@@ -533,7 +524,6 @@ def test_cleanup_aborts_when_jenkins_fails(mock_from_config, reply, caplog):
     assert any(record.levelno >= logging.ERROR for record in caplog.records)
 
 
-@pytest.mark.xfail(strict=True, reason="#826: builds from the healthy Jenkins are taken as complete")
 @patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
 @responses.activate
 def test_cleanup_aborts_when_any_jenkins_fails(mock_from_config):
