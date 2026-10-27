@@ -55,12 +55,10 @@ def check_command(
     """
     try:
         if source.is_file():
-            result = check_license(str(source), license_file)
-            if result:
-                typer.echo(f"✅ License header found in {source}")
-            else:
-                typer.echo(f"❌ License header missing in {source}", err=True)
+            if check_license(license_file, str(source)):
+                typer.echo(f"❌ License header missing or incorrect in {source}", err=True)
                 raise typer.Exit(1) from None
+            typer.echo(f"✅ License header found in {source}")
         elif source.is_dir():
             # check_license_directory returns None but may exit with code 1 if issues found
             # We need to catch the SystemExit and handle it properly
@@ -76,6 +74,8 @@ def check_command(
         else:
             typer.echo(f"Error: {source} is not a valid file or directory", err=True)
             raise typer.Exit(1) from None
+    except typer.Exit:
+        raise
     except Exception as e:
         log.exception("License check failed")
         typer.echo(f"Error: License check failed: {e}", err=True)

@@ -74,14 +74,12 @@ def _typer_check(tmp_path, name, caplog):
     )
 
 
-@pytest.mark.xfail(strict=True, reason="#856: Typer single-file check is inverted")
 def test_typer_check_license_matching_header(tmp_path, caplog):
     """Typer ``license check`` passes a file whose header matches."""
     result = _typer_check(tmp_path, "license.py", caplog)
     assert result.exit_code == 0
 
 
-@pytest.mark.xfail(strict=True, reason="#856: Typer single-file check is inverted")
 @pytest.mark.parametrize("name", ["other_license.py", "no_license1.py"])
 def test_typer_check_license_wrong_or_missing_header(tmp_path, caplog, name):
     """Typer ``license check`` fails cleanly on a wrong or missing header."""
