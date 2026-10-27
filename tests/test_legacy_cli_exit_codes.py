@@ -29,7 +29,6 @@ def github_org():
         yield org
 
 
-@pytest.mark.xfail(strict=True, reason="#853: create-repo exits 0 on API error")
 def test_github_create_repo_api_error_exits_1(cli_runner, github_org):
     """``github create-repo`` exits 1 when GitHub rejects the repository."""
     github_org.create_repo.side_effect = GithubException(422, message="Validation Failed")
@@ -38,7 +37,6 @@ def test_github_create_repo_api_error_exits_1(cli_runner, github_org):
     assert result.exit_code == 1
 
 
-@pytest.mark.xfail(strict=True, reason="#853: create-team exits 0 on API error")
 @pytest.mark.parametrize("with_repo", [False, True])
 def test_github_create_team_api_error_exits_1(cli_runner, github_org, with_repo):
     """``github create-team`` exits 1 when GitHub rejects the team."""
@@ -54,7 +52,6 @@ def test_github_create_team_api_error_exits_1(cli_runner, github_org, with_repo)
     assert result.exit_code == 1
 
 
-@pytest.mark.xfail(strict=True, reason="#864: subproject-delete exits 0 on API error")
 @pytest.mark.parametrize(
     "error",
     [ReadTheDocsNotFoundError("not found"), ReadTheDocsError("server error")],

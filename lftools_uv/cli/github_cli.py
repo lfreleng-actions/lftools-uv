@@ -140,6 +140,7 @@ def createrepo(ctx, organization, repository, description, has_issues, has_proje
         )
     except GithubException as ghe:
         log.exception(ghe)
+        sys.exit(1)
 
 
 @click.command(name="update-repo")
@@ -266,12 +267,14 @@ def createteam(ctx, organization, name, repo, privacy):
             org.create_team(name=name, repo_names=repos, privacy=privacy)
         except GithubException as ghe:
             log.exception(ghe)
+            sys.exit(1)
 
     if not repo:
         try:
             org.create_team(name=name, privacy=privacy)
         except GithubException as ghe:
             log.exception(ghe)
+            sys.exit(1)
 
 
 @click.command(name="user")
