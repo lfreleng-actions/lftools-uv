@@ -424,8 +424,10 @@ def test_cleanup_delete_error(mock_from_config, mock_fetch_builds, caplog):
     # Make delete raise an error
     mock_cloud.delete_coe_cluster.side_effect = OpenStackCloudException("Delete failed")
 
-    # Call cleanup - should not exit, just log error
-    os_cluster.cleanup("test-cloud", jenkins_urls="https://jenkins.example.org")
+    with pytest.raises(SystemExit) as exc_info:
+        os_cluster.cleanup("test-cloud", jenkins_urls="https://jenkins.example.org")
+
+    assert exc_info.value.code == 1
 
     assert "Failed to delete cluster orphaned-cluster" in caplog.text
     assert any(record.levelno >= logging.ERROR for record in caplog.records)
@@ -552,7 +554,6 @@ def test_cleanup_proceeds_when_jenkins_is_idle(mock_from_config):
     mock_cloud.delete_coe_cluster.assert_called_once_with("csit-job-12")
 
 
-@pytest.mark.xfail(strict=True, reason="#827: a failed cluster delete still exits 0")
 @patch("lftools_uv.openstack.cluster._fetch_jenkins_builds", return_value=[])
 @patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
 def test_cleanup_exits_1_after_failed_delete(mock_from_config, _mock_fetch_builds, caplog):

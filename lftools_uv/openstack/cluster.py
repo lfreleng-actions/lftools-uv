@@ -160,7 +160,8 @@ def cleanup(os_cloud: str, jenkins_urls: str | None = None) -> None:
 
     Scans for COE clusters not in use by active Jenkins builds and removes them.
     Clusters with names containing '-managed-prod-k8s-' or '-managed-test-k8s-'
-    are preserved as they are long-lived managed clusters.
+    are preserved as they are long-lived managed clusters. Exits non-zero if
+    any orphaned cluster could not be deleted.
 
     :arg str os_cloud: Cloud name as defined in OpenStack clouds.yaml.
     :arg str jenkins_urls: Space-separated list of Jenkins URLs to check for active builds.
@@ -185,6 +186,7 @@ def cleanup(os_cloud: str, jenkins_urls: str | None = None) -> None:
 
     cloud = openstack.connection.from_config(cloud=os_cloud)
 
+    failed: list[str] = []
     try:
         clusters = cloud.list_coe_clusters()
         cluster_names = [cluster.name for cluster in clusters]
@@ -210,7 +212,7 @@ def cleanup(os_cloud: str, jenkins_urls: str | None = None) -> None:
                 log.info("Successfully deleted cluster: %s", cluster_name)
             except OpenStackCloudException as e:
                 log.error("Failed to delete cluster %s: %s", cluster_name, e)
-                continue
+                failed.append(cluster_name)
 
         log.info("Deleted %d orphaned cluster(s)", deleted_count)
 
@@ -221,4 +223,8 @@ def cleanup(os_cloud: str, jenkins_urls: str | None = None) -> None:
         # Fallback if COE operations are not available
         log.error("COE cluster operations not supported by this OpenStack SDK version")
         log.error("Please ensure openstacksdk >= 4.0.0 is installed")
+        sys.exit(1)
+
+    if failed:
+        log.error("Failed to delete %d orphaned cluster(s): %s", len(failed), ", ".join(failed))
         sys.exit(1)
