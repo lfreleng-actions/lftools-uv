@@ -257,39 +257,37 @@ class Nexus3(client.RestApi):
         return {}
 
     def list_tags(self) -> list[str] | str:
-        """List all tags."""
+        """List all tags.
+
+        Raises:
+            requests.HTTPError: If Nexus rejects a page, or a follow-up page
+                comes back empty.
+        """
         response: ApiResponse = self.get("service/rest/v1/tags")
         if not isinstance(response, tuple):
             response.raise_for_status()
             return "There are no tags"
 
-        body: dict[str, object] = self._json_body(response)
         list_of_tags: list[str] = []
-        token: object = body.get("continuationToken")
+        while True:
+            response[0].raise_for_status()
+            body: dict[str, object] = self._json_body(response)
+            items: object = body.get("items", [])
+            if isinstance(items, list):
+                for raw_tag in cast(_LIST_OBJECT_TYPE, items):
+                    tag: dict[str, object] = self._as_dict(raw_tag)
+                    if tag:
+                        list_of_tags.append(str(tag.get("name", "")))
 
-        if token is not None:
-            result: dict[str, object] = body
-            while token is not None:
-                items: object = result.get("items", [])
-                if isinstance(items, list):
-                    for raw_tag in cast(_LIST_OBJECT_TYPE, items):
-                        tag: dict[str, object] = self._as_dict(raw_tag)
-                        if tag:
-                            list_of_tags.append(str(tag.get("name", "")))
-                cont_token: object = result.get("continuationToken")
-                next_response: ApiResponse = self.get(f"service/rest/v1/tags?continuationToken={str(cont_token)}")
-                if isinstance(next_response, tuple):
-                    result = self._json_body(next_response)
-                    token = result.get("continuationToken")
-                else:
-                    break
-        else:
-            items_obj: object = body.get("items", [])
-            if isinstance(items_obj, list):
-                for raw_tag in cast(_LIST_OBJECT_TYPE, items_obj):
-                    tag_dict: dict[str, object] = self._as_dict(raw_tag)
-                    if tag_dict:
-                        list_of_tags.append(str(tag_dict.get("name", "")))
+            token: object = body.get("continuationToken")
+            if token is None:
+                break
+            next_response: ApiResponse = self.get(f"service/rest/v1/tags?continuationToken={token}")
+            if not isinstance(next_response, tuple):
+                next_response.raise_for_status()
+                msg: str = f"Empty response for the page of tags after continuation token {token}"
+                raise requests.HTTPError(msg, response=next_response)
+            response = next_response
 
         if list_of_tags:
             return list_of_tags

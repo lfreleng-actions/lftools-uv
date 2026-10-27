@@ -59,7 +59,6 @@ def test_delete_user_failure_raises(nexus3, resp):
         nexus3.delete_user("alice")
 
 
-@pytest.mark.xfail(strict=True, reason="#846: the last page of tags is dropped")
 def test_list_tags_returns_every_page(nexus3):
     """Tags on every page reach the result, the last page's included."""
     pages = [_tags_page(["t1", "t2"], "a"), _tags_page(["t3", "t4"], "b"), _tags_page(["t5"], None)]
@@ -79,7 +78,6 @@ def test_list_tags_empty(nexus3):
         assert nexus3.list_tags() == "There are no tags"
 
 
-@pytest.mark.xfail(strict=True, reason="#846: a failed or empty follow-up page ends the listing silently")
 @pytest.mark.parametrize(
     "second_page",
     [_response(500, {"message": "boom"}), _response(200)],
