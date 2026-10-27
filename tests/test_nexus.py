@@ -14,9 +14,10 @@ import os
 import re
 
 import pytest
+import requests
 
 from lftools_uv import cli
-from lftools_uv.nexus import cmd, util
+from lftools_uv.nexus import Nexus, cmd, util
 
 FIXTURE_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "fixtures")
 
@@ -128,6 +129,64 @@ def test_release_cli_requires_repos(cli_runner, mocker):
     result = cli_runner.invoke(cli.cli, ["nexus", "release", "-s", "https://nexus.example.org"], obj={})
     assert result.exit_code == 2
     release.assert_not_called()
+
+
+def _http_response(status, body=None):
+    """Build a ``requests.Response`` with the given status and JSON body."""
+    resp = requests.Response()
+    resp.status_code = status
+    resp.url = "https://nexus.example.org/"
+    resp._content = json.dumps(body).encode("utf-8") if body is not None else b""
+    return resp
+
+
+@pytest.fixture
+def repo_group_nexus(mocker):
+    """A legacy ``Nexus`` whose ``requests`` calls are mocked."""
+    mock_requests = mocker.patch("lftools_uv.nexus.requests")
+    mock_requests.get.return_value = _http_response(200)
+    nexus = Nexus("https://nexus.example.org", "user", "password")
+    mock_requests.reset_mock()
+    return nexus, mock_requests
+
+
+def test_update_repo_group_details_raises_on_error(repo_group_nexus):
+    """A rejected repo group update raises ``HTTPError``."""
+    nexus, mock_requests = repo_group_nexus
+    mock_requests.put.return_value = _http_response(500, {"errors": ["boom"]})
+    with pytest.raises(requests.HTTPError):
+        nexus.update_repo_group_details("staging", {"repositories": []})
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda nexus: nexus.get_repo_group("Staging Repositories"),
+        lambda nexus: nexus.get_repo_group_details("staging"),
+    ],
+    ids=["get_repo_group", "get_repo_group_details"],
+)
+def test_repo_group_get_raises_on_error(repo_group_nexus, call):
+    """A failed repo group lookup raises ``HTTPError``."""
+    nexus, mock_requests = repo_group_nexus
+    mock_requests.get.return_value = _http_response(500, {"data": [{"name": "Staging Repositories", "id": "s"}]})
+    with pytest.raises(requests.HTTPError):
+        call(nexus)
+
+
+def test_repo_group_success(repo_group_nexus):
+    """Successful repo group calls return their data."""
+    nexus, mock_requests = repo_group_nexus
+    mock_requests.get.side_effect = [
+        _http_response(200, {"data": [{"name": "Staging Repositories", "id": "staging"}]}),
+        _http_response(200, {"data": {"repositories": []}}),
+    ]
+    mock_requests.put.return_value = _http_response(200)
+
+    assert nexus.get_repo_group("Staging Repositories") == "staging"
+    assert nexus.get_repo_group_details("staging") == {"repositories": []}
+    nexus.update_repo_group_details("staging", {"repositories": []})
+    mock_requests.put.assert_called_once()
 
 
 def test_create_repo_target_regex():

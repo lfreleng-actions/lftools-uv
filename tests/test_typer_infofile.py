@@ -8,7 +8,7 @@ lftools-uv does not install, and three of them name commands that exist in no
 front-end. A hint must name a command the user can run, or say plainly that
 none exists.
 
-Whether the placeholders should exit non-zero is tracked separately in #857.
+The placeholders do no work, so each exits 1 with its guidance on stderr.
 """
 
 import re
@@ -48,3 +48,14 @@ def test_placeholders_cover_every_typer_command():
     """Guard the parametrisation: a new placeholder must be checked too."""
     registered = {cmd.name for cmd in infofile_app.registered_commands}
     assert registered == set(PLACEHOLDER_ARGS)
+
+
+@pytest.mark.parametrize("command", PLACEHOLDER_ARGS)
+def test_placeholder_exits_non_zero_with_note_on_stderr(command):
+    """A placeholder does no work, so it must not report success."""
+    result = runner.invoke(infofile_app, [command, *PLACEHOLDER_ARGS[command]])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "Note: This command is" in result.stderr
+    assert "Traceback" not in result.output

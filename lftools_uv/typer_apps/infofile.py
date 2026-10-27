@@ -59,10 +59,13 @@ def create_info_file(
     """
     try:
         # For now, provide guidance on using the original command
-        typer.echo(f"Creating INFO file for project: {gerrit_project}")
-        typer.echo(f"Gerrit URL: {gerrit_url}")
-        typer.echo(_MSG_USE_LEGACY_CLI)
-        typer.echo("Use: LEGACY_CLI=1 lftools-uv infofile create-info-file")
+        typer.echo(f"Creating INFO file for project: {gerrit_project}", err=True)
+        typer.echo(f"Gerrit URL: {gerrit_url}", err=True)
+        typer.echo(_MSG_USE_LEGACY_CLI, err=True)
+        typer.echo("Use: LEGACY_CLI=1 lftools-uv infofile create-info-file", err=True)
+        raise typer.Exit(1)
+    except typer.Exit:
+        raise
     except Exception as e:
         log.exception("Failed to create info file")
         typer.echo(f"Error: Failed to create info file: {e}", err=True)
@@ -90,11 +93,14 @@ def get_committers(
         lftools-uv infofile get-committers gerrit.example.com project/name ldap-group INFO.yaml
     """
     try:
-        typer.echo(f"Getting committers for project: {gerrit_project}")
-        typer.echo(f"LDAP group: {ldap_group}")
-        typer.echo(f"INFO file: {info_file}")
-        typer.echo(_MSG_USE_LEGACY_CLI)
-        typer.echo("Use: LEGACY_CLI=1 lftools-uv infofile get-committers")
+        typer.echo(f"Getting committers for project: {gerrit_project}", err=True)
+        typer.echo(f"LDAP group: {ldap_group}", err=True)
+        typer.echo(f"INFO file: {info_file}", err=True)
+        typer.echo(_MSG_USE_LEGACY_CLI, err=True)
+        typer.echo("Use: LEGACY_CLI=1 lftools-uv infofile get-committers", err=True)
+        raise typer.Exit(1)
+    except typer.Exit:
+        raise
     except Exception as e:
         log.exception("Failed to get committers")
         typer.echo(f"Error: Failed to get committers: {e}", err=True)
@@ -114,8 +120,11 @@ def validate_info_file(
         lftools-uv infofile validate-info-file INFO.yaml
     """
     try:
-        typer.echo(f"Validating INFO file: {info_file}")
-        typer.echo(_MSG_NOT_IMPLEMENTED)
+        typer.echo(f"Validating INFO file: {info_file}", err=True)
+        typer.echo(_MSG_NOT_IMPLEMENTED, err=True)
+        raise typer.Exit(1)
+    except typer.Exit:
+        raise
     except Exception as e:
         log.exception("INFO file validation failed")
         typer.echo(f"Error: INFO file validation failed: {e}", err=True)
@@ -135,8 +144,11 @@ def check_committers(
         lftools-uv infofile check-committers INFO.yaml
     """
     try:
-        typer.echo(f"Checking committers in INFO file: {info_file}")
-        typer.echo(_MSG_NOT_IMPLEMENTED)
+        typer.echo(f"Checking committers in INFO file: {info_file}", err=True)
+        typer.echo(_MSG_NOT_IMPLEMENTED, err=True)
+        raise typer.Exit(1)
+    except typer.Exit:
+        raise
     except Exception as e:
         log.exception("Committers check failed")
         typer.echo(f"Error: Committers check failed: {e}", err=True)
@@ -156,8 +168,11 @@ def match_ldap(
         lftools-uv infofile match-ldap INFO.yaml
     """
     try:
-        typer.echo(f"Matching LDAP information for INFO file: {info_file}")
-        typer.echo(_MSG_NOT_IMPLEMENTED)
+        typer.echo(f"Matching LDAP information for INFO file: {info_file}", err=True)
+        typer.echo(_MSG_NOT_IMPLEMENTED, err=True)
+        raise typer.Exit(1)
+    except typer.Exit:
+        raise
     except Exception as e:
         log.exception("LDAP matching failed")
         typer.echo(f"Error: LDAP matching failed: {e}", err=True)
