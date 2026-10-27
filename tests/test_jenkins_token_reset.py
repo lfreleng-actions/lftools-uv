@@ -60,7 +60,6 @@ def _patch_get_token(**kwargs):
     return stack
 
 
-@pytest.mark.xfail(strict=True, reason="#849: a failed single-server reset prints None and exits 0")
 @pytest.mark.parametrize("front_end", FRONT_ENDS)
 def test_single_server_reset_failure_exits_1(front_end, tmp_path):
     """A failed reset of one server exits 1 and prints no token."""
@@ -71,7 +70,6 @@ def test_single_server_reset_failure_exits_1(front_end, tmp_path):
     assert result.stdout == ""
 
 
-@pytest.mark.xfail(strict=True, reason="#849: a failed multi-server reset exits 0")
 @pytest.mark.parametrize("front_end", FRONT_ENDS)
 @pytest.mark.parametrize("args", [[], ["srv1", "srv2"]], ids=["all", "listed"])
 def test_multi_server_reset_failure_exits_1(front_end, args, tmp_path):

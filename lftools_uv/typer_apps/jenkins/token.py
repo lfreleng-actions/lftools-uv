@@ -157,6 +157,9 @@ def token_reset(
             cfg_sections = config.sections()
         elif len(servers) == 1:
             key = _reset_key(config, servers[0])
+            if key is None:
+                log.error(f"Failed to reset API key for {servers[0]}")
+                raise typer.Exit(1)
             echo(key)
             return
         else:
@@ -177,6 +180,10 @@ def token_reset(
         log.info("Update configurations complete.")
         log.info(f"Success: {success}")
         log.info(f"Failed: {fail}")
+        if fail:
+            raise typer.Exit(1)
+    except typer.Exit:
+        raise
     except Exception:
         log.exception("Failed to reset tokens")
         raise typer.Exit(1) from None

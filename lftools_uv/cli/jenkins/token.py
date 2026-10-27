@@ -148,6 +148,9 @@ def reset(ctx, servers):
         cfg_sections = config.sections()
     elif len(servers) == 1:
         key = _reset_key(config, servers[0])
+        if key is None:
+            log.error(f"Failed to reset API key for {servers[0]}")
+            sys.exit(1)
         echo(key)
         return
     else:
@@ -168,6 +171,8 @@ def reset(ctx, servers):
     log.info("Update configurations complete.")
     log.info(f"Success: {success}")
     log.info(f"Failed: {fail}")
+    if fail:
+        sys.exit(1)
 
 
 token.add_command(change)
