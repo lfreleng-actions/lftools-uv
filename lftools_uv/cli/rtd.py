@@ -24,6 +24,7 @@ __author__ = "DW Talton"
 
 import json
 import logging
+import sys
 from pprint import pformat
 
 import click
@@ -232,10 +233,10 @@ def subproject_delete(ctx, project_slug, subproject_slug):
         _ = r.subproject_delete(project_slug, subproject_slug)
     except ReadTheDocsNotFoundError:
         log.error("Request failed. Is there a subproject relationship?")
-        return
+        sys.exit(1)
     except ReadTheDocsError:
         log.exception("Request failed")
-        return
+        sys.exit(1)
     log.info(f"Successfully removed the {project_slug} {subproject_slug} relationship")
 
 

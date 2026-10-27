@@ -9,11 +9,13 @@
 ##############################################################################
 """Test nexus command."""
 
+import json
 import os
 import re
 
 import pytest
 
+from lftools_uv import cli
 from lftools_uv.nexus import cmd, util
 
 FIXTURE_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "fixtures")
@@ -78,6 +80,54 @@ def test_release_staging_repos(datafiles, responses, mocker, nexus2_obj_create, 
     responses.add(responses.GET, activity_url, released_return, status=200)
 
     cmd.release_staging_repos(tuple(repos), False)
+
+
+@pytest.mark.datafiles(os.path.join(FIXTURE_DIR, "nexus"))
+def test_release_staging_repos_skips_released(datafiles, responses, mocker, nexus2_obj_create, mock_get_credentials):
+    """A released repository is skipped and the rest are still promoted."""
+    os.chdir(str(datafiles))
+    baseurl = "http://nexus.localhost/service/local"
+    request_url = f"{baseurl}/staging/bulk/promote"
+    released_return = open("staging_activities_released.xml").read()
+    closed_return = open("staging_activities_closed.xml").read()
+
+    mocker.patch.object(cmd, "sleep")
+
+    responses.add(responses.GET, f"{baseurl}/staging/repository/A/activity", released_return, status=200)
+    responses.add(responses.GET, f"{baseurl}/staging/repository/B/activity", closed_return, status=200)
+    responses.add(responses.POST, request_url, status=201)
+    responses.add(responses.GET, f"{baseurl}/staging/repository/B/activity", released_return, status=200)
+
+    cmd.release_staging_repos(("A", "B"), False)
+
+    promotes = [call.request for call in responses.calls if call.request.url == request_url]
+    assert len(promotes) == 1
+    assert json.loads(promotes[0].body) == {"data": {"stagedRepositoryIds": ["B"]}}
+
+
+@pytest.mark.datafiles(os.path.join(FIXTURE_DIR, "nexus"))
+def test_release_staging_repos_all_released(datafiles, responses, mocker, nexus2_obj_create, mock_get_credentials):
+    """With every repository already released, nothing is promoted."""
+    os.chdir(str(datafiles))
+    baseurl = "http://nexus.localhost/service/local"
+    released_return = open("staging_activities_released.xml").read()
+
+    mocker.patch.object(cmd, "sleep")
+
+    responses.add(responses.GET, f"{baseurl}/staging/repository/A/activity", released_return, status=200)
+    responses.add(responses.GET, f"{baseurl}/staging/repository/B/activity", released_return, status=200)
+
+    cmd.release_staging_repos(("A", "B"), False)
+
+    assert not [call for call in responses.calls if call.request.method == "POST"]
+
+
+def test_release_cli_requires_repos(cli_runner, mocker):
+    """``nexus release`` with no repository IDs is a usage error."""
+    release = mocker.patch("lftools_uv.nexus.cmd.release_staging_repos")
+    result = cli_runner.invoke(cli.cli, ["nexus", "release", "-s", "https://nexus.example.org"], obj={})
+    assert result.exit_code == 2
+    release.assert_not_called()
 
 
 def test_create_repo_target_regex():

@@ -9,11 +9,15 @@
 ##############################################################################
 """Test license command."""
 
+import logging
 import os
+import shutil
 
 import pytest
+from typer.testing import CliRunner
 
 from lftools_uv import cli
+from lftools_uv.typer_apps.license import license_app
 
 FIXTURE_DIR = os.path.join(
     os.path.dirname(os.path.realpath(__file__)),
@@ -54,3 +58,31 @@ def test_check_license_directory(cli_runner, datafiles):
     os.remove("no_license2.py")
     result = cli_runner.invoke(cli.cli, ["license", "check-dir", "."], obj={})
     assert result.exit_code == 0
+
+
+def _typer_check(tmp_path, name, caplog):
+    """Run the Typer ``license check`` on one file copied into tmp_path."""
+    for fixture in ("license-header.txt", "license.py", "no_license1.py"):
+        shutil.copy(os.path.join(FIXTURE_DIR, "license", fixture), tmp_path)
+    (tmp_path / "other_license.py").write_text(
+        '# This file carries a different licence header.\n"""Test code file with a different license header."""\n'
+    )
+    caplog.set_level(logging.DEBUG)
+    return CliRunner().invoke(
+        license_app,
+        ["check", str(tmp_path / name), "--license", str(tmp_path / "license-header.txt")],
+    )
+
+
+def test_typer_check_license_matching_header(tmp_path, caplog):
+    """Typer ``license check`` passes a file whose header matches."""
+    result = _typer_check(tmp_path, "license.py", caplog)
+    assert result.exit_code == 0
+
+
+@pytest.mark.parametrize("name", ["other_license.py", "no_license1.py"])
+def test_typer_check_license_wrong_or_missing_header(tmp_path, caplog, name):
+    """Typer ``license check`` fails cleanly on a wrong or missing header."""
+    result = _typer_check(tmp_path, name, caplog)
+    assert result.exit_code == 1
+    assert "License check failed" not in caplog.text

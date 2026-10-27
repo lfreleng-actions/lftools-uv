@@ -429,6 +429,7 @@ def release_staging_repos(repos: tuple[str, ...], verify: bool, nexus_url: str =
     """
     credentials = get_credentials(None, nexus_url)
     _nexus = Nexus(credentials["nexus"], credentials["user"], credentials["password"])
+    to_release = []
 
     for repo in repos:
         # Verify repo before releasing
@@ -488,7 +489,7 @@ def release_staging_repos(repos: tuple[str, ...], verify: bool, nexus_url: str =
         if len(successes) != 0:
             log.info("\n".join(map(str, successes)))
             log.info("Nothing to do: Repository already released")
-            sys.exit(0)
+            continue
 
         if len(is_repo_closed) == 0:
             log.info(is_repo_closed)
@@ -498,10 +499,11 @@ def release_staging_repos(repos: tuple[str, ...], verify: bool, nexus_url: str =
             log.info(f"PASS: Repository {is_repo_closed[0]} is in closed state")
 
         log.info(f"Successfully verified {str(repo)}")
+        to_release.append(repo)
 
     if not verify:
         log.info("running release")
-        for repo in repos:
+        for repo in to_release:
             data = {"data": {"stagedRepositoryIds": [repo]}}
             log.debug("Sending staging repository release request")
             request_url = f"{_nexus.baseurl}/staging/bulk/promote"
