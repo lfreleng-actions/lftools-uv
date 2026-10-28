@@ -131,7 +131,6 @@ def test_release_cli_requires_repos(cli_runner, mocker):
     release.assert_not_called()
 
 
-@pytest.mark.xfail(strict=True, reason="#845: nexus release waits for ever")
 @pytest.mark.datafiles(os.path.join(FIXTURE_DIR, "nexus"))
 def test_release_staging_repos_gives_up(datafiles, responses, mocker, nexus2_obj_create, mock_get_credentials):
     """A release Nexus never finishes raises ``TimeoutError`` after ``max_wait``."""
@@ -147,11 +146,10 @@ def test_release_staging_repos_gives_up(datafiles, responses, mocker, nexus2_obj
     responses.add(responses.GET, activity_url, open("staging_activities_releasing.xml").read(), status=200)
 
     with pytest.raises(TimeoutError, match="A"):
-        cmd.release_staging_repos(("A",), False, max_wait=1)  # type: ignore[call-arg]
+        cmd.release_staging_repos(("A",), False, max_wait=1)
     assert sleep.call_count <= 5
 
 
-@pytest.mark.xfail(strict=True, reason="#845: nexus release requests have no timeout")
 @pytest.mark.datafiles(os.path.join(FIXTURE_DIR, "nexus"))
 def test_release_staging_repos_requests_time_out(datafiles, responses, mocker, nexus2_obj_create, mock_get_credentials):
     """Every staging request made during a release carries a timeout."""
@@ -174,7 +172,6 @@ def test_release_staging_repos_requests_time_out(datafiles, responses, mocker, n
     assert all(call.kwargs.get("timeout") for call in staging_calls)
 
 
-@pytest.mark.xfail(strict=True, reason="#845: a slow poll ends the release wait")
 @pytest.mark.datafiles(os.path.join(FIXTURE_DIR, "nexus"))
 def test_release_staging_repos_retries_slow_poll(datafiles, responses, mocker, nexus2_obj_create, mock_get_credentials):
     """A poll that times out is retried like a connection error."""
@@ -195,7 +192,6 @@ def test_release_staging_repos_retries_slow_poll(datafiles, responses, mocker, n
     assert len([call for call in responses.calls if call.request.url == activity_url]) == 3
 
 
-@pytest.mark.xfail(strict=True, reason="#845: nexus release has no --max-wait option")
 def test_release_cli_passes_max_wait(cli_runner, mocker):
     """``nexus release --max-wait`` passes the limit on."""
     release = mocker.patch("lftools_uv.nexus.cmd.release_staging_repos")

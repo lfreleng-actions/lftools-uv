@@ -162,11 +162,18 @@ def delete_images(ctx, settings, server, repo, pattern, yes):
         "This will override any URL set in settings.yaml."
     ),
 )
-def release(ctx, repos, verify, server):
+@click.option(
+    "--max-wait",
+    type=click.IntRange(min=1),
+    default=60,
+    show_default=True,
+    help="Minutes to wait for Nexus to release each repository before giving up.",
+)
+def release(ctx, repos, verify, server, max_wait):
     """Release one or more staging repositories."""
     if not server and NEXUS_URL_ENV in environ:
         server = environ[NEXUS_URL_ENV]
-    nexuscmd.release_staging_repos(repos, verify, server)
+    nexuscmd.release_staging_repos(repos, verify, server, max_wait=max_wait)
 
 
 @docker.command(name="releasedockerhub")
