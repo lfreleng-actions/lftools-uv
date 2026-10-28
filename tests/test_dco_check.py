@@ -30,8 +30,6 @@ AUTHOR_NAME = "Scratch Author"
 AUTHOR_EMAIL = "scratch@example.org"
 OTHER_SIGNOFF = "Signed-off-by: Someone <other@example.org>"
 
-XFAIL_944 = pytest.mark.xfail(strict=True, reason="#944: dco match reports matching sign-offs")
-
 
 class Result(Protocol):
     """The parts of a Click or Typer test result these tests read."""
@@ -170,13 +168,11 @@ class TestCheckHead:
 class TestMatchMismatches:
     """``match`` reports only sign-offs that differ from the author."""
 
-    @XFAIL_944
     def test_matching_signoff_passes(self, run: Runner, repo: tuple[Path, str]) -> None:
         work, _ = repo
         result = run("match", str(work))
         assert result.exit_code == 0
 
-    @XFAIL_944
     def test_reports_only_mismatch(self, run: Runner, repo: tuple[Path, str]) -> None:
         work, first = repo
         mismatched = _commit(work, "second.txt", signoff=OTHER_SIGNOFF)
@@ -186,7 +182,6 @@ class TestMatchMismatches:
         assert mismatched in result.output
         assert first not in result.output
 
-    @XFAIL_944
     def test_exempted_mismatch_passes(self, run: Runner, repo: tuple[Path, str]) -> None:
         work, _ = repo
         mismatched = _commit(work, "second.txt", signoff=OTHER_SIGNOFF)
