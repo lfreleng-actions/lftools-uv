@@ -16,7 +16,6 @@ __author__ = "DW Talton"
 
 import json
 import logging
-import sys
 from typing import cast
 
 import lftools_uv.api.client as client
@@ -61,32 +60,35 @@ class Nexus2(client.RestApi):
             return cast("dict[str, object]", obj)
         return {}
 
-    @staticmethod
-    def _data_items(response: ApiResponse) -> list[dict[str, object]]:
+    @classmethod
+    def _data_items(cls, response: ApiResponse, action: str) -> list[dict[str, object]]:
         """Extract the ``data`` list from a Nexus 2 JSON envelope.
 
         Nexus 2 wraps most collection responses in::
 
             {"data": [ ... ]}
 
-        Returns the inner list of dicts, or an empty list when the
-        body cannot be parsed.
+        Returns the inner list of dicts.
+
+        Raises:
+            requests.HTTPError: If the status is not 200.
+            ValueError: If the body is not the ``data`` envelope.
         """
-        if not isinstance(response, tuple):
-            response.raise_for_status()
-            return []
-        body: client.ApiBody = response[1]
-        if isinstance(body, dict):
-            data: object = body.get("data", [])
-            if isinstance(data, list):
-                typed_data: list[object] = cast(_LIST_OBJECT_TYPE, data)
-                return [cast("dict[str, object]", item) for item in typed_data if isinstance(item, dict)]
-        return []
+        cls._require_status(response, action, 200)
+        if isinstance(response, tuple):
+            body: client.ApiBody = response[1]
+            if isinstance(body, dict):
+                data: object = body.get("data")
+                if isinstance(data, list):
+                    typed_data: list[object] = cast(_LIST_OBJECT_TYPE, data)
+                    return [cast("dict[str, object]", item) for item in typed_data if isinstance(item, dict)]
+        msg: str = f"{action} failed: response has no data list"
+        raise ValueError(msg)
 
     def privilege_list(self) -> list[list[object]]:
         """List privileges."""
         response: ApiResponse = self.get("service/local/privileges")
-        result: list[dict[str, object]] = self._data_items(response)
+        result: list[dict[str, object]] = self._data_items(response, "List privileges")
 
         privilege_list: list[list[object]] = []
         for privilege in result:
@@ -116,13 +118,8 @@ class Nexus2(client.RestApi):
 
         json_data: str = json.dumps(data)
         response: ApiResponse = self.post("service/local/privileges_target", data=json_data)
-
-        if isinstance(response, tuple):
-            if response[0].status_code == 201:
-                return "Privilege successfully created."
-        else:
-            response.raise_for_status()
-        return "Failed to create privilege."
+        self._require_status(response, f"Create privilege {name}", 201)
+        return "Privilege successfully created."
 
     def privilege_delete(self, privilege_id: str) -> str:
         """Delete a privilege.
@@ -130,16 +127,13 @@ class Nexus2(client.RestApi):
         :param privilege_id: the ID of the privilege (from privilege list)
         """
         response: ApiResponse = self.delete(f"service/local/privileges/{privilege_id}")
-        resp = self._response_of(response)
-
-        if resp.status_code == 204:
-            return "Privilege successfully deleted."
-        return f"Failed to delete privilege {privilege_id}."
+        self._require_status(response, f"Delete privilege {privilege_id}", 204)
+        return "Privilege successfully deleted."
 
     def repo_list(self) -> list[list[object]]:
         """Get a list of repositories."""
         response: ApiResponse = self.get("service/local/repositories")
-        result: list[dict[str, object]] = self._data_items(response)
+        result: list[dict[str, object]] = self._data_items(response, "List repositories")
 
         repo_list: list[list[object]] = []
         for repo in result:
@@ -222,13 +216,8 @@ class Nexus2(client.RestApi):
         data: dict[str, dict[str, object]] = {"data": inner}
         json_data: str = json.dumps(data)
         response: ApiResponse = self.post("service/local/repositories", data=json_data)
-
-        if isinstance(response, tuple):
-            if response[0].status_code == 201:
-                return "Repo successfully created."
-            return "Failed to create new repository"
-        response.raise_for_status()
-        return "Failed to create new repository"
+        self._require_status(response, f"Create repository {repo_id}", 201)
+        return "Repo successfully created."
 
     def repo_delete(self, repo_id: str) -> str:
         """Permanently delete a repo.
@@ -236,34 +225,16 @@ class Nexus2(client.RestApi):
         :param repo_id: the ID of the repo from repo list.
         """
         response: ApiResponse = self.delete(f"service/local/repositories/{repo_id}")
-        resp = self._response_of(response)
-
-        if resp.status_code == 204:
-            return "Repo successfully deleted."
-        log.error("Failed to delete repository %s", repo_id)
-        sys.exit(1)
+        self._require_status(response, f"Delete repository {repo_id}", 204)
+        return "Repo successfully deleted."
 
     def role_list(self) -> list[list[object]]:
         """List all roles."""
         response: ApiResponse = self.get("service/local/roles")
-        if not isinstance(response, tuple):
-            response.raise_for_status()
-            return []
+        result: list[dict[str, object]] = self._data_items(response, "List roles")
 
-        body: client.ApiBody = response[1]
-        if not isinstance(body, dict):
-            return []
-
-        data_val: object = body.get("data", [])
-        if not isinstance(data_val, list):
-            return []
-
-        typed_data: list[object] = cast(_LIST_OBJECT_TYPE, data_val)
         role_list: list[list[object]] = []
-        for raw_role in typed_data:
-            role: dict[str, object] = self._as_dict(raw_role)
-            if not role:
-                continue
+        for role in result:
             roles_string: str = ""
             privs_string: str = ""
             roles_obj: object = role.get("roles")
@@ -287,7 +258,7 @@ class Nexus2(client.RestApi):
         role_description: str,
         roles_list: str | None = None,
         privs_list: str | None = None,
-    ) -> str | ApiResponse:
+    ) -> str:
         """Create a new role.
 
         :param role_id: the ID name of the role (string)
@@ -313,13 +284,8 @@ class Nexus2(client.RestApi):
         data: dict[str, dict[str, object]] = {"data": inner}
         json_data: str = json.dumps(data)
         response: ApiResponse = self.post("service/local/roles", data=json_data)
-
-        if isinstance(response, tuple):
-            if response[0].status_code == 201:
-                return "Role successfully created."
-            return response
-        response.raise_for_status()
-        return "Failed to create role."
+        self._require_status(response, f"Create role {role_id}", 201)
+        return "Role successfully created."
 
     def role_delete(self, role_id: str) -> str:
         """Permanently delete a role.
@@ -327,16 +293,13 @@ class Nexus2(client.RestApi):
         :param role_id: The ID of the role to delete (from role list)
         """
         response: ApiResponse = self.delete(f"service/local/roles/{role_id}")
-        resp = self._response_of(response)
-
-        if resp.status_code == 204:
-            return "Role successfully deleted."
-        return f"Failed to delete role {role_id}."
+        self._require_status(response, f"Delete role {role_id}", 204)
+        return "Role successfully deleted."
 
     def user_list(self) -> list[list[object]]:
         """List all users."""
         response: ApiResponse = self.get("service/local/plexus_users/allConfigured")
-        result: list[dict[str, object]] = self._data_items(response)
+        result: list[dict[str, object]] = self._data_items(response, "List users")
 
         user_list: list[list[object]] = []
         for user in result:
@@ -394,13 +357,8 @@ class Nexus2(client.RestApi):
         data: dict[str, dict[str, object]] = {"data": inner}
         json_data: str = json.dumps(data)
         response: ApiResponse = self.post("service/local/users", data=json_data)
-
-        if isinstance(response, tuple):
-            if response[0].status_code == 201:
-                return "User successfully created."
-            return "Failed to create new user"
-        response.raise_for_status()
-        return "Failed to create new user"
+        self._require_status(response, f"Create user {username}", 201)
+        return "User successfully created."
 
     def user_delete(self, username: str) -> str:
         """Permanently delete a user.
@@ -408,8 +366,5 @@ class Nexus2(client.RestApi):
         :param username: The username to delete (from user list)
         """
         response: ApiResponse = self.delete(f"service/local/users/{username}")
-        resp = self._response_of(response)
-
-        if resp.status_code == 204:
-            return "User successfully deleted."
-        return f"Failed to delete user {username}."
+        self._require_status(response, f"Delete user {username}", 204)
+        return "User successfully deleted."

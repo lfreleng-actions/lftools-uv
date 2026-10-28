@@ -12,10 +12,13 @@
 from __future__ import annotations
 
 import json
+import logging
 
 import requests
 
 _CONTENT_TYPE_JSON = "application/json"
+
+log: logging.Logger = logging.getLogger(__name__)
 
 
 # Type alias for parsed JSON response body.
@@ -67,6 +70,24 @@ class RestApi:
         if isinstance(response, tuple):
             return response[0]
         return response
+
+    @staticmethod
+    def _require_status(response: ApiResponse, action: str, *expected: int) -> requests.Response:
+        """Return the Response if its status is one of *expected*.
+
+        With no *expected* codes, any 2xx status succeeds. Otherwise log
+        the server's response text and raise.
+
+        Raises:
+            requests.HTTPError: If the status is not one expected.
+        """
+        resp: requests.Response = RestApi._response_of(response)
+        status: int = resp.status_code
+        if status in expected or (not expected and 200 <= status < 300):
+            return resp
+        log.error("%s failed: HTTP %s: %s", action, status, resp.text.strip())
+        msg: str = f"{action} failed: HTTP {status}"
+        raise requests.HTTPError(msg, response=resp)
 
     def __init__(self, **kwargs: str | dict[str, str]) -> None:
         """Initialize the REST API class."""

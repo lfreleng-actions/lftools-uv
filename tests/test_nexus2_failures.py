@@ -74,8 +74,6 @@ LISTS = {
     ),
 }
 
-XFAIL_841 = pytest.mark.xfail(strict=True, reason="#841: Nexus2 commands exit 0 when Nexus refuses a request")
-
 
 def _run_click(args: list[str]) -> ClickResult:
     return ClickRunner().invoke(cli, ["nexus2", FQDN, *args], obj={})
@@ -127,7 +125,6 @@ def nexus_api(monkeypatch: pytest.MonkeyPatch) -> Callable[[requests.Response], 
 # ---------------------------------------------------------------------------
 
 
-@XFAIL_841
 @FRONT_ENDS
 @pytest.mark.parametrize("kind", list(CREATES))
 def test_create_refused_exits_1(run, nexus_api, caplog, kind):
@@ -162,7 +159,6 @@ def test_create_succeeds(run, nexus_api, kind):
 # ---------------------------------------------------------------------------
 
 
-@XFAIL_841
 @FRONT_ENDS
 @pytest.mark.parametrize("kind", list(DELETES))
 @pytest.mark.parametrize(
@@ -214,7 +210,6 @@ def test_repo_delete_refused_exits_1(run, nexus_api):
 # ---------------------------------------------------------------------------
 
 
-@XFAIL_841
 @FRONT_ENDS
 @pytest.mark.parametrize("kind", list(LISTS))
 @pytest.mark.parametrize("status", [401, 500])
@@ -230,7 +225,6 @@ def test_list_refused_exits_1(run, nexus_api, caplog, kind, status):
     assert HTML_ERROR_TEXT in caplog.text
 
 
-@XFAIL_841
 @FRONT_ENDS
 @pytest.mark.parametrize("kind", list(LISTS))
 def test_list_without_envelope_exits_1(run, nexus_api, kind):
