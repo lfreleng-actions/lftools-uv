@@ -19,6 +19,25 @@ import requests
 from lftools_uv.deploy._common import log
 from lftools_uv.deploy._util import _format_url
 
+# Magic string used to trim console logs at the appropriate level during wget
+_MAGIC_STRING: str = "-----END_OF_BUILD-----"
+
+
+def _write_console_log(url: str, filename: str) -> None:
+    """Write the console log at *url* to *filename*, trimmed at the magic string.
+
+    An error status from Jenkins leaves a one-line placeholder instead of
+    archiving the error page as the build's console log.
+    """
+    resp: requests.Response = requests.get(url, timeout=30)
+    if resp.ok:
+        content = resp.content.decode("utf-8").split(_MAGIC_STRING)[0]
+    else:
+        log.warning("Could not fetch %s: HTTP %s; %s holds a placeholder", url, resp.status_code, filename)
+        content = f"Console log unavailable: {url} returned HTTP {resp.status_code}\n"
+    with open(filename, "w+", encoding="utf-8") as f:  # noqa: PTH123
+        _ = f.write(content)
+
 
 def _capture_build_logs(build_url: str) -> None:
     """Write build details, system info and console logs to the current dir.
@@ -51,6 +70,9 @@ def _capture_build_logs(build_url: str) -> None:
             except FileNotFoundError:
                 log.debug("Command not found: %s", c)
                 continue
+            except subprocess.CalledProcessError as e:
+                log.warning("Command %s failed with exit status %s; skipping", " ".join(c), e.returncode)
+                continue
 
             output = "---> {}:\n{}\n".format(" ".join(c), output)
             _ = sysinfo_log.write(output)
@@ -58,14 +80,7 @@ def _capture_build_logs(build_url: str) -> None:
 
     build_details.close()
 
-    # Magic string used to trim console logs at the appropriate level during wget
-    MAGIC_STRING: str = "-----END_OF_BUILD-----"
-    log.info(MAGIC_STRING)
+    log.info(_MAGIC_STRING)
 
-    resp: requests.Response = requests.get(f"{_format_url(build_url)}/consoleText", timeout=30)
-    with open("console.log", "w+", encoding="utf-8") as f:  # noqa: PTH123
-        _ = f.write(str(resp.content.decode("utf-8").split(MAGIC_STRING)[0]))
-
-    resp = requests.get(f"{_format_url(build_url)}/timestamps?time=HH:mm:ss&appendLog", timeout=30)
-    with open("console-timestamp.log", "w+", encoding="utf-8") as f:  # noqa: PTH123
-        _ = f.write(str(resp.content.decode("utf-8").split(MAGIC_STRING)[0]))
+    _write_console_log(f"{_format_url(build_url)}/consoleText", "console.log")
+    _write_console_log(f"{_format_url(build_url)}/timestamps?time=HH:mm:ss&appendLog", "console-timestamp.log")

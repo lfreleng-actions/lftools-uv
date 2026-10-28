@@ -62,7 +62,6 @@ def test_successful_responses_are_trimmed_at_magic_string(env: _Env) -> None:
     assert Path("console-timestamp.log").read_text() == "00:00:01 stamped body\n"
 
 
-@pytest.mark.xfail(strict=True, reason="#834: error pages are archived as console logs")
 @pytest.mark.parametrize("status", [404, 500])
 @pytest.mark.parametrize(
     ("url", "filename"),
@@ -94,7 +93,6 @@ def test_missing_command_is_skipped(env: _Env) -> None:
     assert "sar" not in sysinfo
 
 
-@pytest.mark.xfail(strict=True, reason="#834: a failing diagnostic command aborts the capture")
 def test_failing_command_is_skipped_with_warning(env: _Env, caplog: pytest.LogCaptureFixture) -> None:
     env.failures["sar"] = subprocess.CalledProcessError(1, ["sar"])
 
