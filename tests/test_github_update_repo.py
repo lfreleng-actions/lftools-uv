@@ -69,7 +69,6 @@ def _legacy_team(org):
     return org.get_teams.return_value[0]
 
 
-@pytest.mark.xfail(strict=True, reason="#852: update-repo turns off unnamed features")
 def test_typer_add_team_changes_no_feature(typer_org):
     """Adding a team leaves the repository's features alone."""
     result = runner.invoke(github_app, ["update-repo", "o", "r", "--add-team", "devs"])
@@ -80,7 +79,6 @@ def test_typer_add_team_changes_no_feature(typer_org):
     typer_org.get_team_by_slug.return_value.add_to_repos.assert_called_once_with(repo)
 
 
-@pytest.mark.xfail(strict=True, reason="#852: update-repo turns off unnamed features")
 def test_typer_has_wiki_changes_only_wiki(typer_org):
     """``--has-wiki`` alone turns on the wiki and nothing else."""
     result = runner.invoke(github_app, ["update-repo", "o", "r", "--has-wiki"])
@@ -88,7 +86,6 @@ def test_typer_has_wiki_changes_only_wiki(typer_org):
     assert _changes(typer_org.get_repo.return_value) == {"has_wiki": True}
 
 
-@pytest.mark.xfail(strict=True, reason="#852: update-repo cannot turn a feature off")
 def test_typer_no_has_issues_changes_only_issues(typer_org):
     """``--no-has-issues`` turns off issues and nothing else."""
     result = runner.invoke(github_app, ["update-repo", "o", "r", "--no-has-issues"])
@@ -96,7 +93,6 @@ def test_typer_no_has_issues_changes_only_issues(typer_org):
     assert _changes(typer_org.get_repo.return_value) == {"has_issues": False}
 
 
-@pytest.mark.xfail(strict=True, reason="#852: update-repo turns off unnamed features")
 def test_typer_no_options_changes_nothing(typer_org):
     """With nothing requested, nothing changes and the command succeeds."""
     result = runner.invoke(github_app, ["update-repo", "o", "r"])
@@ -111,7 +107,6 @@ def test_typer_all_features_on(typer_org):
     assert _changes(typer_org.get_repo.return_value) == {"has_issues": True, "has_projects": True, "has_wiki": True}
 
 
-@pytest.mark.xfail(strict=True, reason="#852: legacy update-repo sets the wiki from --has_projects")
 @pytest.mark.parametrize(
     ("flag", "expected"),
     [
@@ -126,14 +121,12 @@ def test_legacy_feature_flags(cli_runner, legacy_org, flag, expected):
     assert _changes(_legacy_repo(legacy_org)) == expected
 
 
-@pytest.mark.xfail(strict=True, reason="#852: legacy update-repo exits 0 for a missing repository")
 def test_legacy_feature_missing_repo_exits_1(cli_runner, legacy_org):
     """A feature flag for a missing repository exits 1."""
     result = cli_runner.invoke(cli.cli, ["github", "update-repo", "o", "nosuch", "--has_wiki"], obj={})
     assert result.exit_code == 1
 
 
-@pytest.mark.xfail(strict=True, reason="#852: legacy update-repo exits 0 for a missing team")
 @pytest.mark.parametrize("option", ["--add_team", "--remove_team"])
 def test_legacy_missing_team_exits_1(cli_runner, legacy_org, option):
     """A team that does not exist exits 1."""

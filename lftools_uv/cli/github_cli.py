@@ -176,35 +176,30 @@ def updaterepo(ctx, organization, repository, has_issues, has_projects, has_wiki
         log.exception(ghe)
         sys.exit(1)
 
-    repos = org.get_repos()
+    repo = next((repo for repo in org.get_repos() if repo.name == repository), None)
+    if repo is None:
+        log.error("repo not found")
+        sys.exit(1)
 
     if has_wiki or has_issues or has_projects:
-        for repo in repos:
-            if repo.name == repository:
-                repo.edit(has_issues=has_issues)
-                repo.edit(has_wiki=has_wiki)
-                repo.edit(has_wiki=has_projects)
+        repo.edit(has_issues=has_issues, has_wiki=has_wiki, has_projects=has_projects)
 
     if add_team or remove_team:
-        teams = org.get_teams()
-
-        repo_actual = None
-        for repo in repos:
-            if repo.name == repository:
-                repo_actual = repo
-
-        if repo_actual is None:
-            log.error("repo not found")
-            sys.exit(1)
-
-        for team in teams:
+        unmatched = {name for name in (add_team, remove_team) if name}
+        for team in org.get_teams():
             if team.name == add_team:
                 log.info(f"Adding team {team.id}")
-                team.add_to_repos(repo_actual)
-                team.update_team_repository(repo_actual, "push")
+                team.add_to_repos(repo)
+                team.update_team_repository(repo, "push")
+                unmatched.discard(add_team)
             elif team.name == remove_team:
                 log.info(f"Removing team {team.id}")
-                team.remove_from_repos(repo_actual)
+                team.remove_from_repos(repo)
+                unmatched.discard(remove_team)
+
+        if unmatched:
+            log.error("team not found: %s", ", ".join(sorted(unmatched)))
+            sys.exit(1)
 
 
 @click.command(name="create-team")

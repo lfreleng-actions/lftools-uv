@@ -17,6 +17,7 @@ import typer
 
 # aislop-ignore-next-line hallucinated-import -- the declared PyGithub dependency provides the `github` package
 from github import Github, GithubException
+from github.GithubObject import NotSet
 
 from lftools_uv import config
 from lftools_uv.github_helper import helper_list, helper_user_github, prvotes
@@ -126,16 +127,30 @@ def create_repo(
 def update_repo(
     organization: str = typer.Argument(..., help=_HELP_GITHUB_ORG),
     repository: str = typer.Argument(..., help="Repository name to update"),
-    has_issues: bool = typer.Option(False, "--has-issues", help="Repo should have issues"),
-    has_projects: bool = typer.Option(False, "--has-projects", help="Repo should have projects"),
-    has_wiki: bool = typer.Option(False, "--has-wiki", help="Repo should have wiki"),
+    has_issues: bool | None = typer.Option(
+        None, "--has-issues/--no-has-issues", help="Turn issues on or off; unchanged if omitted"
+    ),
+    has_projects: bool | None = typer.Option(
+        None, "--has-projects/--no-has-projects", help="Turn projects on or off; unchanged if omitted"
+    ),
+    has_wiki: bool | None = typer.Option(
+        None, "--has-wiki/--no-has-wiki", help="Turn the wiki on or off; unchanged if omitted"
+    ),
     add_team: str | None = typer.Option(None, "--add-team", help="Add team to repo"),
     remove_team: str | None = typer.Option(None, "--remove-team", help="Remove team from repo"),
 ) -> None:
     """Update a Github repo within an Organization.
 
+    Only the features named on the command line change; the others keep
+    their current setting.
+
     Requires an admin token.
     """
+    features = (has_issues, has_projects, has_wiki)
+    if all(feature is None for feature in features) and not add_team and not remove_team:
+        log.warning("Nothing to update for repository '%s'", repository)
+        return
+
     token = config.get_setting("github", "token")
     g = Github(token)
 
@@ -143,7 +158,12 @@ def update_repo(
         org = g.get_organization(organization)
         repo_obj = org.get_repo(repository)
 
-        repo_obj.edit(has_issues=has_issues, has_projects=has_projects, has_wiki=has_wiki)
+        if any(feature is not None for feature in features):
+            repo_obj.edit(
+                has_issues=NotSet if has_issues is None else has_issues,
+                has_projects=NotSet if has_projects is None else has_projects,
+                has_wiki=NotSet if has_wiki is None else has_wiki,
+            )
 
         if add_team:
             team_obj = org.get_team_by_slug(add_team)
