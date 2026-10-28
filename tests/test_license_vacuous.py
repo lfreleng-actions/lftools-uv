@@ -28,8 +28,6 @@ PLAIN_REFERENCE = "Example licence terms written without any comment marker.\n"
 
 Runner = Callable[..., ClickResult | TyperResult]
 
-XFAIL_863 = pytest.mark.xfail(strict=True, reason="#863: licence checks that check nothing pass")
-
 
 def _click_check(reference: Path, source: Path) -> ClickResult:
     return ClickRunner().invoke(cli, ["license", "check", str(source), "-l", str(reference)], obj={})
@@ -72,14 +70,12 @@ def source_dir(tmp_path: Path) -> Path:
     return path
 
 
-@XFAIL_863
 def test_click_check_dir_missing_directory_fails(reference: Path, tmp_path: Path) -> None:
     """Click ``check-dir`` exits 1 on a directory that does not exist."""
     result = _click_check_dir(reference, tmp_path / "missing")
     assert result.exit_code == 1
 
 
-@XFAIL_863
 def test_check_license_directory_missing_directory_fails(reference: Path, tmp_path: Path) -> None:
     """``check_license_directory`` exits 1 on a directory that does not exist."""
     with pytest.raises(SystemExit) as excinfo:
@@ -93,7 +89,6 @@ def test_typer_check_missing_path_fails(reference: Path, tmp_path: Path) -> None
     assert result.exit_code == 1
 
 
-@XFAIL_863
 @DIR_FRONT_ENDS
 def test_empty_directory_fails(run: Runner, reference: Path, source_dir: Path) -> None:
     """A directory with no files at all fails the scan."""
@@ -101,7 +96,6 @@ def test_empty_directory_fails(run: Runner, reference: Path, source_dir: Path) -
     assert result.exit_code == 1
 
 
-@XFAIL_863
 @DIR_FRONT_ENDS
 def test_directory_without_matching_files_fails(run: Runner, reference: Path, source_dir: Path) -> None:
     """A directory whose files do not match the regex fails the scan."""
@@ -110,7 +104,6 @@ def test_directory_without_matching_files_fails(run: Runner, reference: Path, so
     assert result.exit_code == 1
 
 
-@XFAIL_863
 @FILE_FRONT_ENDS
 def test_plain_reference_fails_single_file(run: Runner, plain_reference: Path, source_dir: Path) -> None:
     """A reference header without ``#`` lines fails a single-file check."""
@@ -120,7 +113,6 @@ def test_plain_reference_fails_single_file(run: Runner, plain_reference: Path, s
     assert result.exit_code == 1
 
 
-@XFAIL_863
 @DIR_FRONT_ENDS
 def test_plain_reference_fails_directory(run: Runner, plain_reference: Path, source_dir: Path) -> None:
     """A reference header without ``#`` lines fails a directory scan."""
@@ -129,7 +121,6 @@ def test_plain_reference_fails_directory(run: Runner, plain_reference: Path, sou
     assert result.exit_code == 1
 
 
-@XFAIL_863
 def test_typer_check_accepts_regex(reference: Path, source_dir: Path) -> None:
     """Typer ``check DIR -r`` scans the files the regex names."""
     (source_dir / "build.sh").write_text(HEADER + "echo build\n")

@@ -37,6 +37,9 @@ def check_command(
     license_file: str = typer.Option(
         "license-header.txt", "-l", "--license", help="License header file to compare against"
     ),
+    regex: str = typer.Option(
+        r".+\.py$", "-r", "--regex", help="File regex pattern to match on when checking a directory"
+    ),
 ) -> None:
     """Check files for missing license headers.
 
@@ -48,10 +51,12 @@ def check_command(
     Args:
         source: Source file or directory to check for license headers
         license_file: License header file to compare against
+        regex: File regex pattern to match on when checking a directory
 
     Examples:
         lftools-uv license check src/
         lftools-uv license check myfile.py --license custom-header.txt
+        lftools-uv license check scripts/ --regex '.+\\.sh$'
     """
     try:
         if source.is_file():
@@ -63,7 +68,7 @@ def check_command(
             # check_license_directory returns None but may exit with code 1 if issues found
             # We need to catch the SystemExit and handle it properly
             try:
-                check_license_directory(license_file, str(source))
+                check_license_directory(license_file, str(source), regex)
                 typer.echo(f"✅ All files in {source} have proper license headers")
             except SystemExit as e:
                 if e.code == 1:
