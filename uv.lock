@@ -1170,7 +1170,7 @@ requires-dist = [
     { name = "tox", marker = "extra == 'all'" },
     { name = "tox", marker = "extra == 'dev'" },
     { name = "tqdm" },
-    { name = "typer" },
+    { name = "typer", specifier = ">=0.27.2" },
     { name = "types-deprecated", marker = "extra == 'all'" },
     { name = "types-deprecated", marker = "extra == 'dev'" },
     { name = "types-jsonschema", marker = "extra == 'all'" },

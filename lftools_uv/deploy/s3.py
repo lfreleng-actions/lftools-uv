@@ -19,6 +19,8 @@ from dataclasses import dataclass
 from typing import Any
 
 import boto3
+import requests
+from boto3.exceptions import S3UploadFailedError
 
 # aislop-ignore-next-line hallucinated-import -- botocore ships with the declared boto3 dependency
 from botocore.exceptions import ClientError
@@ -31,6 +33,10 @@ from lftools_uv.deploy._util import _compress_text
 # Uploaded to each top level "directory" so that s3, which has no filesystem,
 # generates or updates the index.html file there.
 _INDEX_MARKER = "_tmpfile"
+
+# boto3's transfer manager wraps a failed upload in S3UploadFailedError,
+# which is not a botocore ClientError, so both have to be caught.
+_UPLOAD_ERRORS = (ClientError, S3UploadFailedError)
 
 
 @dataclass(frozen=True)
@@ -89,7 +95,7 @@ def _upload_index_marker(s3: Any, target: _S3Target, file: str) -> bool:
     for prefix in target.index_dirs:
         try:
             s3.Bucket(target.bucket).upload_file(file, f"{prefix}{file}")
-        except ClientError:
+        except _UPLOAD_ERRORS:
             log.exception("Failed to upload _tmpfile marker to %s", prefix)
             return False
     return True
@@ -106,7 +112,7 @@ def _upload_to_s3(s3: Any, target: _S3Target, file: str) -> bool:
     extra_args, failure_message = _upload_args(mime_type, mime_encoding)
     try:
         s3.Bucket(target.bucket).upload_file(file, f"{target.path}{file}", ExtraArgs=extra_args)
-    except ClientError:
+    except _UPLOAD_ERRORS:
         log.exception(failure_message, file)
         return False
     return True
@@ -148,6 +154,11 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
             $WORKSPACE
         :pattern: Space-separated list of Globstar patterns of files to
             archive. (optional)
+
+    A failed upload does not stop the others. The index markers are always
+    deleted, and requests.HTTPError naming every failed file is raised once
+    all uploads have been attempted. When deleting a marker also fails,
+    that error propagates with the HTTPError as its context.
     """
     previous_dir: str = os.getcwd()
     work_dir: str = tempfile.mkdtemp(prefix="lftools-dl.")
@@ -173,17 +184,25 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
     log.info(_BANNER_HASHES)
     log.info("Deploying files from %s to %s/%s", work_dir, s3_bucket, s3_path)
 
-    # Perform s3 upload
-    for file in file_list:
-        log.info("Attempting to upload file %s", file)
-        if _upload_to_s3(s3, target, file):
-            log.info("Successfully uploaded %s", file)
-        else:
-            log.error("FAILURE: Uploading %s failed", file)
+    failed: list[str] = []
+    try:
+        for file in file_list:
+            log.info("Attempting to upload file %s", file)
+            if _upload_to_s3(s3, target, file):
+                log.info("Successfully uploaded %s", file)
+            else:
+                log.error("FAILURE: Uploading %s failed", file)
+                failed.append(file)
 
-    log.info("Finished deploying from %s to %s/%s", work_dir, s3_bucket, s3_path)
-    log.info(_BANNER_HASHES)
+        log.info("Finished deploying from %s to %s/%s", work_dir, s3_bucket, s3_path)
+        log.info(_BANNER_HASHES)
 
-    _delete_index_markers(s3, target)
-    os.chdir(previous_dir)
+        if failed:
+            log.error("%d file(s) failed to upload to %s/%s", len(failed), s3_bucket, s3_path)
+            raise requests.HTTPError(f"Failed to upload to S3: {', '.join(failed)}")
+    finally:
+        try:
+            _delete_index_markers(s3, target)
+        finally:
+            os.chdir(previous_dir)
     # shutil.rmtree(work_dir)

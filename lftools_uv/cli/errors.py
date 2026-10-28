@@ -77,6 +77,9 @@ from functools import wraps
 from types import ModuleType
 from typing import TYPE_CHECKING, ParamSpec, TypeVar
 
+import typer
+import typer.exceptions
+
 from .state import AppState  # noqa: F401
 
 # Optional import guarded to avoid hard dependency on Click
@@ -92,6 +95,21 @@ if TYPE_CHECKING:
     import click as _click_type
 
 log: logging.Logger = logging.getLogger(__name__)
+
+# Exceptions that carry an exit the CLI framework already decided. In Click
+# 8.5 and Typer 0.27 the exits and aborts are RuntimeErrors, not SystemExit,
+# and Typer's usage errors derive from its own bundled copy of Click.
+_FRAMEWORK_EXITS: tuple[type[BaseException], ...] = (
+    typer.Exit,
+    typer.Abort,
+    typer.exceptions.TyperException,
+)
+if click:
+    _FRAMEWORK_EXITS += (
+        click.exceptions.Exit,
+        click.exceptions.Abort,
+        click.exceptions.ClickException,
+    )
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -199,7 +217,10 @@ def handle_errors(
             try:
                 return func(*args, **kwargs)
             except SystemExit:
-                # Allow explicit sys.exit / click.Abort to propagate unchanged
+                # Allow explicit sys.exit to propagate unchanged
+                raise
+            except _FRAMEWORK_EXITS:
+                # Let Click and Typer report their own exits and usage errors
                 raise
             except BaseException as exc:  # noqa: BLE001 - we intentionally centralize handling
                 # Inclusion / exclusion logic

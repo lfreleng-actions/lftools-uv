@@ -72,7 +72,7 @@ dependencies = [
     "soupsieve",
     "tabulate",
     "tqdm",
-    "typer",
+    "typer>=0.27.2",
     # typing.override is only available on Python >= 3.12; earlier
     # interpreters need the backport from typing-extensions.
     "typing-extensions>=4.4.0; python_version < '3.12'",

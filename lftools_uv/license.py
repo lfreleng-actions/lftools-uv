@@ -48,13 +48,22 @@ def get_header_text(_file: str) -> str:
     return text
 
 
+def _reference_header(license_file: str) -> str:
+    """Return the reference header text, refusing one that is empty."""
+    text: str = get_header_text(license_file)
+    if not text:
+        raise ValueError(f"{license_file} has no '#' comment lines to use as a license header.")
+    return text
+
+
 def check_license(license_file: str, code_file: str) -> int:
     """Compare a file with the provided license header.
 
     Reports if license header is missing or does not match the text of
-    license_file.
+    license_file. Raises ValueError when license_file has no '#' comment
+    lines, since an empty reference header would match every file.
     """
-    license_header: str = get_header_text(license_file)
+    license_header: str = _reference_header(license_file)
     code_header: str = get_header_text(code_file)
 
     if license_header not in code_header:
@@ -65,14 +74,32 @@ def check_license(license_file: str, code_file: str) -> int:
 
 
 def check_license_directory(license_file: str, directory: str, regex: str = r".+\.py$") -> None:
-    """Search a directory for files and calls check_license()."""
+    """Search a directory for files and calls check_license().
+
+    Exits 1 when any matching file is missing the header, and also when the
+    scan checked nothing: the directory does not exist, or no file in it
+    matches regex. Raises ValueError when license_file has no '#' comment
+    lines.
+    """
+    if not os.path.isdir(directory):
+        log.error(f"{directory} is not a directory.")
+        sys.exit(1)
+
+    _reference_header(license_file)
+
     missing_license: bool = False
+    checked: int = 0
 
     for root, _dirs, files in os.walk(directory):
         for f in files:
             if re.search(regex, f):
+                checked += 1
                 if check_license(license_file, os.path.join(root, f)):
                     missing_license = True
+
+    if checked == 0:
+        log.error(f"No files in {directory} match the regex {regex}.")
+        sys.exit(1)
 
     if missing_license:
         sys.exit(1)
