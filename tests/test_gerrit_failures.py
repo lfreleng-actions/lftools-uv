@@ -54,8 +54,6 @@ def _run_typer(args: list[str]) -> TyperResult:
 
 FRONT_ENDS = pytest.mark.parametrize("run", [_run_click, _run_typer], ids=["click", "typer"])
 
-XFAIL_855 = pytest.mark.xfail(strict=True, reason="#855: bad maven settings are still pushed")
-
 
 def _response(status: int, body: object = None) -> requests.Response:
     """Build a Gerrit-style response, JSON behind the ``)]}'`` guard line."""
@@ -264,7 +262,6 @@ def commit():
         yield mock_commit
 
 
-@XFAIL_855
 def test_addmavenconfig_malformed_json_raises(git_gerrit, maven_settings, commit):
     """Malformed ``additional_credentials`` stops the change before commit."""
     maven_settings["additional_credentials"] = "{not json"
@@ -275,7 +272,6 @@ def test_addmavenconfig_malformed_json_raises(git_gerrit, maven_settings, commit
     commit.assert_not_called()
 
 
-@XFAIL_855
 @pytest.mark.parametrize("ports", ["10001,abc", "70000"])
 def test_addmavenconfig_bad_port_argument_raises(git_gerrit, commit, ports):
     """A port argument that is not a port number stops the change before commit."""
@@ -285,7 +281,6 @@ def test_addmavenconfig_bad_port_argument_raises(git_gerrit, commit, ports):
     commit.assert_not_called()
 
 
-@XFAIL_855
 @pytest.mark.parametrize("ports", ["10001,abc", "70000"])
 def test_addmavenconfig_bad_port_setting_raises(git_gerrit, maven_settings, commit, ports):
     """A ``lftools.ini`` port that is not a port number stops the change."""
@@ -298,7 +293,6 @@ def test_addmavenconfig_bad_port_setting_raises(git_gerrit, maven_settings, comm
     commit.assert_not_called()
 
 
-@XFAIL_855
 def test_addmavenconfig_regular_file_instead_of_symlink_raises(git_gerrit, commit):
     """A regular file where a symlink belongs stops the change before commit."""
     content = Path(CONTENT_LINK)
@@ -326,7 +320,6 @@ def test_addmavenconfig_valid_settings_push(git_gerrit, maven_settings, commit):
     assert '"docker.example.org"' in rendered
 
 
-@XFAIL_855
 def test_addmavenconfig_strips_port_whitespace(git_gerrit, commit):
     """Whitespace around a port does not reach the rendered server ID."""
     git_gerrit.add_maven_config(FQDN, PROJECT, None, NEXUS3, "10001, 10002")
