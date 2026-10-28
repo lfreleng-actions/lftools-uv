@@ -26,6 +26,18 @@ from lftools_uv.output import echo
 log = logging.getLogger(__name__)
 
 
+def _ldap_error_detail(exc: Exception) -> str:
+    """Describe a python-ldap error from its ``desc`` and ``info`` fields.
+
+    python-ldap 3 errors carry a dict in ``args[0]`` rather than a
+    ``message`` attribute; fall back to ``str(exc)`` for anything else.
+    """
+    info = exc.args[0] if exc.args else None
+    if isinstance(info, dict) and "desc" in info:
+        return ": ".join(str(info[key]) for key in ("desc", "info") if info.get(key))
+    return str(exc)
+
+
 @click.group()
 @click.pass_context
 def ldap_cli(ctx):
@@ -96,8 +108,9 @@ def autocorrectinfofile(ctx, gerrit_clone_base, ldap_group, repo, purpose, revie
 @click.pass_context
 def csv(ctx, ldap_server, ldap_group_base, ldap_user_base, groups):
     """Query an Ldap server."""
-    # groups needs to be a list
-    groups = groups.split(" ")
+    groups = groups.split()
+    if not groups:
+        ctx.fail("GROUPS must name at least one LDAP group")
 
     def ldap_connect(ldap_object):
         """Start the connection to LDAP."""
@@ -105,10 +118,7 @@ def csv(ctx, ldap_server, ldap_group_base, ldap_user_base, groups):
             ldap_object.protocol_version = ldap.VERSION3  # pyright: ignore[reportAttributeAccessIssue]
             ldap_object.simple_bind_s()
         except ldap.LDAPError as e:  # pyright: ignore[reportAttributeAccessIssue]
-            if type(e.message) is dict and "desc" in e.message:
-                log.exception(e.message["desc"])
-            else:
-                log.exception(e)
+            log.error("LDAP bind to %s failed: %s", ldap_server, _ldap_error_detail(e))
             sys.exit(1)
 
     def eprint(*args, **kwargs):
@@ -134,7 +144,8 @@ def csv(ctx, ldap_server, ldap_group_base, ldap_user_base, groups):
                     if result_type == ldap.RES_SEARCH_ENTRY:  # pyright: ignore[reportAttributeAccessIssue]
                         result_set.append(result_data)
             return result_set
-        except ldap.LDAPError:  # pyright: ignore[reportAttributeAccessIssue]
+        except ldap.LDAPError as e:  # pyright: ignore[reportAttributeAccessIssue]
+            log.error("LDAP search for %s under %s failed: %s", search_filter, dn, _ldap_error_detail(e))
             sys.exit(1)
 
     def package_groups(groups):
@@ -165,8 +176,13 @@ def csv(ctx, ldap_server, ldap_group_base, ldap_user_base, groups):
         """Perform an LDAP query."""
         ldap_obj = ldap.initialize(ldap_server)
         ldap_connect(ldap_obj)
+        failures = 0
         for arg in groups:
             groups = ldap_query(ldap_obj, ldap_group_base, f"cn={arg}", ["member"])
+            if not groups:
+                log.error("Group not found: %s", arg)
+                failures += 1
+                continue
             group_dict = package_groups(groups)
             cut_length = len(ldap_group_base) + 1
             for group_bar in group_dict:
@@ -178,8 +194,12 @@ def csv(ctx, ldap_server, ldap_group_base, ldap_user_base, groups):
                         echo(f"{group_name},{user_to_csv(user_info)}")
                     except Exception:
                         log.error("Error parsing user: %s", user)
+                        failures += 1
                         continue
         ldap_disconnect(ldap_obj)
+        if failures:
+            log.error("Committer list is incomplete: %d lookup(s) failed", failures)
+            sys.exit(1)
 
     main(groups)
 

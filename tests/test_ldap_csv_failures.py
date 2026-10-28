@@ -133,7 +133,32 @@ def test_readable_group_exits_zero(ldap_group: click.Group, directory: FakeDirec
     assert result.output.splitlines() == ["grp,alice,Alice,alice@example.org", "grp,bob,Bob,bob@example.org"]
 
 
-@pytest.mark.xfail(strict=True, reason="#865: ldap csv exits 0 on an unreadable member")
+def test_extra_spaces_between_groups_are_ignored(
+    ldap_group: click.Group, directory: FakeDirectory, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Leading, trailing and repeated spaces in GROUPS do not count as groups."""
+    directory.add_group("grp", ["alice"])
+    directory.add_group("other", ["bob"])
+    directory.add_user("alice")
+    directory.add_user("bob")
+
+    with caplog.at_level(logging.ERROR):
+        result = _run_csv(ldap_group, "  grp   other ")
+
+    assert result.exit_code == 0, result.output
+    assert result.output.splitlines() == ["grp,alice,Alice,alice@example.org", "other,bob,Bob,bob@example.org"]
+    assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
+
+
+@pytest.mark.parametrize("groups", ["", "   "])
+def test_blank_groups_is_usage_error(ldap_group: click.Group, groups: str) -> None:
+    """A GROUPS argument naming no group is a usage error, not a silent pass."""
+    result = _run_csv(ldap_group, groups)
+
+    assert result.exit_code == 2
+    assert "GROUPS must name at least one LDAP group" in result.output
+
+
 def test_member_without_mail_fails(
     ldap_group: click.Group, directory: FakeDirectory, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -150,7 +175,6 @@ def test_member_without_mail_fails(
     assert "Error parsing user: uid=bob" in caplog.text
 
 
-@pytest.mark.xfail(strict=True, reason="#865: ldap csv exits 0 on a missing user entry")
 def test_member_without_entry_fails(ldap_group: click.Group, directory: FakeDirectory) -> None:
     """A member with no user entry fails the run; other rows still print."""
     directory.add_group("grp", ["alice", "ghost"])
@@ -162,7 +186,6 @@ def test_member_without_entry_fails(ldap_group: click.Group, directory: FakeDire
     assert "grp,alice,Alice,alice@example.org" in result.output
 
 
-@pytest.mark.xfail(strict=True, reason="#865: ldap csv exits 0 on an unknown group")
 def test_unknown_group_fails(ldap_group: click.Group, caplog: pytest.LogCaptureFixture) -> None:
     """A group that does not exist is named in an error and fails the run."""
     with caplog.at_level(logging.ERROR):
@@ -172,7 +195,6 @@ def test_unknown_group_fails(ldap_group: click.Group, caplog: pytest.LogCaptureF
     assert "nosuchgroup" in caplog.text
 
 
-@pytest.mark.xfail(strict=True, reason="#865: ldap csv exits 0 on an unknown group")
 def test_unknown_group_keeps_other_rows(ldap_group: click.Group, directory: FakeDirectory) -> None:
     """An unknown group fails the run, but later groups are still read."""
     directory.add_group("grp", ["alice"])
@@ -184,7 +206,6 @@ def test_unknown_group_keeps_other_rows(ldap_group: click.Group, directory: Fake
     assert "grp,alice,Alice,alice@example.org" in result.output
 
 
-@pytest.mark.xfail(strict=True, reason="#865: a bind failure raises AttributeError for .message")
 @pytest.mark.parametrize(
     ("error", "detail"),
     [
@@ -214,7 +235,6 @@ def test_bind_failure_logs_detail(
     assert detail in caplog.text
 
 
-@pytest.mark.xfail(strict=True, reason="#865: a failed query exits 1 without logging")
 def test_query_failure_logs_detail(
     ldap_group: click.Group, directory: FakeDirectory, caplog: pytest.LogCaptureFixture
 ) -> None:
