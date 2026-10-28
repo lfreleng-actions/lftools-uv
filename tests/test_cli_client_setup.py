@@ -14,6 +14,7 @@ from typer.testing import CliRunner as TyperRunner
 
 import lftools_uv.cli
 import lftools_uv.typer_apps.root
+from lftools_uv.cli.state import LazyClient
 from lftools_uv.jenkins import Jenkins
 
 click_token_module = importlib.import_module("lftools_uv.cli.jenkins.token")
@@ -21,7 +22,6 @@ typer_token_module = importlib.import_module("lftools_uv.typer_apps.jenkins.toke
 
 FQDN = "nexus.example.org"
 
-XFAIL_953 = pytest.mark.xfail(strict=True, reason="#953: group callbacks build their client eagerly")
 XFAIL_952 = pytest.mark.xfail(strict=True, reason="#952: a missing jenkins_jobs.ini section is not reported")
 
 
@@ -79,7 +79,6 @@ def _help_args(name, ini):
     return [arg.format(ini=ini) for arg in HELP_ARGS[name]]
 
 
-@XFAIL_953
 @pytest.mark.parametrize("name", HELP_ARGS)
 def test_click_subcommand_help_needs_no_client(name, jjb_ini):
     """Legacy ``--help`` works without configuration or a server."""
@@ -98,7 +97,6 @@ def test_typer_subcommand_help_needs_no_client(name, jjb_ini):
     assert "Usage:" in result.output
 
 
-@XFAIL_953
 @pytest.mark.usefixtures("jjb_ini")
 def test_typer_nexus2_reports_configuration_error(caplog):
     """A Nexus2 client that cannot be built reports why, not a KeyError."""
@@ -110,7 +108,6 @@ def test_typer_nexus2_reports_configuration_error(caplog):
     assert "KeyError" not in report
 
 
-@XFAIL_953
 @pytest.mark.parametrize("front_end", FRONT_ENDS)
 def test_token_reset_needs_no_server_section(front_end, jjb_ini):
     """``token reset`` only needs the file, not a section for ``--server``."""
@@ -129,25 +126,19 @@ def test_token_reset_needs_no_server_section(front_end, jjb_ini):
     assert "new-token" in jjb_ini.read_text()
 
 
-def _lazy_client_class():
-    return importlib.import_module("lftools_uv.cli.state").LazyClient
-
-
-@XFAIL_953
 def test_lazy_client_known_attribute_skips_factory():
     """A known attribute is answered without building the client."""
     factory = mock.Mock()
-    client = _lazy_client_class()(factory, config_file="/tmp/jenkins_jobs.ini")
+    client = LazyClient(factory, config_file="/tmp/jenkins_jobs.ini")
 
     assert client.config_file == "/tmp/jenkins_jobs.ini"
     factory.assert_not_called()
 
 
-@XFAIL_953
 def test_lazy_client_builds_once():
     """The first other attribute builds the client; later ones reuse it."""
     factory = mock.Mock()
-    client = _lazy_client_class()(factory)
+    client = LazyClient(factory)
 
     first = client.server
     second = client.url
@@ -157,11 +148,10 @@ def test_lazy_client_builds_once():
     assert second is factory.return_value.url
 
 
-@XFAIL_953
 def test_lazy_client_dunder_does_not_build():
     """A dunder lookup raises AttributeError without building the client."""
     factory = mock.Mock()
-    client = _lazy_client_class()(factory)
+    client = LazyClient(factory)
 
     dunder = "__deepcopy__"
     with pytest.raises(AttributeError):

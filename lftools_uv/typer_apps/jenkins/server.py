@@ -7,7 +7,8 @@ import logging
 import requests
 import typer
 
-from lftools_uv.jenkins import Jenkins
+from lftools_uv.cli.state import LazyClient
+from lftools_uv.jenkins import JJB_INI, Jenkins
 from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
@@ -31,29 +32,19 @@ def jenkins_callback(
     password: str | None = typer.Option(None, "--password", "-p", envvar="JENKINS_PASSWORD"),
 ) -> None:
     """Query information about the Jenkins Server."""
-    # Skip initialization if we're just showing help
-    if ctx.resilient_parsing:
-        return
+    jenkins_client = LazyClient(lambda: Jenkins(server, user, password, config_file=conf), config_file=conf or JJB_INI)
+    if ctx.obj is None:
+        ctx.obj = {}
+    ctx.obj["jenkins"] = jenkins_client
 
-    try:
-        jenkins_client = Jenkins(server, user, password, config_file=conf)
-        if ctx.obj is None:
-            ctx.obj = {}
-        ctx.obj["jenkins"] = jenkins_client
+    # Also store credentials for compatibility
+    ctx.obj["username"] = user
+    ctx.obj["password"] = password
 
-        # Also store credentials for compatibility
-        ctx.obj["username"] = user
-        ctx.obj["password"] = password
-
-        # Register in AppState if available
-        state = ctx.obj.get("state")
-        if state:
-            state.jenkins = jenkins_client
-    except Exception:
-        log.exception("Failed to initialize Jenkins client")
-        # For help requests, don't fail - just continue without initializing client
-        if ctx.obj is None:
-            ctx.obj = {}
+    # Register in AppState if available
+    state = ctx.obj.get("state")
+    if state:
+        state.jenkins = jenkins_client
 
 
 @jenkins_app.command("get-credentials")

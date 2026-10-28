@@ -23,7 +23,8 @@ from lftools_uv.cli.jenkins.jobs import jobs
 from lftools_uv.cli.jenkins.nodes import nodes
 from lftools_uv.cli.jenkins.plugins import plugins_init
 from lftools_uv.cli.jenkins.token import token
-from lftools_uv.jenkins import Jenkins
+from lftools_uv.cli.state import LazyClient
+from lftools_uv.jenkins import JJB_INI, Jenkins
 from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
@@ -44,8 +45,8 @@ log = logging.getLogger(__name__)
 @click.pass_context
 def jenkins_cli(ctx, server, user, password, conf):
     """Query information about the Jenkins Server."""
-    # Initialize the Jenkins object and pass it to sub-commands; also register in AppState if available
-    jenkins_client = Jenkins(server, user, password, config_file=conf)
+    # Pass a lazily built Jenkins client to sub-commands; also register in AppState if available
+    jenkins_client = LazyClient(lambda: Jenkins(server, user, password, config_file=conf), config_file=conf or JJB_INI)
     ctx.obj["jenkins"] = jenkins_client
     state = ctx.obj.get("state")
     if state:

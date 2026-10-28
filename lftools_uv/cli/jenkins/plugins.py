@@ -30,11 +30,8 @@ def print_plugin(plugin, namefield="longName"):
 
 
 @click.group()
-@click.pass_context
-def plugins_init(ctx):
+def plugins_init():
     """Inspect Jenkins plugins on the server."""
-    jenkins = ctx.obj["jenkins"]
-    ctx.obj["plugins"] = jenkins.server.get_plugins()
 
 
 @click.command()
@@ -44,7 +41,7 @@ def list_plugins(ctx):
 
     Defaults to listing all installed plugins and their current versions
     """
-    plugins = ctx.obj["plugins"]
+    plugins = ctx.obj["jenkins"].server.get_plugins()
     for key in plugins.keys():
         _, plugin_name = key
         plugin = plugins[plugin_name]
@@ -55,7 +52,7 @@ def list_plugins(ctx):
 @click.pass_context
 def pinned(ctx):
     """List pinned plugins."""
-    plugins = ctx.obj["plugins"]
+    plugins = ctx.obj["jenkins"].server.get_plugins()
     for key in plugins.keys():
         _, plugin_name = key
         plugin = plugins[plugin_name]
@@ -67,7 +64,7 @@ def pinned(ctx):
 @click.pass_context
 def dynamic(ctx):
     """List dynamically reloadable plugins."""
-    plugins = ctx.obj["plugins"]
+    plugins = ctx.obj["jenkins"].server.get_plugins()
     for key in plugins.keys():
         _, plugin_name = key
         plugin = plugins[plugin_name]
@@ -79,7 +76,7 @@ def dynamic(ctx):
 @click.pass_context
 def needs_update(ctx):
     """List pending plugin updates."""
-    plugins = ctx.obj["plugins"]
+    plugins = ctx.obj["jenkins"].server.get_plugins()
     for key in plugins.keys():
         _, plugin_name = key
         plugin = plugins[plugin_name]
@@ -91,7 +88,7 @@ def needs_update(ctx):
 @click.pass_context
 def enabled(ctx):
     """List enabled plugins."""
-    plugins = ctx.obj["plugins"]
+    plugins = ctx.obj["jenkins"].server.get_plugins()
     for key in plugins.keys():
         _, plugin_name = key
         plugin = plugins[plugin_name]
@@ -107,7 +104,7 @@ def disabled(ctx):
     TODO: In the future this should be part of a command alias and pass a flag
     to 'enabled' so that we don't duplicate code.
     """
-    plugins = ctx.obj["plugins"]
+    plugins = ctx.obj["jenkins"].server.get_plugins()
     for key in plugins.keys():
         _, plugin_name = key
         plugin = plugins[plugin_name]
@@ -119,7 +116,7 @@ def disabled(ctx):
 @click.pass_context
 def active(ctx):
     """List active plugins."""
-    plugins = ctx.obj["plugins"]
+    plugins = ctx.obj["jenkins"].server.get_plugins()
     for key in plugins.keys():
         _, plugin_name = key
         plugin = plugins[plugin_name]
@@ -151,7 +148,7 @@ def sec(ctx):
 
     # create a dict of our active plugins
     activedict = {}
-    plugins = ctx.obj["plugins"]
+    plugins = ctx.obj["jenkins"].server.get_plugins()
     for key in plugins.keys():
         _, plugin_name = key
         plugin = plugins[plugin_name]

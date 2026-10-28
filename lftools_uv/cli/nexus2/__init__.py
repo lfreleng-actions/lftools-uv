@@ -16,6 +16,7 @@ __author__ = "DW Talton"
 import click
 
 from lftools_uv.api.endpoints import nexus2
+from lftools_uv.cli.state import LazyClient
 
 from .privilege import privilege
 from .repository import repo
@@ -28,7 +29,7 @@ from .user import user
 @click.pass_context
 def nexus_two(ctx, fqdn):
     """The Nexus2 API Interface."""
-    nexus2_obj = nexus2.Nexus2(fqdn=fqdn)
+    nexus2_obj = LazyClient(lambda: nexus2.Nexus2(fqdn=fqdn))
     if ctx.obj is None:
         ctx.obj = {}
     # Store client in raw context (legacy) and structured AppState if available
