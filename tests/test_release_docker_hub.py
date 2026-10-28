@@ -891,7 +891,9 @@ class TestFetchAllTagsAndUpdate:
 
     def test_start_bogus_orgs(self, responses):
         self.initiate_bogus_org_test_fetch(responses, "bogus_org321")
-        rdh.start_point("bogus_org321")
+        with pytest.raises(SystemExit) as excinfo:
+            rdh.start_point("bogus_org321")
+        assert excinfo.value.code == 1
         assert len(rdh.NexusCatalog) == 0
         assert len(rdh.projects) == 0
 

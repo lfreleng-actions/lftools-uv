@@ -94,26 +94,22 @@ class TestDockerPush:
 class TestStartPointFailures:
     """#839: setup and catalog failures must exit 1."""
 
-    @pytest.mark.xfail(strict=True, reason="#839: --exact without a pattern exits 0")
     def test_exact_without_pattern_exits_1(self) -> None:
         with pytest.raises(SystemExit) as excinfo:
             rdh.start_point(ORG, "", exact_match=True)
         assert excinfo.value.code == 1
 
-    @pytest.mark.xfail(strict=True, reason="#839: an invalid version regexp exits 0")
     def test_invalid_version_regexp_exits_1(self) -> None:
         with pytest.raises(SystemExit) as excinfo:
             rdh.start_point(ORG, "", version_regexp="(unclosed")
         assert excinfo.value.code == 1
 
-    @pytest.mark.xfail(strict=True, reason="#839: a non-200 catalog reads as success")
     def test_catalog_500_returns_false(self, responses: RequestsMock) -> None:
         responses.add(responses.GET, CATALOG_URL, body="boom", status=500)
 
         assert rdh.get_nexus3_catalog(ORG) is False
         assert rdh.NexusCatalog == []
 
-    @pytest.mark.xfail(strict=True, reason="#839: a non-200 catalog reads as success")
     def test_catalog_500_exits_1(self, responses: RequestsMock) -> None:
         responses.add(responses.GET, CATALOG_URL, body="boom", status=500)
 
