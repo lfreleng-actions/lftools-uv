@@ -122,7 +122,6 @@ class TestStartPointFailures:
 class TestTagLookupFailures:
     """#840: only a 404 means "no repository"; any other failure raises."""
 
-    @pytest.mark.xfail(strict=True, reason="#840: a failed Nexus lookup reads as no repository")
     def test_nexus_500_raises(self, responses: RequestsMock) -> None:
         responses.add(responses.GET, NEXUS_TAGS_URL, body="boom", status=500)
 
@@ -137,14 +136,12 @@ class TestTagLookupFailures:
         assert tags.repository_exist is False
         assert tags.valid == []
 
-    @pytest.mark.xfail(strict=True, reason="#840: a failed Docker Hub lookup reads as no repository")
     def test_docker_500_first_page_raises(self, responses: RequestsMock) -> None:
         responses.add(responses.GET, DOCKER_TAGS_URL, body="boom", status=500)
 
         with pytest.raises(requests.HTTPError, match="500"):
             rdh.DockerTagClass(ORG, DOCKER_REPO, False)
 
-    @pytest.mark.xfail(strict=True, reason="#840: a failed later page keeps a partial tag list")
     def test_docker_500_second_page_raises(self, responses: RequestsMock) -> None:
         page2_url = f"{DOCKER_TAGS_URL}?page=2"
         page1 = {"count": 2, "next": page2_url, "results": [{"name": "1.0.0"}]}
@@ -154,7 +151,6 @@ class TestTagLookupFailures:
         with pytest.raises(requests.HTTPError, match="500"):
             rdh.DockerTagClass(ORG, DOCKER_REPO, False)
 
-    @pytest.mark.xfail(strict=True, reason="#840: a failed later page keeps a partial tag list")
     def test_docker_404_after_empty_first_page_raises(self, responses: RequestsMock) -> None:
         page2_url = f"{DOCKER_TAGS_URL}?page=2"
         page1 = {"count": 0, "next": page2_url, "results": []}

@@ -82,7 +82,8 @@ class NexusTagClass(TagClass):
         {"name":"onap/aaf/aaf_service","tags":["2.1.1","2.1.3","2.1.4","2.1.5"]}
     Hence, we need to extract all the tags, and add them to our list of valid or
     invalid tags.
-    If we fail to collect the tags, we set the repository_exist flag to false.
+    A 404 sets the repository_exist flag to false; any other failure raises
+    requests.HTTPError.
 
     Parameter:
         org_name  : The organization part of the repository. (onap)
@@ -114,13 +115,9 @@ class NexusTagClass(TagClass):
             except requests.HTTPError as excinfo:
                 log.debug(f"Fetching Nexus3 tags. {excinfo}")
                 retries = retries + 1
-                if retries > 19:
-                    self.repository_exist = False
-                    return
 
         if r is None:
-            self.repository_exist = False
-            return
+            raise requests.HTTPError(f"Could not fetch Nexus3 tags for {org_repo_name} after {retries} attempts")
 
         log.debug(f"r.status_code = {r.status_code}, ok={r.status_code == requests.codes.ok}")
         if r.status_code == requests.codes.ok:
@@ -135,8 +132,10 @@ class NexusTagClass(TagClass):
                 for tag_2_add in TmpSplittedTags:
                     self.add_tag(tag_2_add)
                     log.debug(f"Nexus {org_repo_name} has tag {tag_2_add}")
-        else:
+        elif r.status_code == requests.codes.not_found:
             self.repository_exist = False
+        else:
+            raise requests.HTTPError(f"Fetching Nexus3 tags for {org_repo_name} answered HTTP {r.status_code}")
 
 
 class DockerTagClass(TagClass):
@@ -160,7 +159,8 @@ class DockerTagClass(TagClass):
 
     Hence, we need to extract all the tags, and add them to our list of valid or
     invalid tags.
-    If we fail to collect the tags, we set the repository_exist flag to false.
+    A 404 on the first page sets the repository_exist flag to false; any other
+    failure, including one on a later page, raises requests.HTTPError.
 
     Parameter:
         org_name  : The organization part of the repository. (onap)
@@ -186,6 +186,7 @@ class DockerTagClass(TagClass):
         log.debug(f"Fetching docker tags for {combined_repo_name}")
         _docker_base = self._docker_base_start + f"{org_name}/repositories"
         still_more = True
+        first_page = True
         docker_tag_url = _docker_base + "/" + repo_name + "/tags"
         while still_more:
             raw_json = None
@@ -206,13 +207,11 @@ class DockerTagClass(TagClass):
                 except requests.HTTPError as excinfo:
                     log.debug(f"Fetching Docker Hub tags. {excinfo}")
                     retries = retries + 1
-                    if retries > 19:
-                        self.repository_exist = False
-                        return
 
             if r is None:
-                self.repository_exist = False
-                return
+                raise requests.HTTPError(
+                    f"Could not fetch Docker Hub tags for {combined_repo_name} after {retries} attempts"
+                )
 
             log.debug(f"r.status_code = {r.status_code}, ok={r.status_code == requests.codes.ok}")
             if r.status_code == 429:
@@ -232,6 +231,7 @@ class DockerTagClass(TagClass):
                         still_more = True
                     else:
                         still_more = False
+                    first_page = False
                 except Exception as exc:
                     # Leaving still_more and docker_tag_url unchanged here would
                     # re-fetch the same page forever, re-adding tags each time.
@@ -239,6 +239,12 @@ class DockerTagClass(TagClass):
                     raise requests.HTTPError(
                         f"Malformed tag response from Docker Hub for {combined_repo_name}"
                     ) from exc
-            else:
+            elif r.status_code == requests.codes.not_found and first_page:
                 self.repository_exist = False
                 return
+            else:
+                # A failure on a later page would leave a partial tag list,
+                # and the tags it misses would be pushed again.
+                raise requests.HTTPError(
+                    f"Fetching Docker Hub tags for {combined_repo_name} answered HTTP {r.status_code}"
+                )
