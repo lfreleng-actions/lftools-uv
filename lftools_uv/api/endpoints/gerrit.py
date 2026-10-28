@@ -296,10 +296,21 @@ class Gerrit(client.RestApi):
         result: ApiResponse = self.post(access_str, data=payload)
         return result
 
-    def abandon_changes(self, _fqdn: str, gerrit_project: str) -> dict[str, object] | None:
-        """Abandon open changes for a project."""
+    def abandon_changes(self, _fqdn: str, gerrit_project: str) -> list[dict[str, object]]:
+        """Abandon every open change for a project.
+
+        A change that closed after the query (HTTP 409) is skipped. Any
+        other failure is logged and the remaining changes are still
+        attempted.
+
+        Returns:
+            The ChangeInfo of each abandoned change, empty when none were open.
+
+        Raises:
+            RuntimeError: If any open change could not be abandoned.
+        """
         gerrit_project_encoded: str = quote(gerrit_project, safe="", encoding=None, errors=None)
-        access_str: str = f"changes/?q=project:{gerrit_project_encoded}"
+        access_str: str = f"changes/?q=project:{gerrit_project_encoded}+status:open"
         log.info(access_str)
         headers: dict[str, str] = {
             "Content-Type": _CONTENT_TYPE_JSON_UTF8,
@@ -308,17 +319,33 @@ class Gerrit(client.RestApi):
         response: ApiResponse = self.get(access_str)
         changes: list[object] = self._list_body(response)
         abandon_payload: str = json.dumps({"message": "Abandoned by automation"})
+        abandoned: list[dict[str, object]] = []
+        failed: list[str] = []
         for raw_change in changes:
             change: dict[str, object] = self._as_dict(raw_change)
-            if not change:
+            if self._str_val(change.get("status")) != "NEW":
                 continue
-            if self._str_val(change.get("status")) == "NEW":
-                change_id: str = self._str_val(change.get("id"))
-                access_str = f"changes/{change_id}/abandon"
-                log.info(access_str)
+            change_id: str = self._str_val(change.get("id"))
+            access_str = f"changes/{change_id}/abandon"
+            log.info(access_str)
+            try:
                 abandon_response: ApiResponse = self.post(access_str, data=abandon_payload)
-                return self._json_body(abandon_response)
-        return None
+            except requests.RequestException as exc:
+                log.error("Failed to abandon change %s: %s", change_id, exc)
+                failed.append(change_id)
+                continue
+            status: int = self._response_of(abandon_response).status_code
+            if status == 200:
+                abandoned.append(self._json_body(abandon_response))
+            elif status == 409:
+                log.warning("Change %s is no longer open; skipping", change_id)
+            else:
+                log.error("Failed to abandon change %s: HTTP %s", change_id, status)
+                failed.append(change_id)
+        if failed:
+            msg: str = f"Failed to abandon changes: {', '.join(failed)}"
+            raise RuntimeError(msg)
+        return abandoned
 
     def sanity_check(self, _fqdn: str, gerrit_project: str) -> dict[str, object]:
         """Perform a sanity check."""
@@ -456,7 +483,8 @@ class Gerrit(client.RestApi):
             pretty: str = json.dumps(post_body, indent=4, sort_keys=True)
             log.info(pretty)
         else:
-            log.info("Error no githubid found")
+            log.error("No GitHub Replication group found; cannot grant GitHub read to %s", gerrit_project)
+            sys.exit(1)
 
     def create_project(
         self,

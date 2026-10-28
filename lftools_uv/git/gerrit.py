@@ -32,6 +32,20 @@ _LFTOOLS_UV_GIT = "lftools_uv.git"
 log = logging.getLogger(__name__)
 
 
+def _parse_nexus3_ports(nexus3_ports: str) -> list[str]:
+    """Split a comma-separated port list, rejecting any entry that is not a port.
+
+    Raises:
+        ValueError: If any entry is not a whole number from 1 to 65535.
+    """
+    ports = [port.strip() for port in nexus3_ports.split(",")]
+    invalid = [port for port in ports if not (port.isdecimal() and 1 <= int(port) <= 65535)]
+    if invalid:
+        msg = f"Invalid nexus3_ports entries (expected 1-65535): {', '.join(repr(port) for port in invalid)}"
+        raise ValueError(msg)
+    return ports
+
+
 class Gerrit:
     """Wrapper for Gerrit-specific git methods."""
 
@@ -107,8 +121,8 @@ class Gerrit:
             os.symlink(target, filepath)
         except FileExistsError:
             if not os.path.islink(filepath):
-                log.error(f"{filepath} exists and is not a symlink")
-                return
+                msg = f"{filepath} exists and is not a symlink"
+                raise ValueError(msg) from None
         self.repo.git.add(filepath)
 
     def commit(self, commit_msg: str, issue_id: str | None, push: bool = False) -> None:
@@ -226,11 +240,11 @@ class Gerrit:
         except configparser.NoOptionError as exc:
             log.debug("No additional credentials found: %s", exc)
         except json.decoder.JSONDecodeError as exc:
-            log.error(
-                'Improperly formatted JSON in "additional_credentials" (%s). '
-                "Please ensure that all credentials are on a single line, and are not quoted.",
-                exc,
+            msg = (
+                f'Improperly formatted JSON in "additional_credentials" ({exc}). '
+                "Please ensure that all credentials are on a single line, and are not quoted."
             )
+            raise ValueError(msg) from exc
 
         if not nexus3_url:
             try:
@@ -242,14 +256,11 @@ class Gerrit:
         if nexus3_url and not nexus3_ports:
             try:
                 nexus3_ports = config.get_setting(self.fqdn, "nexus3_ports")
-                nexus3_port_list = nexus3_ports.split(",")
+                nexus3_port_list = _parse_nexus3_ports(nexus3_ports)
             except configparser.NoOptionError:
                 nexus3_port_list = ["10001", "10002", "10003", "10004"]
         elif nexus3_ports:
-            try:
-                nexus3_port_list = nexus3_ports.split(",")
-            except AttributeError as exc:
-                log.error("Invalid nexus3_ports designated: %s", exc)
+            nexus3_port_list = _parse_nexus3_ports(nexus3_ports)
 
         jinja_env = Environment(
             loader=PackageLoader(_LFTOOLS_UV_GIT), autoescape=select_autoescape(), keep_trailing_newline=True
