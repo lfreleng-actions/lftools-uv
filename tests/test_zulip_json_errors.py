@@ -26,7 +26,6 @@ from lftools_uv.typer_apps.zulip import zulip_app
 
 API_FUNCTIONS = ("archive_channel", "unarchive_channel", "update_channel", "set_topic_policy", "get_topic_policy")
 NOT_FOUND = "Channel 'missing' not found"
-XFAIL = pytest.mark.xfail(strict=True, reason="#900: --json failures write only to stderr")
 
 
 @dataclass(frozen=True)
@@ -162,7 +161,6 @@ def _assert_error_payload(result: Result, case: Case) -> None:
     assert result.stderr == ""
 
 
-@XFAIL
 @pytest.mark.parametrize("case", API_CASES, ids=_case_id)
 def test_api_failure_emits_json_payload(api: dict[str, mock.MagicMock], case: Case) -> None:
     """An API failure under --json is the error payload on stdout."""
@@ -171,7 +169,6 @@ def test_api_failure_emits_json_payload(api: dict[str, mock.MagicMock], case: Ca
     _assert_error_payload(result, case)
 
 
-@XFAIL
 def test_config_failure_emits_json_payload(api: dict[str, mock.MagicMock]) -> None:
     """A client configuration failure under --json is the error payload."""
     api["get_client"].side_effect = ZulipConfigError("No zuliprc found")
@@ -182,7 +179,6 @@ def test_config_failure_emits_json_payload(api: dict[str, mock.MagicMock]) -> No
     _assert_error_payload(result, case)
 
 
-@XFAIL
 @pytest.mark.parametrize("case", VALIDATION_CASES, ids=_case_id)
 def test_validation_failure_emits_json_payload(api: dict[str, mock.MagicMock], case: Case) -> None:
     """A flag validation failure under --json is the error payload."""

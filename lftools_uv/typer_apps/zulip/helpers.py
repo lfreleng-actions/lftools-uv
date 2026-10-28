@@ -74,6 +74,35 @@ def handle_zulip_error(exc: ZulipError) -> typer.Exit:
     return typer.Exit(code=1)
 
 
+def mutation_failure(
+    options: dict[str, Any],
+    message: str,
+    *,
+    operation: str,
+    channel_name: str | None,
+) -> typer.Exit:
+    """Report a failed channel mutation and return ``typer.Exit``.
+
+    With ``--json`` the failure is the FR-008 mutation error payload on
+    stdout, with ``channel_id`` null since no channel was resolved, so
+    automation always receives an outcome; otherwise it is the usual
+    error line on stderr. Callers should ``raise`` the returned exit.
+    """
+    if options.get("json_output"):
+        emit_json(
+            mutation_result(
+                status="error",
+                operation=operation,
+                channel_id=None,
+                channel_name=channel_name or "",
+                extra={"error": message},
+            )
+        )
+    else:
+        emit_error(message)
+    return typer.Exit(code=1)
+
+
 def emit_table(rows: Sequence[Sequence[Any]], headers: Sequence[str]) -> None:
     """Print a human-readable table to stdout using ``tabulate``."""
     typer.echo(tabulate(list(rows), headers=list(headers)))
@@ -206,11 +235,26 @@ def _resolve_id_mode(by_email: bool, by_id: bool, by_name: bool) -> Literal["ema
 def _validate_single_channel_target(
     channel: str | None,
     channel_id: str | None,
+    *,
+    options: dict[str, Any],
+    operation: str,
 ) -> None:
-    """Enforce FR-018: exactly one of [channel] or --channel-id."""
+    """Enforce FR-018: exactly one of [channel] or --channel-id.
+
+    Reports a violation through :func:`mutation_failure`, so ``--json``
+    callers receive the error payload for ``operation``.
+    """
     if channel is None and channel_id is None:
-        emit_error("Exactly one of [channel] or --channel-id is required")
-        raise typer.Exit(code=1)
+        raise mutation_failure(
+            options,
+            "Exactly one of [channel] or --channel-id is required",
+            operation=operation,
+            channel_name=channel,
+        )
     if channel is not None and channel_id is not None:
-        emit_error("Specify only one of [channel] or --channel-id, not both")
-        raise typer.Exit(code=1)
+        raise mutation_failure(
+            options,
+            "Specify only one of [channel] or --channel-id, not both",
+            operation=operation,
+            channel_name=channel,
+        )
