@@ -54,7 +54,6 @@ def _run_typer(args: list[str]) -> TyperResult:
 
 FRONT_ENDS = pytest.mark.parametrize("run", [_run_click, _run_typer], ids=["click", "typer"])
 
-XFAIL_851 = pytest.mark.xfail(strict=True, reason="#851: only the first open change is abandoned")
 XFAIL_855 = pytest.mark.xfail(strict=True, reason="#855: bad maven settings are still pushed")
 
 
@@ -169,7 +168,6 @@ def _abandoned(calls: list[tuple[str, str]]) -> list[str]:
     return [url.rsplit("/", 2)[-2] for url in _posts(calls) if url.endswith("/abandon")]
 
 
-@XFAIL_851
 @FRONT_ENDS
 def test_abandonchanges_abandons_every_open_change(run, gerrit_api):
     """Every open change is abandoned, in order, and only open ones are queried."""
@@ -183,7 +181,6 @@ def test_abandonchanges_abandons_every_open_change(run, gerrit_api):
     assert f"project:{PROJECT_ENCODED}+status:open" in query
 
 
-@XFAIL_851
 @FRONT_ENDS
 def test_abandonchanges_failure_continues_and_exits_1(run, gerrit_api):
     """A change that cannot be abandoned does not stop the rest, and fails the run."""
@@ -195,7 +192,6 @@ def test_abandonchanges_failure_continues_and_exits_1(run, gerrit_api):
     assert result.exit_code == 1
 
 
-@XFAIL_851
 @FRONT_ENDS
 def test_abandonchanges_transport_failure_continues_and_exits_1(run, gerrit_api):
     """A connection error on one change does not stop the rest, and fails the run."""
@@ -207,7 +203,6 @@ def test_abandonchanges_transport_failure_continues_and_exits_1(run, gerrit_api)
     assert result.exit_code == 1
 
 
-@XFAIL_851
 @FRONT_ENDS
 def test_abandonchanges_conflict_is_skipped(run, gerrit_api):
     """A change closed since the query (409) is skipped, not a failure."""
@@ -219,7 +214,6 @@ def test_abandonchanges_conflict_is_skipped(run, gerrit_api):
     assert result.exit_code == 0
 
 
-@XFAIL_851
 @FRONT_ENDS
 def test_abandonchanges_nothing_open_prints_empty_list(run, gerrit_api):
     """With no open changes the command succeeds and prints an empty list."""
