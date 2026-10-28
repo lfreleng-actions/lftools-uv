@@ -19,7 +19,6 @@ from typer.testing import Result as TyperResult
 from lftools_uv.cli.lfidapi import lfidapi
 from lftools_uv.typer_apps.lfidapi import lfidapi_app
 
-_XFAIL_872 = pytest.mark.xfail(strict=True, reason="#872: Click registers create-group as create")
 _XFAIL_860 = pytest.mark.xfail(strict=True, reason="#860: invalid invite or existing group exits 0")
 
 
@@ -48,7 +47,6 @@ def mock_requests():
         yield requests
 
 
-@_XFAIL_872
 def test_click_registers_create_group_name():
     """Click 8.2 strips ``_group`` from the derived name, so set it."""
     assert "create-group" in lfidapi.commands
@@ -88,11 +86,7 @@ def test_create_group_existing_exits_1(run, mock_requests):
     assert "created successfully" not in result.output
 
 
-@pytest.mark.parametrize(
-    "run",
-    [pytest.param(_run_click, marks=_XFAIL_872), _run_typer],
-    ids=["click", "typer"],
-)
+@pytest.mark.parametrize("run", [_run_click, _run_typer], ids=["click", "typer"])
 def test_create_group_new_exits_0(run, mock_requests):
     """A group that does not exist yet is created and the command succeeds."""
     with patch("lftools_uv.lfidapi.helper_check_group_exists", return_value=404):

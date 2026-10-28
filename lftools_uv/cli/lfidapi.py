@@ -64,7 +64,7 @@ def invite(ctx, email, group):
     helper_invite(email, group)
 
 
-@click.command()
+@click.command(name="create-group")
 @click.argument("group")
 @click.pass_context
 def create_group(ctx, group):
