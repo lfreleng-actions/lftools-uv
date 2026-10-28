@@ -62,7 +62,6 @@ def _make_project(mocker: MockerFixture) -> tuple[rdh.ProjectClass, MagicMock]:
 class TestDockerPush:
     """#838: a push the daemon reports as failed in its stream must raise."""
 
-    @pytest.mark.xfail(strict=True, reason="#838: push stream errors are discarded")
     def test_error_chunk_raises(self, mocker: MockerFixture) -> None:
         proj, push = _make_project(mocker)
         push.return_value = iter([{"status": "Preparing"}, PUSH_ERROR_CHUNK])
@@ -72,7 +71,6 @@ class TestDockerPush:
 
         push.assert_called_once_with(f"{ORG}/{DOCKER_REPO}", tag="1.2.3", stream=True, decode=True)
 
-    @pytest.mark.xfail(strict=True, reason="#838: push stream errors are discarded")
     def test_error_chunk_retried_then_fails(self, mocker: MockerFixture) -> None:
         mocker.patch("lftools_uv.nexus.release_docker_hub.project._MAX_RETRY_ATTEMPTS", 3)
         proj, push = _make_project(mocker)
