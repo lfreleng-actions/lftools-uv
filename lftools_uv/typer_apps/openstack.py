@@ -15,6 +15,7 @@ import subprocess
 
 import typer
 
+from lftools_uv.openstack import cluster as os_cluster
 from lftools_uv.openstack import image as os_image
 from lftools_uv.openstack import object as os_object
 from lftools_uv.openstack import server as os_server
@@ -29,6 +30,7 @@ openstack_app = typer.Typer(
     rich_markup_mode="markdown",
 )
 
+cluster_app = typer.Typer(name="cluster", help="Command for manipulating COE clusters.")
 image_app = typer.Typer(name="image", help="Command for manipulating images.")
 object_app = typer.Typer(name="object", help="Command for manipulating objects.")
 server_app = typer.Typer(name="server", help="Command for manipulating servers.")
@@ -36,6 +38,7 @@ stack_app = typer.Typer(name="stack", help="Command for manipulating stacks.")
 volume_app = typer.Typer(name="volume", help="Command for manipulating volumes.")
 
 # Add sub-apps to main app
+openstack_app.add_typer(cluster_app, name="cluster")
 openstack_app.add_typer(image_app, name="image")
 openstack_app.add_typer(object_app, name="object")
 openstack_app.add_typer(server_app, name="server")
@@ -57,6 +60,27 @@ def openstack_callback(
 ) -> None:
     """Provide an interface to OpenStack."""
     state.os_cloud = os_cloud
+
+
+# Cluster commands
+@cluster_app.command("cleanup")
+def cluster_cleanup(
+    jenkins: str | None = typer.Option(
+        None, "--jenkins", help="Space-separated list of Jenkins URLs to check for active builds."
+    ),
+) -> None:
+    """Cleanup orphaned COE clusters.
+
+    Removes clusters not in use by active Jenkins builds.
+    Preserves managed clusters (names containing -managed-prod-k8s- or -managed-test-k8s-).
+    """
+    os_cluster.cleanup(state.os_cloud, jenkins_urls=jenkins)
+
+
+@cluster_app.command("list")
+def cluster_list() -> None:
+    """List COE clusters."""
+    os_cluster.list_clusters(state.os_cloud)
 
 
 # Image commands

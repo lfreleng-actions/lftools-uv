@@ -15,8 +15,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 import responses
+from click.testing import CliRunner as ClickRunner
+from click.testing import Result as ClickResult
+from typer.testing import CliRunner as TyperRunner
+from typer.testing import Result as TyperResult
 
 from lftools_uv.openstack import cluster as os_cluster
+from lftools_uv.openstack import cmd as os_cmd
+from lftools_uv.typer_apps.openstack import openstack_app
 
 
 @responses.activate
@@ -572,3 +578,54 @@ def test_cleanup_exits_1_after_failed_delete(mock_from_config, _mock_fetch_build
     mock_cloud.delete_coe_cluster.assert_any_call("other-job-7")
     assert "Failed to delete cluster csit-job-12" in caplog.text
     assert "Failed to delete 1 orphaned cluster(s): csit-job-12" in caplog.text
+
+
+def _run_click(args: list[str]) -> ClickResult:
+    return ClickRunner().invoke(os_cmd.openstack, ["--os-cloud", "test-cloud", *args], obj={})
+
+
+def _run_typer(args: list[str]) -> TyperResult:
+    return TyperRunner().invoke(openstack_app, ["--os-cloud", "test-cloud", *args])
+
+
+FRONT_ENDS = [pytest.param(_run_click, id="click"), pytest.param(_run_typer, id="typer")]
+
+
+@pytest.mark.parametrize("run", FRONT_ENDS)
+def test_cluster_help_lists_commands(run):
+    """The cluster group exists and names its cleanup and list commands."""
+    result = run(["cluster", "--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "cleanup" in result.output
+    assert "list" in result.output
+
+
+@pytest.mark.parametrize("run", FRONT_ENDS)
+def test_cluster_cleanup_passes_jenkins_urls(run):
+    """cluster cleanup hands the --jenkins string to the library unchanged."""
+    jenkins = "https://jenkins.example.org https://jenkins.example.io"
+    with patch("lftools_uv.openstack.cluster.cleanup") as mock_cleanup:
+        result = run(["cluster", "cleanup", "--jenkins", jenkins])
+
+    assert result.exit_code == 0, result.output
+    mock_cleanup.assert_called_once_with("test-cloud", jenkins_urls=jenkins)
+
+
+@pytest.mark.parametrize("run", FRONT_ENDS)
+def test_cluster_cleanup_exits_1_on_failure(run):
+    """A cleanup that exits 1 makes the command exit 1."""
+    with patch("lftools_uv.openstack.cluster.cleanup", side_effect=SystemExit(1)):
+        result = run(["cluster", "cleanup", "--jenkins", JENKINS_URL])
+
+    assert result.exit_code == 1
+
+
+@pytest.mark.parametrize("run", FRONT_ENDS)
+def test_cluster_list_calls_library(run):
+    """cluster list lists the clusters of the selected cloud."""
+    with patch("lftools_uv.openstack.cluster.list_clusters") as mock_list:
+        result = run(["cluster", "list"])
+
+    assert result.exit_code == 0, result.output
+    mock_list.assert_called_once_with("test-cloud")
