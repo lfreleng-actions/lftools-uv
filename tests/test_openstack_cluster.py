@@ -588,14 +588,7 @@ def _run_typer(args: list[str]) -> TyperResult:
     return TyperRunner().invoke(openstack_app, ["--os-cloud", "test-cloud", *args])
 
 
-FRONT_ENDS = [
-    pytest.param(_run_click, id="click"),
-    pytest.param(
-        _run_typer,
-        id="typer",
-        marks=pytest.mark.xfail(strict=True, reason="#828: Typer CLI has no cluster group"),
-    ),
-]
+FRONT_ENDS = [pytest.param(_run_click, id="click"), pytest.param(_run_typer, id="typer")]
 
 
 @pytest.mark.parametrize("run", FRONT_ENDS)
