@@ -22,8 +22,6 @@ typer_token_module = importlib.import_module("lftools_uv.typer_apps.jenkins.toke
 
 FQDN = "nexus.example.org"
 
-XFAIL_952 = pytest.mark.xfail(strict=True, reason="#952: a missing jenkins_jobs.ini section is not reported")
-
 
 def _no_section(section, _option=None):
     raise configparser.NoSectionError(section)
@@ -159,14 +157,12 @@ def test_lazy_client_dunder_does_not_build():
     factory.assert_not_called()
 
 
-@XFAIL_952
 def test_jenkins_missing_section_raises(jjb_ini):
     """A missing jenkins_jobs.ini section raises a ValueError naming it."""
     with pytest.raises(ValueError, match=r"\[jenkins\] section not found"):
         Jenkins("jenkins", config_file=str(jjb_ini))
 
 
-@XFAIL_952
 @pytest.mark.parametrize("front_end", FRONT_ENDS)
 def test_get_credentials_reports_missing_section(front_end, jjb_ini, caplog):
     """A command run against a missing section reports the section."""
