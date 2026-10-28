@@ -11,7 +11,6 @@ still map to the decorator's own codes.
 import sys
 
 import click
-import pytest
 import typer
 from click.testing import CliRunner as ClickRunner
 from click.testing import Result as ClickResult
@@ -19,8 +18,6 @@ from typer.testing import CliRunner as TyperRunner
 from typer.testing import Result as TyperResult
 
 from lftools_uv.cli.errors import error_handler
-
-XFAIL_866 = pytest.mark.xfail(strict=True, reason="#866: handle_errors turns framework exits into exit 1")
 
 
 @click.group()
@@ -101,19 +98,16 @@ def _typer(command: str) -> TyperResult:
     return TyperRunner().invoke(typer_app, [command])
 
 
-@XFAIL_866
 def test_click_ctx_exit_keeps_code() -> None:
     """``ctx.exit(0)`` exits 0."""
     assert _click("ctx-exit").exit_code == 0
 
 
-@XFAIL_866
 def test_click_usage_error_keeps_code() -> None:
     """``click.UsageError`` exits 2."""
     assert _click("usage-error").exit_code == 2
 
 
-@XFAIL_866
 def test_click_abort_reaches_click() -> None:
     """``click.Abort`` reaches Click, which prints ``Aborted!``."""
     result = _click("abort")
@@ -121,13 +115,11 @@ def test_click_abort_reaches_click() -> None:
     assert "Aborted!" in result.output
 
 
-@XFAIL_866
 def test_typer_exit_keeps_code() -> None:
     """``typer.Exit(3)`` exits 3."""
     assert _typer("exit").exit_code == 3
 
 
-@XFAIL_866
 def test_typer_abort_reaches_typer() -> None:
     """``typer.Abort`` reaches Typer, which prints ``Aborted.``."""
     result = _typer("abort")
@@ -135,7 +127,6 @@ def test_typer_abort_reaches_typer() -> None:
     assert "Aborted." in result.output
 
 
-@XFAIL_866
 def test_typer_bad_parameter_keeps_code() -> None:
     """``typer.BadParameter`` exits 2."""
     assert _typer("bad-parameter").exit_code == 2
