@@ -23,6 +23,7 @@ from lftools_uv.typer_apps.zulip.helpers import (
     emit_error,
     emit_json,
     emit_table,
+    folder_failure,
     handle_zulip_error,
 )
 
@@ -137,7 +138,7 @@ def folder_create(
         client = zulip_cli.get_client(zuliprc=options.get("zuliprc"))
         result = zulip_cli.create_channel_folder(client, name=name, description=description)
     except ZulipError as exc:
-        raise handle_zulip_error(exc) from exc
+        raise folder_failure(options, str(exc), operation="create", folder_name=name) from exc
 
     if options.get("json_output"):
         emit_json(result)
@@ -159,17 +160,21 @@ def folder_update(
     ),
 ) -> None:
     """Update a channel folder name and/or description."""
-    if name is None and description is None:
-        emit_error("folder update requires at least one of --name or --description")
-        raise typer.Exit(code=1)
     options = {**(ctx.obj or {})}
     if json_output:
         options["json_output"] = True
+    if name is None and description is None:
+        raise folder_failure(
+            options,
+            "folder update requires at least one of --name or --description",
+            operation="update",
+            folder_id=folder_id,
+        )
     try:
         client = zulip_cli.get_client(zuliprc=options.get("zuliprc"))
         result = zulip_cli.update_channel_folder(client, folder_id=folder_id, name=name, description=description)
     except ZulipError as exc:
-        raise handle_zulip_error(exc) from exc
+        raise folder_failure(options, str(exc), operation="update", folder_id=folder_id) from exc
 
     if options.get("json_output"):
         emit_json(result)
@@ -196,7 +201,8 @@ def _folder_archive_common(
             else zulip_cli.unarchive_channel_folder(client, folder_id)
         )
     except ZulipError as exc:
-        raise handle_zulip_error(exc) from exc
+        operation = "archive" if archive else "unarchive"
+        raise folder_failure(options, str(exc), operation=operation, folder_id=folder_id) from exc
 
     if options.get("json_output"):
         emit_json(result)
@@ -264,13 +270,17 @@ def folder_move(
     ),
 ) -> None:
     """Move a channel folder before or after another folder."""
-    if (before is None) == (after is None):
-        emit_error("Exactly one of --before or --after is required")
-        raise typer.Exit(code=1)
-
     options = {**(ctx.obj or {})}
     if json_output:
         options["json_output"] = True
+    if (before is None) == (after is None):
+        raise folder_failure(
+            options,
+            "Exactly one of --before or --after is required",
+            operation="move",
+            folder_id=folder_id,
+        )
+
     position: Literal["before", "after"] = "before" if before is not None else "after"
     reference_token = before if before is not None else after
     assert reference_token is not None
@@ -282,11 +292,8 @@ def folder_move(
         current_order = _current_folder_order(folders)
         new_order = zulip_cli.plan_folder_move(current_order, folder_id, reference_id, position)
         zulip_cli.reorder_channel_folders(client, new_order)
-    except ValueError as exc:
-        emit_error(str(exc))
-        raise typer.Exit(code=1) from exc
-    except ZulipError as exc:
-        raise handle_zulip_error(exc) from exc
+    except (ValueError, ZulipError) as exc:
+        raise folder_failure(options, str(exc), operation="move", folder_id=folder_id) from exc
 
     if options.get("json_output"):
         emit_json(

@@ -87,6 +87,7 @@ Standard response schema for folder mutation operations.
 | `folder_id` | `int \| None` | Folder ID, if known |
 | `folder_name` | `str \| None` | Folder name, if known |
 | `operation` | `str` | create/update/archive/unarchive/move |
+| `error` | `str` | Failure message; present when `status` is error |
 
 ## Relationships
 

@@ -103,6 +103,36 @@ def mutation_failure(
     return typer.Exit(code=1)
 
 
+def folder_failure(
+    options: dict[str, Any],
+    message: str,
+    *,
+    operation: str,
+    folder_id: int | None = None,
+    folder_name: str | None = None,
+) -> typer.Exit:
+    """Report a failed folder mutation and return ``typer.Exit``.
+
+    With ``--json`` the failure is the spec 002 ``FolderMutationResult``
+    error payload on stdout, so automation always receives an outcome;
+    otherwise it is the usual error line on stderr. Callers should
+    ``raise`` the returned exit.
+    """
+    if options.get("json_output"):
+        emit_json(
+            {
+                "status": "error",
+                "folder_id": folder_id,
+                "folder_name": folder_name,
+                "operation": operation,
+                "error": message,
+            }
+        )
+    else:
+        emit_error(message)
+    return typer.Exit(code=1)
+
+
 def emit_table(rows: Sequence[Sequence[Any]], headers: Sequence[str]) -> None:
     """Print a human-readable table to stdout using ``tabulate``."""
     typer.echo(tabulate(list(rows), headers=list(headers)))
