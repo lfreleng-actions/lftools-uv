@@ -110,7 +110,7 @@ def helper_invite(email: str, group: str) -> None:
     except EmailNotValidError:
         # Avoid logging PII (email) in error messages
         log.error(f"Email address is not valid, not inviting to {group}")
-        return
+        sys.exit(1)
 
     sys.stdout.write(f"Inviting user to join {group}\n")
     response = requests.post(url, json=data, headers=headers)
@@ -128,6 +128,7 @@ def helper_create_group(group: str) -> None:
     response_code = helper_check_group_exists(group)
     if response_code == 200:
         log.error(f"Group {group} already exists. Exiting...")
+        sys.exit(1)
     else:
         access_token, url = oauth_helper()
         url = f"{url}/"

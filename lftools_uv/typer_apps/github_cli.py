@@ -205,8 +205,6 @@ def user(
     """Add and Remove users from an org team."""
     try:
         helper_user_github(None, organization, user, team, delete, admin)
-        action = "removed from" if delete else "added to"
-        log.info("User '%s' %s team '%s' successfully", user, action, team)
     except Exception:
         log.exception("Failed to modify user team membership")
         raise typer.Exit(1) from None
