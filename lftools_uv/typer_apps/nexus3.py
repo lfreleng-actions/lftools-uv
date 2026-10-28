@@ -16,6 +16,7 @@ import typer
 from tabulate import tabulate
 
 from lftools_uv.api.endpoints import nexus3
+from lftools_uv.cli.state import LazyClient
 from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
@@ -49,24 +50,15 @@ def nexus3_callback(
     fqdn: str = typer.Argument(..., help="Nexus3 server FQDN"),
 ) -> None:
     """The Nexus3 API Interface."""
-    # Check if we're just asking for help - if so, skip initialization
-    if ctx.resilient_parsing:
-        return
-
-    try:
-        nexus3_obj = nexus3.Nexus3(fqdn=fqdn)
-        # Preserve existing context; add nexus3 client without overwriting other keys
-        if ctx.obj is None:
-            ctx.obj = {}
-        ctx.obj["nexus3"] = nexus3_obj
-        # Also register inside structured AppState if available
-        state = ctx.obj.get("state")
-        if state:
-            state.nexus3 = nexus3_obj
-    except Exception:
-        # For help requests, don't fail - just continue without initializing client
-        if ctx.obj is None:
-            ctx.obj = {}
+    nexus3_obj = LazyClient(lambda: nexus3.Nexus3(fqdn=fqdn))
+    # Preserve existing context; add nexus3 client without overwriting other keys
+    if ctx.obj is None:
+        ctx.obj = {}
+    ctx.obj["nexus3"] = nexus3_obj
+    # Also register inside structured AppState if available
+    state = ctx.obj.get("state")
+    if state:
+        state.nexus3 = nexus3_obj
 
 
 # Asset subcommands

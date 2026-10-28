@@ -24,18 +24,15 @@ def offline_str(status):
 
 
 @click.group()
-@click.pass_context
-def nodes(ctx):
+def nodes():
     """Find information about builders connected to Jenkins Master."""
-    jenkins = ctx.obj["jenkins"]
-    ctx.obj["nodes"] = jenkins.server.get_nodes()
 
 
 @click.command()
 @click.pass_context
 def list_nodes(ctx):
     """List Jenkins nodes."""
-    node_list = ctx.obj["nodes"]
+    node_list = ctx.obj["jenkins"].server.get_nodes()
 
     for node in node_list:
         echo(f"{node['name']} [{offline_str(node['offline'])}]")

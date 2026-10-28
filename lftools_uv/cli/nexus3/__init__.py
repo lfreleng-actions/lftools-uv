@@ -15,6 +15,7 @@ __author__ = "DW Talton"
 import click
 
 from lftools_uv.api.endpoints import nexus3
+from lftools_uv.cli.state import LazyClient
 
 from .asset import asset
 from .privilege import privilege
@@ -31,7 +32,7 @@ from .user import user
 @click.pass_context
 def nexus_three(ctx, fqdn):
     """The Nexus3 API Interface."""
-    nexus3_obj = nexus3.Nexus3(fqdn=fqdn)
+    nexus3_obj = LazyClient(lambda: nexus3.Nexus3(fqdn=fqdn))
     # Preserve existing context; add nexus3 client without overwriting other keys
     if ctx.obj is None:
         ctx.obj = {}

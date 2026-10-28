@@ -15,6 +15,7 @@ import typer
 from tabulate import tabulate
 
 from lftools_uv.api.endpoints import nexus2
+from lftools_uv.cli.state import LazyClient
 from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
@@ -40,23 +41,14 @@ def nexus2_callback(
     fqdn: str = typer.Argument(..., help="Nexus2 server FQDN"),
 ) -> None:
     """The Nexus2 API Interface."""
-    # Check if we're just asking for help - if so, skip initialization
-    if ctx.resilient_parsing:
-        return
-
-    try:
-        nexus2_obj = nexus2.Nexus2(fqdn=fqdn)
-        if ctx.obj is None:
-            ctx.obj = {}
-        # Store client in raw context (legacy) and structured AppState if available
-        ctx.obj["nexus2"] = nexus2_obj
-        state = ctx.obj.get("state")
-        if state:
-            state.nexus2 = nexus2_obj
-    except Exception:
-        # For help requests, don't fail - just continue without initializing client
-        if ctx.obj is None:
-            ctx.obj = {}
+    nexus2_obj = LazyClient(lambda: nexus2.Nexus2(fqdn=fqdn))
+    if ctx.obj is None:
+        ctx.obj = {}
+    # Store client in raw context (legacy) and structured AppState if available
+    ctx.obj["nexus2"] = nexus2_obj
+    state = ctx.obj.get("state")
+    if state:
+        state.nexus2 = nexus2_obj
 
 
 # Privilege subcommands

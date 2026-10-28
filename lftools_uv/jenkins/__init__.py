@@ -65,7 +65,12 @@ class Jenkins:
     def __init__(
         self, server: str, user: str | None = None, password: str | None = None, config_file: str | None = None
     ) -> None:
-        """Initialize a Jenkins object."""
+        """Initialize a Jenkins object.
+
+        Raises:
+            ValueError: If *server* is not a URL and the config file has no
+                section of that name.
+        """
         self.config_file: str | None = config_file
         if not self.config_file:
             self.config_file = JJB_INI
@@ -80,7 +85,11 @@ class Jenkins:
                     password = config.get(server, "password")
                     server = config.get(server, "url")
                 else:
-                    log.error(f"[{server}] section not found in {self.config_file}")
+                    msg = (
+                        f"[{server}] section not found in {self.config_file}; "
+                        "pass the server URL with --server, or add the section"
+                    )
+                    raise ValueError(msg)
             else:
                 log.debug("jenkins_jobs.ini not found in any of the default paths.")
                 server = "https://localhost:8080"

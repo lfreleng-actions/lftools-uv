@@ -42,11 +42,43 @@ classes (Jenkins, Nexus, etc.). Attribute types are annotated as 'Any'.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
 MASK = "********"
+
+_LAZY_FIELDS = frozenset({"_factory", "_known", "_client"})
+
+
+class LazyClient:
+    """Stand-in for a service client that builds it on first use.
+
+    Group callbacks register one in place of the client, so a subcommand's
+    ``--help`` needs no configuration and a failed build surfaces in the
+    command that uses the client, inside its own error handling.
+
+    Args:
+        factory: Zero-argument callable returning the real client.
+        **known: Attributes answered without building the client.
+    """
+
+    def __init__(self, factory: Callable[[], Any], **known: Any) -> None:
+        self._factory = factory
+        self._known = known
+        self._client: Any = None
+
+    def __getattr__(self, name: str) -> Any:
+        # Called only for attributes the wrapper lacks. Refusing dunders keeps
+        # copy, pickle and introspection from building a client by accident;
+        # refusing the wrapper's own fields avoids recursing before __init__.
+        if (name.startswith("__") and name.endswith("__")) or name in _LAZY_FIELDS:
+            raise AttributeError(name)
+        if name in self._known:
+            return self._known[name]
+        if self._client is None:
+            self._client = self._factory()
+        return getattr(self._client, name)
 
 
 @dataclass
