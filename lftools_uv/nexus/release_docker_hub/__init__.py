@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import logging
 import multiprocessing
+import sys
 from multiprocessing.dummy import Pool as ThreadPool
 
 import docker
@@ -158,7 +159,9 @@ def get_nexus3_catalog(
         log.debug(
             f"# TmpCatalog {len(TmpCatalog)}, NexusCatalog {len(NexusCatalog)}, DIFF = {len(TmpCatalog) - len(NexusCatalog)}"
         )
-    return True
+        return True
+    log.error(f"Fetching Nexus3 catalog {settings.nexus3_catalog} answered HTTP {r.status_code}")
+    return False
 
 
 def fetch_all_tags(progbar: bool = False, docker_client: docker.DockerClient | None = None) -> None:
@@ -385,14 +388,14 @@ def start_point(
     # Verify find_pattern and specified_repo are not both used.
     if len(find_pattern) == 0 and exact_match:
         log.error("You need to provide a Pattern to go with the --exact flag")
-        return
+        sys.exit(1)
     initialize(org_name, version_regexp)
     if not validate_regexp():
         log.error(f"Found issues with the provided regexp >>{settings.version_regexp}<< ")
-        return
+        sys.exit(1)
     if not get_nexus3_catalog(org_name, find_pattern, exact_match, repofile):
-        log.info(f"Could not get any catalog from Nexus3 with org = {org_name}")
-        return
+        log.error(f"Could not get any catalog from Nexus3 with org = {org_name}")
+        sys.exit(1)
 
     fetch_all_tags(progbar, docker_client)
     if verbose:

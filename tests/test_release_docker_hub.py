@@ -891,13 +891,19 @@ class TestFetchAllTagsAndUpdate:
 
     def test_start_bogus_orgs(self, responses):
         self.initiate_bogus_org_test_fetch(responses, "bogus_org321")
-        rdh.start_point("bogus_org321")
+        with pytest.raises(SystemExit) as excinfo:
+            rdh.start_point("bogus_org321")
+        assert excinfo.value.code == 1
         assert len(rdh.NexusCatalog) == 0
         assert len(rdh.projects) == 0
 
 
 def test_calculate_docker_project_name(mocker):
     mocker.patch("docker.from_env")
+    nexus_mock = mocker.patch("lftools_uv.nexus.release_docker_hub.project.NexusTagClass")
+    nexus_mock.return_value.valid = []
+    docker_mock = mocker.patch("lftools_uv.nexus.release_docker_hub.project.DockerTagClass")
+    docker_mock.return_value.valid = []
     project = ["onap", "this/is/a-test_project", ""]
     rdh.initialize("onap")
     test_proj = rdh.ProjectClass(project)
@@ -930,9 +936,9 @@ class TestProjectClassOrdering:
         is a no-op.
         """
         mocker.patch("docker.from_env")
-        nexus_mock = mocker.patch("lftools_uv.nexus.release_docker_hub.NexusTagClass")
+        nexus_mock = mocker.patch("lftools_uv.nexus.release_docker_hub.project.NexusTagClass")
         nexus_mock.return_value.valid = []
-        docker_mock = mocker.patch("lftools_uv.nexus.release_docker_hub.DockerTagClass")
+        docker_mock = mocker.patch("lftools_uv.nexus.release_docker_hub.project.DockerTagClass")
         docker_mock.return_value.valid = []
         rdh.initialize("onap")
         return rdh.ProjectClass(["onap", repo, ""])

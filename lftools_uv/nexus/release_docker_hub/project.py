@@ -155,11 +155,21 @@ class ProjectClass:
     def _docker_push(
         self, count: int, image: docker.models.images.Image, tag: str, retry_text: str, progbar: bool = False
     ) -> None:
-        """Push the docker image to Docker Hub."""
+        """Push the docker image to Docker Hub.
+
+        The daemon answers a failed push with HTTP 200 and reports the
+        failure in the progress stream, so read the stream and raise on it.
+
+        :raises docker.errors.APIError: when the stream reports an error.
+        """
         self._pull_tag_push_msg(
             f"Pushing  docker image {self.calc_docker_project_name()} with tag {tag}", count, retry_text
         )
-        self.docker_client.images.push(self.calc_docker_project_name(), tag=tag)
+        for chunk in self.docker_client.images.push(self.calc_docker_project_name(), tag=tag, stream=True, decode=True):
+            if "error" in chunk or "errorDetail" in chunk:
+                detail = chunk.get("errorDetail") or {}
+                message = chunk.get("error") or detail.get("message") or "unknown push error"
+                raise docker.errors.APIError(f"Push of {self.calc_docker_project_name()}:{tag} failed: {message}")
 
     def _docker_cleanup(
         self, count: int, image: docker.models.images.Image, tag: str, retry_text: str = "", progbar: bool = False
