@@ -12,28 +12,27 @@
 
 __author__ = "DW Talton"
 
+import contextlib
 import logging
 import os
 import re
 import subprocess
 import sys
-from os import chdir, getcwd
 
 from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
 
 
-def get_branches(path=getcwd(), invert=False):
+def get_branches(path=".", invert=False):
     """Get a list of branches."""
     if invert:
         invert = "--invert-grep"
     else:
         invert = ""
-    chdir(path)
     try:
         branches = (
-            subprocess.check_output("git branch -r | grep -v origin/HEAD", shell=True)
+            subprocess.check_output("git branch -r | grep -v origin/HEAD", shell=True, cwd=path)
             .decode(encoding="UTF-8")
             .splitlines()
         )
@@ -44,6 +43,7 @@ def get_branches(path=getcwd(), invert=False):
                 subprocess.check_output(
                     f'git log {branch} --no-merges --pretty="%H %ae" --grep "Signed-off-by" {invert}',
                     shell=True,
+                    cwd=path,
                 )
                 .decode(encoding="UTF-8")
                 .split("\n")
@@ -61,9 +61,14 @@ def get_branches(path=getcwd(), invert=False):
         sys.exit(1)
 
 
-def check(path=getcwd(), signoffs_dir="dco_signoffs"):
+def check(path=".", signoffs_dir="dco_signoffs"):
     """Check repository for commits missing DCO."""
-    chdir(path)
+    with contextlib.chdir(path):
+        _check(".", signoffs_dir)
+
+
+def _check(path, signoffs_dir):
+    """Report commits missing DCO; run inside the repository."""
     try:
         hashes = get_branches(path, invert=True)
         if not hashes:
@@ -96,9 +101,14 @@ def check(path=getcwd(), signoffs_dir="dco_signoffs"):
         sys.exit(1)
 
 
-def match(path=getcwd(), signoffs_dir="dco_signoffs"):
+def match(path=".", signoffs_dir="dco_signoffs"):
     """Check for commits where DCO does not match the commit author's email."""
-    chdir(path)
+    with contextlib.chdir(path):
+        _match(".", signoffs_dir)
+
+
+def _match(path, signoffs_dir):
+    """Report DCO mismatches; run inside the repository."""
     try:
         hashes = get_branches(path)
         exit_code = 0

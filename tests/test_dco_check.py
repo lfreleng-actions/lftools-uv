@@ -32,7 +32,6 @@ OTHER_SIGNOFF = "Signed-off-by: Someone <other@example.org>"
 
 XFAIL_861 = pytest.mark.xfail(strict=True, reason="#861: commits not on a remote branch are not checked")
 XFAIL_944 = pytest.mark.xfail(strict=True, reason="#944: dco match reports matching sign-offs")
-XFAIL_945 = pytest.mark.xfail(strict=True, reason="#945: dco leaves the caller in the repository")
 
 
 class Result(Protocol):
@@ -101,10 +100,6 @@ def _isolated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(f"GIT_{kind}_EMAIL", AUTHOR_EMAIL)
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
-    # A test that ran earlier may leave the process in a deleted
-    # directory, where ``monkeypatch.chdir`` fails on ``os.getcwd()``
-    # before it changes directory. Leave it first.
-    os.chdir(tmp_path)
     monkeypatch.chdir(tmp_path)
 
 
@@ -211,14 +206,12 @@ class TestMatchMismatches:
 class TestWorkingDirectory:
     """``check`` and ``match`` keep the caller's working directory."""
 
-    @XFAIL_945
     @pytest.mark.parametrize("cmd", ["check", "match"])
     def test_cwd_unchanged(self, run: Runner, cmd: str, repo: tuple[Path, str], tmp_path: Path) -> None:
         work, _ = repo
         run(cmd, str(work))
         assert os.getcwd() == str(tmp_path)
 
-    @XFAIL_945
     def test_relative_path(self, run: Runner, repo: tuple[Path, str]) -> None:
         result = run("check", repo[0].name)
         assert result.exit_code == 0
