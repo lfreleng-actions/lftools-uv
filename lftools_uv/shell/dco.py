@@ -12,58 +12,48 @@
 
 __author__ = "DW Talton"
 
+import contextlib
 import logging
 import os
 import re
 import subprocess
 import sys
-from os import chdir, getcwd
 
 from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
 
 
-def get_branches(path=getcwd(), invert=False):
-    """Get a list of branches."""
+def get_branches(path=".", invert=False):
+    """List the commits reachable from ``HEAD`` or any remote-tracking branch.
+
+    Merge commits are left out. Each entry is a commit hash and its author
+    email, separated by a space.
+
+    :arg path: Repository to read.
+    :arg invert: List the commits without a ``Signed-off-by`` line instead
+        of those with one.
+    :returns: The entries, or ``False`` when there are none.
+    """
+    command = ["git", "log", "HEAD", "--remotes", "--no-merges", "--pretty=%H %ae", "--grep", "Signed-off-by"]
     if invert:
-        invert = "--invert-grep"
-    else:
-        invert = ""
-    chdir(path)
+        command.append("--invert-grep")
     try:
-        branches = (
-            subprocess.check_output("git branch -r | grep -v origin/HEAD", shell=True)
-            .decode(encoding="UTF-8")
-            .splitlines()
-        )
-        hashlist: list[str] = []
-        for branch in branches:
-            branch = branch.strip()
-            hashes = (
-                subprocess.check_output(
-                    f'git log {branch} --no-merges --pretty="%H %ae" --grep "Signed-off-by" {invert}',
-                    shell=True,
-                )
-                .decode(encoding="UTF-8")
-                .split("\n")
-            )
-            hashlist = hashlist + hashes
-        if hashlist:
-            # ``git log`` terminates its output with a newline, so the
-            # ``split`` above leaves an empty final element.
-            hashlist.pop()
-            return hashlist
-        else:
-            return False
+        hashlist = subprocess.check_output(command, cwd=path).decode(encoding="UTF-8").splitlines()
     except subprocess.CalledProcessError as e:
         log.exception(e)
         sys.exit(1)
+    return hashlist or False
 
 
-def check(path=getcwd(), signoffs_dir="dco_signoffs"):
+def check(path=".", signoffs_dir="dco_signoffs"):
     """Check repository for commits missing DCO."""
-    chdir(path)
+    with contextlib.chdir(path):
+        _check(".", signoffs_dir)
+
+
+def _check(path, signoffs_dir):
+    """Report commits missing DCO; run inside the repository."""
     try:
         hashes = get_branches(path, invert=True)
         if not hashes:
@@ -96,9 +86,14 @@ def check(path=getcwd(), signoffs_dir="dco_signoffs"):
         sys.exit(1)
 
 
-def match(path=getcwd(), signoffs_dir="dco_signoffs"):
+def match(path=".", signoffs_dir="dco_signoffs"):
     """Check for commits where DCO does not match the commit author's email."""
-    chdir(path)
+    with contextlib.chdir(path):
+        _match(".", signoffs_dir)
+
+
+def _match(path, signoffs_dir):
+    """Report DCO mismatches; run inside the repository."""
     try:
         hashes = get_branches(path)
         exit_code = 0
@@ -122,7 +117,10 @@ def match(path=getcwd(), signoffs_dir="dco_signoffs"):
                 sob_email_regex = r"(?=Signed\-off\-by: ).*[\<](.*)[\>]"
                 sob_results = re.findall(sob_email_regex, commit_log_message)
 
-                if commit_author_email not in sob_results and os.path.isdir(signoffs_dir):
+                if commit_author_email in sob_results:
+                    continue
+
+                if os.path.isdir(signoffs_dir):
                     dco_file = subprocess.run(
                         ["grep", "-Rli", commit_author_email, signoffs_dir], capture_output=True
                     ).stdout
