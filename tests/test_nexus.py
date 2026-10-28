@@ -131,6 +131,77 @@ def test_release_cli_requires_repos(cli_runner, mocker):
     release.assert_not_called()
 
 
+@pytest.mark.datafiles(os.path.join(FIXTURE_DIR, "nexus"))
+def test_release_staging_repos_gives_up(datafiles, responses, mocker, nexus2_obj_create, mock_get_credentials):
+    """A release Nexus never finishes raises ``TimeoutError`` after ``max_wait``."""
+    os.chdir(str(datafiles))
+    baseurl = "http://nexus.localhost/service/local"
+    activity_url = f"{baseurl}/staging/repository/A/activity"
+    responses.assert_all_requests_are_fired = False
+
+    sleep = mocker.patch.object(cmd, "sleep")
+
+    responses.add(responses.GET, activity_url, open("staging_activities_closed.xml").read(), status=200)
+    responses.add(responses.POST, f"{baseurl}/staging/bulk/promote", status=201)
+    responses.add(responses.GET, activity_url, open("staging_activities_releasing.xml").read(), status=200)
+
+    with pytest.raises(TimeoutError, match="A"):
+        cmd.release_staging_repos(("A",), False, max_wait=1)
+    assert sleep.call_count <= 5
+
+
+@pytest.mark.datafiles(os.path.join(FIXTURE_DIR, "nexus"))
+def test_release_staging_repos_requests_time_out(datafiles, responses, mocker, nexus2_obj_create, mock_get_credentials):
+    """Every staging request made during a release carries a timeout."""
+    os.chdir(str(datafiles))
+    baseurl = "http://nexus.localhost/service/local"
+    activity_url = f"{baseurl}/staging/repository/A/activity"
+
+    mocker.patch.object(cmd, "sleep")
+    get = mocker.patch.object(cmd.requests, "get", wraps=requests.get)
+    post = mocker.patch.object(cmd.requests, "post", wraps=requests.post)
+
+    responses.add(responses.GET, activity_url, open("staging_activities_closed.xml").read(), status=200)
+    responses.add(responses.POST, f"{baseurl}/staging/bulk/promote", status=201)
+    responses.add(responses.GET, activity_url, open("staging_activities_released.xml").read(), status=200)
+
+    cmd.release_staging_repos(("A",), False)
+
+    staging_calls = [call for call in get.call_args_list + post.call_args_list if "/staging/" in call.args[0]]
+    assert len(staging_calls) == 3
+    assert all(call.kwargs.get("timeout") for call in staging_calls)
+
+
+@pytest.mark.datafiles(os.path.join(FIXTURE_DIR, "nexus"))
+def test_release_staging_repos_retries_slow_poll(datafiles, responses, mocker, nexus2_obj_create, mock_get_credentials):
+    """A poll that times out is retried like a connection error."""
+    os.chdir(str(datafiles))
+    baseurl = "http://nexus.localhost/service/local"
+    activity_url = f"{baseurl}/staging/repository/A/activity"
+    responses.assert_all_requests_are_fired = False
+
+    mocker.patch.object(cmd, "sleep")
+
+    responses.add(responses.GET, activity_url, open("staging_activities_closed.xml").read(), status=200)
+    responses.add(responses.POST, f"{baseurl}/staging/bulk/promote", status=201)
+    responses.add(responses.GET, activity_url, body=requests.exceptions.ReadTimeout("slow"))
+    responses.add(responses.GET, activity_url, open("staging_activities_released.xml").read(), status=200)
+
+    cmd.release_staging_repos(("A",), False)
+
+    assert len([call for call in responses.calls if call.request.url == activity_url]) == 3
+
+
+def test_release_cli_passes_max_wait(cli_runner, mocker):
+    """``nexus release --max-wait`` passes the limit on."""
+    release = mocker.patch("lftools_uv.nexus.cmd.release_staging_repos")
+    result = cli_runner.invoke(
+        cli.cli, ["nexus", "release", "-s", "https://nexus.example.org", "--max-wait", "5", "A"], obj={}
+    )
+    assert result.exit_code == 0
+    assert release.call_args.kwargs["max_wait"] == 5
+
+
 def _http_response(status, body=None):
     """Build a ``requests.Response`` with the given status and JSON body."""
     resp = requests.Response()

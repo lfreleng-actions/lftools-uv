@@ -238,8 +238,9 @@ def maven_file(
 @click.argument("nexus-repo-url", envvar="NEXUS_REPO_URL")
 @click.argument("deploy-dir", envvar="DEPLOY_DIR")
 @click.option("-s", "--snapshot", is_flag=True, default=False, help="Deploy a snapshot repo.")
+@click.option("--allow-empty", is_flag=True, default=False, help="Succeed when there is nothing to deploy.")
 @click.pass_context
-def nexus(ctx, nexus_repo_url, deploy_dir, snapshot):
+def nexus(ctx, nexus_repo_url, deploy_dir, snapshot, allow_empty):
     """Deploy a Maven repository to a specified Nexus repository.
 
     This script takes a local Maven repository and deploys it to a Nexus
@@ -251,7 +252,7 @@ def nexus(ctx, nexus_repo_url, deploy_dir, snapshot):
     """
     log.debug(f"nexus_repo_url={nexus_repo_url}, deploy_dir={deploy_dir}, snapshot={snapshot}")
     try:
-        deploy_sys.deploy_nexus(nexus_repo_url, deploy_dir, snapshot)
+        deploy_sys.deploy_nexus(nexus_repo_url, deploy_dir, snapshot, allow_empty=allow_empty)
     except HTTPError as e:
         deploy_sys._log_error_and_exit(str(e))
     except OSError as e:
@@ -262,14 +263,17 @@ def nexus(ctx, nexus_repo_url, deploy_dir, snapshot):
 @click.argument("nexus-url", envvar="NEXUS_URL")
 @click.argument("staging-profile-id", envvar="STAGING_PROFILE_ID")
 @click.argument("deploy-dir", envvar="DEPLOY_DIR")
+@click.option(
+    "--allow-empty", is_flag=True, default=False, help="Stage an empty repository when there is nothing to deploy."
+)
 @click.pass_context
-def nexus_stage(ctx, nexus_url, staging_profile_id, deploy_dir):
+def nexus_stage(ctx, nexus_url, staging_profile_id, deploy_dir, allow_empty):
     """Deploy a Maven repository to a Nexus staging repository.
 
     This script takes a local Maven repository and deploys it to a Nexus
     staging repository as defined by the staging-profile-id.
     """
-    deploy_sys.deploy_nexus_stage(nexus_url, staging_profile_id, deploy_dir)
+    deploy_sys.deploy_nexus_stage(nexus_url, staging_profile_id, deploy_dir, allow_empty=allow_empty)
 
 
 @click.command(name="nexus-stage-repo-close")

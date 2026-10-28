@@ -30,6 +30,8 @@ from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
 
+_RELEASE_REQUEST_TIMEOUT = 60  # seconds
+
 
 def get_credentials(settings_file: str | None, url: str | None = None) -> dict[str, str]:
     """Return credentials for Nexus instantiation."""
@@ -420,12 +422,14 @@ def find_release_time(events: list[et.Element]) -> str | None:
     return None
 
 
-def release_staging_repos(repos: tuple[str, ...], verify: bool, nexus_url: str = "") -> None:
+def release_staging_repos(repos: tuple[str, ...], verify: bool, nexus_url: str = "", max_wait: int = 60) -> None:
     """Release one or more staging repos.
 
     :arg tuple repos: A tuple containing one or more repo name strings.
     :arg str nexus_url: Optional URL of target Nexus server.
     :arg flag --verify-only: Only verify repo and exit.
+    :arg int max_wait: Minutes to wait for Nexus to release each repo
+        before raising ``TimeoutError``.
     """
     credentials = get_credentials(None, nexus_url)
     _nexus = Nexus(credentials["nexus"], credentials["user"], credentials["password"])
@@ -436,7 +440,7 @@ def release_staging_repos(repos: tuple[str, ...], verify: bool, nexus_url: str =
         activity_url = f"{_nexus.baseurl}/staging/repository/{repo}/activity"
         # Avoid logging full URL to prevent clear-text credential taint (CodeQL)
         log.debug("Verifying staging repository activity for: %s", repo)
-        response = requests.get(activity_url, auth=_nexus.auth)
+        response = requests.get(activity_url, auth=_nexus.auth, timeout=_RELEASE_REQUEST_TIMEOUT)
 
         if response.status_code != 200:
             raise requests.HTTPError(
@@ -511,7 +515,7 @@ def release_staging_repos(repos: tuple[str, ...], verify: bool, nexus_url: str =
             log.debug("Releasing staging repository: %s", repo)
             log.info(f"Requesting Nexus to release {repo}")
 
-            response = requests.post(request_url, json=data, auth=_nexus.auth)
+            response = requests.post(request_url, json=data, auth=_nexus.auth, timeout=_RELEASE_REQUEST_TIMEOUT)
 
             if response.status_code != 201:
                 raise requests.HTTPError(
@@ -528,8 +532,13 @@ def release_staging_repos(repos: tuple[str, ...], verify: bool, nexus_url: str =
             activity_url = f"{_nexus.baseurl}/staging/repository/{repo}/activity"
             sleep(5)  # Quick sleep to allow small repos to release.
             while True:
+                if wait_seconds * wait_iteration >= max_wait * 60:
+                    raise TimeoutError(
+                        f"Nexus did not finish releasing {repo} within {max_wait} minute(s); "
+                        "check the repository in Nexus before retrying"
+                    )
                 try:
-                    response_text = requests.get(activity_url, auth=_nexus.auth).text
+                    response_text = requests.get(activity_url, auth=_nexus.auth, timeout=_RELEASE_REQUEST_TIMEOUT).text
                     consecutive_failures = 0
                     root = et.fromstring(response_text)  # nosec
                     time = find_release_time(root.findall("./stagingActivity"))
@@ -537,7 +546,7 @@ def release_staging_repos(repos: tuple[str, ...], verify: bool, nexus_url: str =
                         log.info(f"Repo released at: {time}")
                         break
 
-                except requests.exceptions.ConnectionError as e:
+                except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
                     # Ignore failures unless they pile up. We do this because we seem to be facing transient
                     # issues (like DNS failures) and completing repository release here is absolutely critical,
                     # as otherwise this can lead to failing to perform post-release steps, which cannot be
