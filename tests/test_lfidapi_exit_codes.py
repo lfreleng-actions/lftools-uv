@@ -19,8 +19,6 @@ from typer.testing import Result as TyperResult
 from lftools_uv.cli.lfidapi import lfidapi
 from lftools_uv.typer_apps.lfidapi import lfidapi_app
 
-_XFAIL_860 = pytest.mark.xfail(strict=True, reason="#860: invalid invite or existing group exits 0")
-
 
 def _run_click(args: list[str]) -> ClickResult:
     return ClickRunner().invoke(lfidapi, args, obj={})
@@ -53,7 +51,6 @@ def test_click_registers_create_group_name():
     assert "create" not in lfidapi.commands
 
 
-@_XFAIL_860
 @pytest.mark.parametrize("run", [_run_click, _run_typer], ids=["click", "typer"])
 def test_invite_invalid_email_exits_1(run, mock_requests):
     """An invalid address fails the command and sends no invitation."""
@@ -74,7 +71,6 @@ def test_invite_valid_email_exits_0(run, mock_requests):
     mock_requests.post.assert_called_once()
 
 
-@_XFAIL_860
 @pytest.mark.parametrize("run", [_run_click, _run_typer], ids=["click", "typer"])
 def test_create_group_existing_exits_1(run, mock_requests):
     """Creating a group that already exists is an error."""
