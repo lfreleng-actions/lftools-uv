@@ -36,8 +36,6 @@ MARKER_KEYS = {"logs/_tmpfile", "silo/_tmpfile", "logs/silo/node/_tmpfile"}
 ErrorFactory = Callable[[], Exception]
 Installer = Callable[[dict[str, ErrorFactory]], "FakeS3"]
 
-XFAIL_835 = pytest.mark.xfail(strict=True, reason="#835: a failed S3 upload stops the deploy or passes")
-
 
 def _client_error() -> Exception:
     return ClientError({"Error": {"Code": "500", "Message": "Internal error"}}, "PutObject")
@@ -52,6 +50,7 @@ class FakeS3:
 
     def __init__(self, failures: dict[str, ErrorFactory]) -> None:
         self.failures = failures
+        self.delete_error: ErrorFactory | None = None
         self.uploaded: list[str] = []
         self.attempted: list[str] = []
         self.deleted: set[str] = set()
@@ -77,6 +76,8 @@ class FakeObject:
         self.key = key
 
     def delete(self) -> None:
+        if self.s3.delete_error is not None:
+            raise self.s3.delete_error()
         self.s3.deleted.add(self.key)
 
 
@@ -107,7 +108,6 @@ def fake_s3(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Install
         yield install
 
 
-@XFAIL_835
 @pytest.mark.parametrize("error", [_upload_failed, _client_error], ids=["upload-failed", "client-error"])
 def test_failed_upload_reports_and_cleans_up(fake_s3: Installer, tmp_path: Path, error: ErrorFactory) -> None:
     """Every file is still attempted, markers go, and the failure is named."""
@@ -128,7 +128,33 @@ def test_successful_deploy_deletes_markers(fake_s3: Installer, tmp_path: Path) -
     assert Path.cwd() == tmp_path
 
 
-@XFAIL_835
+def _access_denied() -> Exception:
+    return ClientError({"Error": {"Code": "AccessDenied", "Message": "Access Denied"}}, "DeleteObject")
+
+
+@pytest.mark.parametrize("failures", [{}, {"console.log": _upload_failed}], ids=["uploads-ok", "upload-failed"])
+def test_failed_marker_delete_restores_cwd(
+    fake_s3: Installer, tmp_path: Path, failures: dict[str, ErrorFactory]
+) -> None:
+    """A marker deletion that fails still returns to the previous directory."""
+    s3 = fake_s3(failures)
+    s3.delete_error = _access_denied
+    with pytest.raises(ClientError, match="AccessDenied"):
+        deploy_s3(BUCKET, S3_PATH, BUILD_URL, str(tmp_path))
+    assert Path.cwd() == tmp_path
+
+
+def test_failed_marker_delete_keeps_upload_failures(fake_s3: Installer, tmp_path: Path) -> None:
+    """A failed marker deletion carries the upload failure as its context."""
+    s3 = fake_s3({"console.log": _upload_failed})
+    s3.delete_error = _access_denied
+    with pytest.raises(ClientError, match="AccessDenied") as excinfo:
+        deploy_s3(BUCKET, S3_PATH, BUILD_URL, str(tmp_path))
+    context = excinfo.value.__context__
+    assert isinstance(context, requests.HTTPError)
+    assert "console.log" in str(context)
+
+
 def test_typer_deploy_s3_exits_one(fake_s3: Installer, tmp_path: Path) -> None:
     """Typer ``deploy s3`` exits 1 when an upload fails."""
     fake_s3({"console.log": _client_error})
@@ -136,7 +162,6 @@ def test_typer_deploy_s3_exits_one(fake_s3: Installer, tmp_path: Path) -> None:
     assert result.exit_code == 1
 
 
-@XFAIL_835
 def test_click_deploy_s3_exits_one(fake_s3: Installer, tmp_path: Path) -> None:
     """Click ``deploy s3`` exits 1 when an upload fails."""
     fake_s3({"console.log": _client_error})
