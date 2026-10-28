@@ -25,40 +25,25 @@ log = logging.getLogger(__name__)
 
 
 def get_branches(path=".", invert=False):
-    """Get a list of branches."""
+    """List the commits reachable from ``HEAD`` or any remote-tracking branch.
+
+    Merge commits are left out. Each entry is a commit hash and its author
+    email, separated by a space.
+
+    :arg path: Repository to read.
+    :arg invert: List the commits without a ``Signed-off-by`` line instead
+        of those with one.
+    :returns: The entries, or ``False`` when there are none.
+    """
+    command = ["git", "log", "HEAD", "--remotes", "--no-merges", "--pretty=%H %ae", "--grep", "Signed-off-by"]
     if invert:
-        invert = "--invert-grep"
-    else:
-        invert = ""
+        command.append("--invert-grep")
     try:
-        branches = (
-            subprocess.check_output("git branch -r | grep -v origin/HEAD", shell=True, cwd=path)
-            .decode(encoding="UTF-8")
-            .splitlines()
-        )
-        hashlist: list[str] = []
-        for branch in branches:
-            branch = branch.strip()
-            hashes = (
-                subprocess.check_output(
-                    f'git log {branch} --no-merges --pretty="%H %ae" --grep "Signed-off-by" {invert}',
-                    shell=True,
-                    cwd=path,
-                )
-                .decode(encoding="UTF-8")
-                .split("\n")
-            )
-            hashlist = hashlist + hashes
-        if hashlist:
-            # ``git log`` terminates its output with a newline, so the
-            # ``split`` above leaves an empty final element.
-            hashlist.pop()
-            return hashlist
-        else:
-            return False
+        hashlist = subprocess.check_output(command, cwd=path).decode(encoding="UTF-8").splitlines()
     except subprocess.CalledProcessError as e:
         log.exception(e)
         sys.exit(1)
+    return hashlist or False
 
 
 def check(path=".", signoffs_dir="dco_signoffs"):

@@ -30,7 +30,6 @@ AUTHOR_NAME = "Scratch Author"
 AUTHOR_EMAIL = "scratch@example.org"
 OTHER_SIGNOFF = "Signed-off-by: Someone <other@example.org>"
 
-XFAIL_861 = pytest.mark.xfail(strict=True, reason="#861: commits not on a remote branch are not checked")
 XFAIL_944 = pytest.mark.xfail(strict=True, reason="#944: dco match reports matching sign-offs")
 
 
@@ -131,7 +130,6 @@ def solo(tmp_path: Path) -> Path:
 class TestCheckHead:
     """``check`` examines commits that are not on a remote branch."""
 
-    @XFAIL_861
     def test_unsigned_on_detached_head(self, run: Runner, repo: tuple[Path, str]) -> None:
         work, _ = repo
         _git(work, "checkout", "-q", "--detach")
@@ -140,7 +138,6 @@ class TestCheckHead:
         assert result.exit_code == 1
         assert unsigned in result.output
 
-    @XFAIL_861
     def test_unsigned_on_local_branch(self, run: Runner, repo: tuple[Path, str]) -> None:
         work, _ = repo
         _git(work, "checkout", "-q", "-b", "topic")
@@ -149,20 +146,17 @@ class TestCheckHead:
         assert result.exit_code == 1
         assert unsigned in result.output
 
-    @XFAIL_861
     def test_unsigned_without_remote(self, run: Runner, solo: Path) -> None:
         unsigned = _commit(solo, "only.txt", signoff=None)
         result = run("check", str(solo))
         assert result.exit_code == 1
         assert unsigned in result.output
 
-    @XFAIL_861
     def test_signed_without_remote(self, run: Runner, solo: Path) -> None:
         _commit(solo, "only.txt")
         result = run("check", str(solo))
         assert result.exit_code == 0
 
-    @XFAIL_861
     def test_match_mismatch_on_detached_head(self, run: Runner, repo: tuple[Path, str]) -> None:
         work, _ = repo
         _git(work, "checkout", "-q", "--detach")
