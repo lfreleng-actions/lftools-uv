@@ -130,6 +130,7 @@ class Gerrit(client.RestApi):
 
         access_str: str = _CHANGES_PATH
         response: ApiResponse = self.post(access_str, data=payload)
+        self._require_status(response, f"Create change in {gerrit_project}")
         result: dict[str, object] = self._json_body(response)
         log.info(result.get("id"))
         changeid: str = self._str_val(result.get("id"))
@@ -143,6 +144,7 @@ class Gerrit(client.RestApi):
         access_str = f"changes/{changeid}/edit/{basename}"
         edit_result: ApiResponse = self.put(access_str, data=file_content)
         log.info(edit_result)
+        self._require_status(edit_result, f"Upload {basename} to change {changeid}")
 
         access_str = f"changes/{changeid}/edit:publish"
         headers = {"Content-Type": _CONTENT_TYPE_JSON_UTF8}
@@ -153,6 +155,7 @@ class Gerrit(client.RestApi):
             }
         )
         publish_result: ApiResponse = self.post(access_str, data=publish_payload)
+        self._require_status(publish_result, f"Publish change {changeid}")
         return publish_result
 
     def add_info_job(
@@ -440,6 +443,7 @@ class Gerrit(client.RestApi):
         access_str: str = f"groups/{saml_group_encoded}"
         log.info("Encoded SAML group name: %s", saml_group_encoded)
         result: ApiResponse = self.put(access_str, data=payload)
+        self._require_status(result, f"Create group {saml_group}")
         return result
 
     def add_github_rights(self, _fqdn: str, gerrit_project: str) -> None:
@@ -507,6 +511,7 @@ class Gerrit(client.RestApi):
         --description="This is a demo project"
 
         """
+        project_name: str = gerrit_project
         gerrit_project = quote(gerrit_project, safe="", encoding=None, errors=None)
 
         access_str: str = f"projects/?query=name:{gerrit_project}"
@@ -546,6 +551,7 @@ class Gerrit(client.RestApi):
 
         log.info(payload)
         result: ApiResponse = self.put(access_str, data=payload)
+        self._require_status(result, f"Create project {project_name}")
         return result
 
     def list_project_permissions(self, project: str) -> list[str]:

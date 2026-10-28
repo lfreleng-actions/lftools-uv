@@ -38,8 +38,6 @@ _SETTINGS = {
     "sob": "Automation <automation@example.org>",
 }
 
-XFAIL_847 = pytest.mark.xfail(strict=True, reason="#847: Gerrit commands exit 0 when Gerrit refuses a request")
-
 # (method, URL fragment, response); the first matching route answers.
 Routes = list[tuple[str, str, requests.Response]]
 
@@ -106,7 +104,6 @@ def _project_routes(existing: dict[str, object], put: requests.Response) -> Rout
     ]
 
 
-@XFAIL_847
 @FRONT_ENDS
 def test_createproject_refused_exits_1(run, gerrit_api, caplog):
     """A project Gerrit refuses to create fails, logging Gerrit's message."""
@@ -147,7 +144,6 @@ def test_createproject_existing_exits_1_without_put(run, gerrit_api):
 # ---------------------------------------------------------------------------
 
 
-@XFAIL_847
 @FRONT_ENDS
 @pytest.mark.parametrize(
     ("status", "text"),
@@ -199,7 +195,6 @@ def _addfile_routes(
     ]
 
 
-@XFAIL_847
 @FRONT_ENDS
 def test_addfile_create_refused_logs_gerrit_text(run, gerrit_api, caplog, tmp_path):
     """A refused change creation fails with Gerrit's message and goes no further."""
@@ -215,7 +210,6 @@ def test_addfile_create_refused_logs_gerrit_text(run, gerrit_api, caplog, tmp_pa
     assert len(calls) == 1
 
 
-@XFAIL_847
 @FRONT_ENDS
 def test_addfile_edit_refused_does_not_publish(run, gerrit_api, caplog, tmp_path):
     """A refused upload fails and the change is not published."""
@@ -231,7 +225,6 @@ def test_addfile_edit_refused_does_not_publish(run, gerrit_api, caplog, tmp_path
     assert not any(url.endswith("edit:publish") for _method, url in calls)
 
 
-@XFAIL_847
 @FRONT_ENDS
 def test_addfile_publish_refused_exits_1(run, gerrit_api, caplog, tmp_path):
     """A refused publish fails, logging Gerrit's message."""
