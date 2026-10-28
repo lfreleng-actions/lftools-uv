@@ -54,7 +54,6 @@ def _run_typer(args: list[str]) -> TyperResult:
 
 FRONT_ENDS = pytest.mark.parametrize("run", [_run_click, _run_typer], ids=["click", "typer"])
 
-XFAIL_850 = pytest.mark.xfail(strict=True, reason="#850: a missing GitHub group exits 0")
 XFAIL_851 = pytest.mark.xfail(strict=True, reason="#851: only the first open change is abandoned")
 XFAIL_855 = pytest.mark.xfail(strict=True, reason="#855: bad maven settings are still pushed")
 
@@ -114,7 +113,6 @@ def _github_route(groups: dict[str, object]) -> Route:
     return route
 
 
-@XFAIL_850
 @FRONT_ENDS
 def test_addgithubrights_missing_group_exits_1(run, gerrit_api):
     """With no GitHub Replication group, nothing is granted and it fails."""

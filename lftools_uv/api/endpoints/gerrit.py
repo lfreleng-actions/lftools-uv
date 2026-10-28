@@ -456,7 +456,8 @@ class Gerrit(client.RestApi):
             pretty: str = json.dumps(post_body, indent=4, sort_keys=True)
             log.info(pretty)
         else:
-            log.info("Error no githubid found")
+            log.error("No GitHub Replication group found; cannot grant GitHub read to %s", gerrit_project)
+            sys.exit(1)
 
     def create_project(
         self,
