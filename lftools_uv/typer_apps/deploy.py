@@ -205,6 +205,7 @@ def nexus(
     nexus_repo_url: str = typer.Argument(..., envvar="NEXUS_REPO_URL", help="Nexus repository URL"),
     deploy_dir: str = typer.Argument(..., envvar="DEPLOY_DIR", help="Directory containing Maven repository to deploy"),
     snapshot: bool = typer.Option(False, "-s", "--snapshot", help="Deploy a snapshot repo."),
+    allow_empty: bool = typer.Option(False, "--allow-empty", help="Succeed when there is nothing to deploy."),
 ) -> None:
     """Deploy a Maven repository to a specified Nexus repository.
 
@@ -214,7 +215,7 @@ def nexus(
     Requires the Nexus Unpack plugin and permission assigned to the upload user.
     """
     try:
-        deploy_sys.deploy_nexus(nexus_repo_url, deploy_dir, snapshot)
+        deploy_sys.deploy_nexus(nexus_repo_url, deploy_dir, snapshot, allow_empty=allow_empty)
     except HTTPError as e:
         log.exception(str(e))
         raise typer.Exit(1) from None
@@ -228,13 +229,16 @@ def nexus_stage(
     nexus_url: str = typer.Argument(..., envvar="NEXUS_URL", help=_HELP_NEXUS_URL),
     staging_profile_id: str = typer.Argument(..., envvar="STAGING_PROFILE_ID", help=_HELP_NEXUS_STAGING_ID),
     deploy_dir: str = typer.Argument(..., envvar="DEPLOY_DIR", help="Directory containing Maven repository to deploy"),
+    allow_empty: bool = typer.Option(
+        False, "--allow-empty", help="Stage an empty repository when there is nothing to deploy."
+    ),
 ) -> None:
     """Deploy a Maven repository to a Nexus staging repository.
 
     This script takes a local Maven repository and deploys it to a Nexus
     staging repository as defined by the staging-profile-id.
     """
-    deploy_sys.deploy_nexus_stage(nexus_url, staging_profile_id, deploy_dir)
+    deploy_sys.deploy_nexus_stage(nexus_url, staging_profile_id, deploy_dir, allow_empty=allow_empty)
 
 
 @deploy_app.command(name="nexus-stage-repo-close")

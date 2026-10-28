@@ -220,7 +220,38 @@ def upload_maven_file_to_nexus(
         raise requests.HTTPError(f"Nexus Error: {nexus_error_msg}") from None
 
 
-def deploy_nexus(nexus_repo_url: str, deploy_dir: str, snapshot: bool = False, workers: int = 2) -> None:
+def _deploy_file_list(deploy_dir: str, snapshot: bool) -> list[str]:
+    """Return the files to deploy from *deploy_dir*, relative to it.
+
+    Skips ``_remote.repositories``, ``resolver-status.properties`` and,
+    unless *snapshot*, ``maven-metadata.xml*``.
+    """
+    file_list: list[str] = []
+    for file in glob.glob("**/*", root_dir=deploy_dir, recursive=True):
+        if not os.path.isfile(os.path.join(deploy_dir, file)):
+            continue
+        base_name: str = os.path.basename(file)
+        if base_name in ("_remote.repositories", "resolver-status.properties"):
+            continue
+        if not snapshot and base_name.startswith("maven-metadata.xml"):
+            continue
+        file_list.append(file)
+    return file_list
+
+
+def _require_files(file_list: list[str], deploy_dir: str, allow_empty: bool) -> None:
+    """Raise ``FileNotFoundError`` if *file_list* is empty, unless *allow_empty*."""
+    if not file_list and not allow_empty:
+        raise FileNotFoundError(f"Nothing to deploy in {deploy_dir}; pass --allow-empty to deploy nothing")
+
+
+def deploy_nexus(
+    nexus_repo_url: str,
+    deploy_dir: str,
+    snapshot: bool = False,
+    workers: int = 2,
+    allow_empty: bool = False,
+) -> None:
     """Deploy a local directory of files to a Nexus repository.
 
     One purpose of this is so that we can get around the problematic
@@ -237,6 +268,8 @@ def deploy_nexus(nexus_repo_url: str, deploy_dir: str, snapshot: bool = False, w
         nexus_repo_url: URL to Nexus repository to upload to.
                         (Ex: https://nexus.example.org/content/repositories/releases)
         deploy_dir:     The directory to deploy. (Ex: /tmp/m2repo)
+        allow_empty:    Succeed when there is nothing to deploy, rather
+                        than raise ``FileNotFoundError``.
 
     Sample:
         lftools-uv deploy nexus \
@@ -260,23 +293,11 @@ def deploy_nexus(nexus_repo_url: str, deploy_dir: str, snapshot: bool = False, w
         log.info("Attempting to upload %s (%s)", file, _get_filesize(file))
         _request_put_file(nexus_url_with_file, file)
 
-    file_list: list[str] = []
+    file_list: list[str] = _deploy_file_list(deploy_dir, snapshot)
+    _require_files(file_list, deploy_dir, allow_empty)
+
     previous_dir: str = os.getcwd()
     os.chdir(deploy_dir)
-    files: list[str] = glob.glob("**/*", recursive=True)
-    for file in files:
-        if os.path.isfile(file):
-            base_name: str = os.path.basename(file)
-
-            # Skip blacklisted files
-            if base_name == "_remote.repositories" or base_name == "resolver-status.properties":
-                continue
-
-            if not snapshot:
-                if base_name.startswith("maven-metadata.xml"):
-                    continue
-
-            file_list.append(file)
 
     log.info(_BANNER_HASHES)
     log.info("Deploying directory %s to %s", deploy_dir, nexus_repo_url)
@@ -321,7 +342,7 @@ def deploy_nexus(nexus_repo_url: str, deploy_dir: str, snapshot: bool = False, w
         )
 
 
-def deploy_nexus_stage(nexus_url: str, staging_profile_id: str, deploy_dir: str) -> None:
+def deploy_nexus_stage(nexus_url: str, staging_profile_id: str, deploy_dir: str, allow_empty: bool = False) -> None:
     """Deploy Maven artifacts to Nexus staging repo.
 
     Parameters:
@@ -329,6 +350,9 @@ def deploy_nexus_stage(nexus_url: str, staging_profile_id: str, deploy_dir: str)
     staging_profile_id: The staging profile id as defined in Nexus for the
                         staging repo.
     deploy_dir:         The directory to deploy. (Ex: /tmp/m2repo)
+    allow_empty:        Stage and close an empty repository when there is
+                        nothing to deploy, rather than raise
+                        ``FileNotFoundError`` before creating one.
 
     # Sample:
         lftools-uv deploy nexus-stage http://192.168.1.26:8081/nexus 4e6f95cd2344 /tmp/slask
@@ -340,6 +364,8 @@ def deploy_nexus_stage(nexus_url: str, staging_profile_id: str, deploy_dir: str)
             ~/LF/work/lftools-dev/lftools/shell
             Completed uploading files to aaf-1005.
     """
+    _require_files(_deploy_file_list(deploy_dir, snapshot=False), deploy_dir, allow_empty)
+
     staging_repo_id: str = nexus_stage_repo_create(nexus_url, staging_profile_id)
     log.info("Staging repository %s created.", staging_repo_id)
 
@@ -349,7 +375,7 @@ def deploy_nexus_stage(nexus_url: str, staging_profile_id: str, deploy_dir: str)
     log.debug("Staging repository upload size: %s bytes", sz_m2repo)
 
     log.debug("Nexus Staging URL: %s", _format_url(deploy_nexus_url))
-    deploy_nexus(deploy_nexus_url, deploy_dir)
+    deploy_nexus(deploy_nexus_url, deploy_dir, allow_empty=allow_empty)
 
     nexus_stage_repo_close(nexus_url, staging_profile_id, staging_repo_id)
     log.info("Completed uploading files to %s.", staging_repo_id)

@@ -36,7 +36,6 @@ def empty_dir(tmp_path, monkeypatch):
     return str(deploy_dir)
 
 
-@pytest.mark.xfail(strict=True, reason="#836: deploy_nexus reports success with nothing to deploy")
 def test_deploy_nexus_empty_raises(empty_dir, responses):
     """An empty directory raises ``FileNotFoundError`` naming the flag."""
     with pytest.raises(FileNotFoundError, match="--allow-empty"):
@@ -44,14 +43,12 @@ def test_deploy_nexus_empty_raises(empty_dir, responses):
     assert not responses.calls
 
 
-@pytest.mark.xfail(strict=True, reason="#836: deploy_nexus has no allow_empty parameter")
 def test_deploy_nexus_empty_allowed(empty_dir, responses):
     """With ``allow_empty`` an empty directory uploads nothing and returns."""
-    deploy_sys.deploy_nexus(NEXUS_REPO_URL, empty_dir, allow_empty=True)  # type: ignore[call-arg]
+    deploy_sys.deploy_nexus(NEXUS_REPO_URL, empty_dir, allow_empty=True)
     assert not responses.calls
 
 
-@pytest.mark.xfail(strict=True, reason="#836: deploy_nexus_stage stages an empty repository")
 def test_deploy_nexus_stage_empty_creates_no_repo(empty_dir):
     """An empty directory raises before a staging repository is created."""
     with (
@@ -75,7 +72,6 @@ def _invoke_typer(args):
 FRONT_ENDS = {"click": _invoke_legacy, "typer": _invoke_typer}
 
 
-@pytest.mark.xfail(strict=True, reason="#836: deploy nexus exits 0 with nothing to deploy")
 @pytest.mark.parametrize("front_end", FRONT_ENDS)
 def test_cli_deploy_nexus_empty_exits_1(empty_dir, responses, front_end):
     """``deploy nexus`` exits 1 for an empty directory."""
@@ -83,7 +79,6 @@ def test_cli_deploy_nexus_empty_exits_1(empty_dir, responses, front_end):
     assert result.exit_code == 1
 
 
-@pytest.mark.xfail(strict=True, reason="#836: deploy nexus has no --allow-empty option")
 @pytest.mark.parametrize("front_end", FRONT_ENDS)
 def test_cli_deploy_nexus_allow_empty_exits_0(empty_dir, responses, front_end):
     """``deploy nexus --allow-empty`` exits 0 for an empty directory."""
@@ -91,7 +86,6 @@ def test_cli_deploy_nexus_allow_empty_exits_0(empty_dir, responses, front_end):
     assert result.exit_code == 0
 
 
-@pytest.mark.xfail(strict=True, reason="#836: deploy nexus-stage has no --allow-empty option")
 @pytest.mark.parametrize("front_end", FRONT_ENDS)
 def test_cli_deploy_nexus_stage_passes_allow_empty(empty_dir, front_end):
     """``deploy nexus-stage --allow-empty`` passes the flag on."""
