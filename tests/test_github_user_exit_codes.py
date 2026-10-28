@@ -20,8 +20,6 @@ from typer.testing import Result as TyperResult
 from lftools_uv.cli.github_cli import github_cli
 from lftools_uv.typer_apps.github_cli import github_app
 
-_XFAIL_848 = pytest.mark.xfail(strict=True, reason="#848: failed team membership change exits 0")
-
 _ORG = "an-org"
 _USER = "a-user"
 _TEAM = "a-team"
@@ -56,8 +54,6 @@ def _make_org(membership_status: int, *, redirect: bool = False) -> MagicMock:
         ]
     else:
         org.requester.requestJson.return_value = (membership_status, {}, "")
-    # Mirror PyGithub, which reads only a 204 as membership.
-    org.has_in_members.return_value = membership_status == 204
     org.get_teams.return_value = [team]
     org.get_team.return_value = team
     return org
@@ -87,7 +83,6 @@ def _error(status: int) -> GithubException:
     return GithubException(status, {"message": "refused"}, None)
 
 
-@_XFAIL_848
 @pytest.mark.parametrize("run", [_run_click, _run_typer], ids=["click", "typer"])
 def test_delete_failed_removal_exits_1(run, make_github):
     """A removal GitHub refuses fails the command."""
@@ -99,7 +94,6 @@ def test_delete_failed_removal_exits_1(run, make_github):
     assert result.exit_code == 1
 
 
-@_XFAIL_848
 @pytest.mark.parametrize("run", [_run_click, _run_typer], ids=["click", "typer"])
 def test_add_non_member_failed_invite_exits_1(run, make_github):
     """An invitation GitHub refuses fails the command."""
@@ -111,7 +105,6 @@ def test_add_non_member_failed_invite_exits_1(run, make_github):
     assert result.exit_code == 1
 
 
-@_XFAIL_848
 @pytest.mark.parametrize("run", [_run_click, _run_typer], ids=["click", "typer"])
 def test_add_member_failed_add_exits_1(run, make_github):
     """A team add GitHub refuses fails the command."""
@@ -123,7 +116,6 @@ def test_add_member_failed_add_exits_1(run, make_github):
     assert result.exit_code == 1
 
 
-@_XFAIL_848
 @pytest.mark.parametrize("run", [_run_click, _run_typer], ids=["click", "typer"])
 def test_delete_membership_check_forbidden_exits_1(run, make_github):
     """A 403 from the membership check is an error, not "not a member"."""
@@ -165,7 +157,6 @@ def _assert_followed_redirect(org: MagicMock) -> None:
     ]
 
 
-@_XFAIL_848
 @pytest.mark.parametrize("run", [_run_click, _run_typer], ids=["click", "typer"])
 def test_delete_redirected_member_exits_0(run, make_github):
     """A 302 to a 204 is a member, read from the redirect's location."""
@@ -178,7 +169,6 @@ def test_delete_redirected_member_exits_0(run, make_github):
     org.get_team.return_value.remove_membership.assert_called_once()
 
 
-@_XFAIL_848
 @pytest.mark.parametrize("run", [_run_click, _run_typer], ids=["click", "typer"])
 def test_delete_redirected_non_member_exits_0(run, make_github):
     """A 302 to a 404 is a non-member, read from the redirect's location."""
@@ -192,7 +182,6 @@ def test_delete_redirected_non_member_exits_0(run, make_github):
     org.get_team.return_value.remove_membership.assert_not_called()
 
 
-@_XFAIL_848
 @pytest.mark.parametrize("args", [["--delete"], []], ids=["delete", "add"])
 @pytest.mark.parametrize("run", [_run_click, _run_typer], ids=["click", "typer"])
 def test_redirected_membership_check_forbidden_exits_1(run, args, make_github):

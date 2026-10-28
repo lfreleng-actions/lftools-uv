@@ -191,6 +191,23 @@ def prvotes(organization: str, repo: str, pr: int) -> list[str]:
     return approval_list
 
 
+def _is_org_member(org: Organization, user: NamedUser) -> bool:
+    """Report whether a user is a member of an organization, exiting on error.
+
+    ``Organization.has_in_members`` reads every status but 204 as "not a
+    member", so a 403 from a token lacking scope would pass for one.
+    """
+    status, headers, _ = org.requester.requestJson("GET", f"{org.url}/members/{user.login}")
+    if status == 302:
+        status, headers, _ = org.requester.requestJson("GET", headers["location"])
+    if status == 204:
+        return True
+    if status == 404:
+        return False
+    log.error("Organization membership check failed with status %s", status)
+    sys.exit(1)
+
+
 # aislop-ignore-next-line too-many-params -- mirrors the option set of the `github` commands
 def helper_user_github(  # noqa: C901, PLR0912
     _ctx: object,
@@ -225,12 +242,8 @@ def helper_user_github(  # noqa: C901, PLR0912
     user_object: NamedUser = user_raw
 
     # check if user is a member
-    is_member: bool = False
-    try:
-        is_member = org.has_in_members(user_object)
-        echo(f"User membership status: {is_member}")
-    except GithubException as ghe:
-        log.error(ghe)
+    is_member: bool = _is_org_member(org, user_object)
+    echo(f"User membership status: {is_member}")
 
     try:
         get_teams_fn = org.get_teams
@@ -253,6 +266,7 @@ def helper_user_github(  # noqa: C901, PLR0912
                 team_obj.remove_membership(user_object)
             except GithubException as ghe:
                 log.error(ghe)
+                sys.exit(1)
             echo("Removing user from team")
         else:
             echo("User is not a member of org, cannot delete")
@@ -264,6 +278,7 @@ def helper_user_github(  # noqa: C901, PLR0912
                 team_obj.add_membership(member=user_object, role="maintainer")
             except GithubException as ghe:
                 log.error(ghe)
+                sys.exit(1)
         if admin and not is_member:
             try:
                 org.invite_user(
@@ -273,6 +288,7 @@ def helper_user_github(  # noqa: C901, PLR0912
                 )
             except GithubException as ghe:
                 log.error(ghe)
+                sys.exit(1)
             echo("Sending Admin invite to user for team")
 
         if not admin and is_member:
@@ -280,6 +296,7 @@ def helper_user_github(  # noqa: C901, PLR0912
                 team_obj.add_membership(member=user_object, role="member")
             except GithubException as ghe:
                 log.error(ghe)
+                sys.exit(1)
 
         if not admin and not is_member:
             try:
@@ -289,4 +306,5 @@ def helper_user_github(  # noqa: C901, PLR0912
                 )
             except GithubException as ghe:
                 log.error(ghe)
+                sys.exit(1)
             echo("Sending invite to user for team")
