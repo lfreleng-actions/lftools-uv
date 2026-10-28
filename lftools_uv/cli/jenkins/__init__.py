@@ -13,9 +13,10 @@ __author__ = "Trevor Bramwell"
 
 
 import logging
-from urllib.error import HTTPError
+import sys
 
 import click
+import requests
 
 from lftools_uv.cli.jenkins.builds import builds
 from lftools_uv.cli.jenkins.jobs import jobs
@@ -147,23 +148,26 @@ def groovy(ctx, groovy_file):
 
 
 @click.command()
-@click.option("-n/-y", is_flag=True, prompt="Quiet down Jenkins?", required=True)
+@click.option("-y", "--yes", is_flag=True, help="Proceed without confirmation.")
+# Deprecated alias for --yes, kept so jobs that passed -n still proceed.
+@click.option("-n", "legacy_yes", is_flag=True, hidden=True)
 @click.pass_context
-def quiet_down(ctx, n):
+def quiet_down(ctx, yes, legacy_yes):
     """Put Jenkins into 'Quiet Down' mode."""
     jenkins = ctx.obj["jenkins"]
     version = jenkins.server.get_version()
-    # Ask permission first
-    if n:
-        try:
-            jenkins.server.quiet_down()
-        except HTTPError as m:
-            if m.code == 405:
-                log.exception(
-                    f"\n[{m}]\nJenkins {version} does not support Quiet Down without a CSRF Token. (CVE-2017-04-26)\nPlease file a bug with 'python-jenkins'"
-                )
-            else:
-                raise m
+    if not (yes or legacy_yes) and not click.confirm("Quiet down Jenkins?"):
+        log.info("Operation cancelled.")
+        return
+    try:
+        jenkins.server.quiet_down()
+    except requests.exceptions.HTTPError as m:
+        if m.response is None or m.response.status_code != 405:
+            raise
+        log.exception(
+            f"\n[{m}]\nJenkins {version} does not support Quiet Down without a CSRF Token. (CVE-2017-04-26)\nPlease file a bug with 'python-jenkins'"
+        )
+        sys.exit(1)
 
 
 @click.command()

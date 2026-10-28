@@ -3,8 +3,8 @@
 """The Jenkins command group and its server-wide commands."""
 
 import logging
-from urllib.error import HTTPError
 
+import requests
 import typer
 
 from lftools_uv.jenkins import Jenkins
@@ -184,8 +184,8 @@ def quiet_down(
                 return
 
         jenkins.server.quiet_down()
-    except HTTPError as m:
-        if m.code == 405:
+    except requests.exceptions.HTTPError as m:
+        if m.response is not None and m.response.status_code == 405:
             log.exception(
                 f"\n[{m}]\nJenkins {version} does not support Quiet Down without a CSRF Token. (CVE-2017-04-26)\nPlease file a bug with 'python-jenkins'"
             )
