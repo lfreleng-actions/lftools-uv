@@ -36,7 +36,6 @@ def _invoke(server: mock.MagicMock, args: list[str], stdin: str | None = None) -
     return CliRunner().invoke(quiet_down, args, obj={"jenkins": SimpleNamespace(server=server)}, input=stdin)
 
 
-@pytest.mark.xfail(strict=True, reason="#854: -y/--yes does not quiet Jenkins down")
 @pytest.mark.parametrize("flag", ["-y", "--yes"])
 def test_yes_quiets_down(flag: str) -> None:
     server = _server()
@@ -56,7 +55,6 @@ def test_legacy_n_quiets_down() -> None:
     server.quiet_down.assert_called_once_with()
 
 
-@pytest.mark.xfail(strict=True, reason="#854: a 405 does not exit 1 with the CSRF message")
 @pytest.mark.parametrize("flag", ["-y", "-n"])
 def test_405_exits_one(flag: str, caplog: pytest.LogCaptureFixture) -> None:
     server = _server(405)
@@ -69,7 +67,6 @@ def test_405_exits_one(flag: str, caplog: pytest.LogCaptureFixture) -> None:
     server.quiet_down.assert_called_once_with()
 
 
-@pytest.mark.xfail(strict=True, reason="#854: -y/--yes does not quiet Jenkins down")
 def test_other_http_error_propagates() -> None:
     server = _server(500)
 
@@ -97,7 +94,6 @@ def test_prompt_no_cancels() -> None:
     server.quiet_down.assert_not_called()
 
 
-@pytest.mark.xfail(strict=True, reason="#854: a 405 does not log the CSRF message")
 def test_typer_405_exits_one(caplog: pytest.LogCaptureFixture) -> None:
     server = _server(405)
 
