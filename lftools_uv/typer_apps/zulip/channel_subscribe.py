@@ -28,6 +28,28 @@ from lftools_uv.typer_apps.zulip.helpers import (
 )
 
 
+def _fail(options: dict[str, Any], message: str, *, channel_name: str = "") -> typer.Exit:
+    """Report a flag-check failure and return the ``typer.Exit`` to raise.
+
+    With ``--json`` the failure is the FR-008 bulk error payload on
+    stdout, as ``channel unsubscribe`` reports it; otherwise it is the
+    usual error line on stderr.
+    """
+    if options.get("json_output"):
+        emit_json(
+            bulk_mutation_result(
+                operation="subscribe",
+                channel_id=None,
+                channel_name=channel_name,
+                results=[],
+                errors=[{"user": None, "error": message}],
+            )
+        )
+    else:
+        emit_error(message)
+    return typer.Exit(code=1)
+
+
 @channel_app.command("subscribe")
 def channel_subscribe(
     ctx: typer.Context,
@@ -58,7 +80,14 @@ def channel_subscribe(
     ),
 ) -> None:
     """Subscribe users to a channel."""
-    id_mode = _resolve_id_mode(by_email, by_id, by_name)
+    options = {**(ctx.obj or {})}
+    if json_output:
+        options["json_output"] = True
+    targets_list: list[str] = list(targets or [])
+    error_channel = targets_list[0] if targets_list and channel_id is None else ""
+    id_mode = _resolve_id_mode(
+        by_email, by_id, by_name, fail=lambda message: _fail(options, message, channel_name=error_channel)
+    )
 
     # Split positional arguments per the contract:
     #   --channel-id present → all positionals are USERs.
@@ -67,34 +96,31 @@ def channel_subscribe(
     # rather than required (``...``) so we can validate "no arguments" cases
     # ourselves and exit with code 1, honouring the cli-commands.md contract
     # (Click's required-argument failure would otherwise exit 2).
-    targets_list: list[str] = list(targets or [])
     channel_arg: str | int
     if channel_id is not None:
         try:
             parsed_channel_id = int(channel_id)
         except ValueError:
-            emit_error("--channel-id must be a numeric channel ID.")
-            raise typer.Exit(code=1) from None
+            raise _fail(options, "--channel-id must be a numeric channel ID.") from None
         if not targets_list:
-            emit_error("Provide at least one USER, or omit --channel-id and pass [CHANNEL] USER...")
-            raise typer.Exit(code=1)
+            raise _fail(options, "Provide at least one USER, or omit --channel-id and pass [CHANNEL] USER...")
         channel_arg = parsed_channel_id
         user_idents = targets_list
     else:
         if len(targets_list) < 2:
             # Contract says exit code 0/1, not 2 — use Exit(1) rather than
             # typer.BadParameter (which would exit 2 via Click).
-            emit_error("Provide [CHANNEL] followed by at least one USER, or use --channel-id.")
-            raise typer.Exit(code=1)
+            raise _fail(
+                options,
+                "Provide [CHANNEL] followed by at least one USER, or use --channel-id.",
+                channel_name=error_channel,
+            )
         # Preserve the channel positional as a STRING — even if it looks
         # numeric (e.g. literally the channel named "123"). Callers that
         # want id-based resolution must use --channel-id.
         channel_arg = targets_list[0]
         user_idents = targets_list[1:]
 
-    options = {**(ctx.obj or {})}
-    if json_output:
-        options["json_output"] = True
     # Two-stage resolution so that --json error payloads can include
     # accurate channel context:
     #   Stage 1 — resolve the channel. If this fails, channel_id MUST be

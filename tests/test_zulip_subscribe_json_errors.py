@@ -91,7 +91,6 @@ def api(monkeypatch: pytest.MonkeyPatch) -> dict[str, mock.MagicMock]:
     return mocks
 
 
-@pytest.mark.xfail(strict=True, reason="subscribe flag checks print no --json error payload")
 @pytest.mark.parametrize("case", CASES, ids=_case_id)
 def test_flag_failure_emits_json_payload(api: dict[str, mock.MagicMock], case: Case) -> None:
     """A flag-check failure under --json is the bulk error payload."""
