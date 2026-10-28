@@ -18,9 +18,8 @@ from lftools_uv.typer_apps import zulip as zulip_cli
 from lftools_uv.typer_apps.zulip.apps import channel_app
 from lftools_uv.typer_apps.zulip.helpers import (
     _validate_single_channel_target,
-    emit_error,
     emit_json,
-    handle_zulip_error,
+    mutation_failure,
 )
 
 
@@ -56,27 +55,28 @@ def channel_archive(
     channel surfaced via ``--include-archived`` is reported as success
     without a redundant API call.
     """
-    _validate_single_channel_target(channel, channel_id)
+    options = ctx.obj or {}
     channel_name = channel.strip() if isinstance(channel, str) else None
+    _validate_single_channel_target(channel_name, channel_id, options=options, operation="archive")
+
+    def fail(message: str) -> typer.Exit:
+        return mutation_failure(options, message, operation="archive", channel_name=channel_name)
 
     # --yes is mandatory for this destructive operation.
     if not yes:
-        emit_error("Refusing to archive without --yes. Re-run with --yes to confirm.")
-        raise typer.Exit(code=1)
+        raise fail("Refusing to archive without --yes. Re-run with --yes to confirm.")
 
-    options = ctx.obj or {}
     try:
         client = zulip_cli.get_client(zuliprc=options.get("zuliprc"))
     except ZulipError as exc:
-        raise handle_zulip_error(exc) from exc
+        raise fail(str(exc)) from exc
 
     target: str | int
     if channel_id is not None:
         try:
             target = int(channel_id)
         except ValueError:
-            emit_error("--channel-id must be a numeric channel ID.")
-            raise typer.Exit(code=1) from None
+            raise fail("--channel-id must be a numeric channel ID.") from None
     else:
         assert channel_name is not None  # narrow for the type checker
         target = channel_name
@@ -84,7 +84,7 @@ def channel_archive(
     try:
         result = zulip_cli.archive_channel(client, target, include_archived=include_archived)
     except ZulipError as exc:
-        raise handle_zulip_error(exc) from exc
+        raise fail(str(exc)) from exc
 
     if options.get("json_output"):
         emit_json(result)
@@ -123,21 +123,22 @@ def channel_unarchive(
     the name/ID resolves; without it the CLI emits a helpful message
     pointing at the flag.
     """
-    _validate_single_channel_target(channel, channel_id)
+    options = ctx.obj or {}
+    _validate_single_channel_target(channel, channel_id, options=options, operation="unarchive")
+
+    def fail(message: str) -> typer.Exit:
+        return mutation_failure(options, message, operation="unarchive", channel_name=channel)
 
     if not yes:
-        emit_error("Refusing to unarchive without explicit confirmation. Re-run with --yes to proceed.")
-        raise typer.Exit(code=1)
+        raise fail("Refusing to unarchive without explicit confirmation. Re-run with --yes to proceed.")
 
     parsed_channel_id: int | None = None
     if channel_id is not None:
         try:
             parsed_channel_id = int(channel_id)
         except ValueError:
-            emit_error("--channel-id must be a numeric channel ID.")
-            raise typer.Exit(code=1) from None
+            raise fail("--channel-id must be a numeric channel ID.") from None
 
-    options = ctx.obj or {}
     try:
         client = zulip_cli.get_client(zuliprc=options.get("zuliprc"))
         payload = zulip_cli.unarchive_channel(
@@ -147,7 +148,7 @@ def channel_unarchive(
             include_archived=include_archived,
         )
     except ZulipError as exc:
-        raise handle_zulip_error(exc) from exc
+        raise fail(str(exc)) from exc
 
     if options.get("json_output"):
         emit_json(payload)

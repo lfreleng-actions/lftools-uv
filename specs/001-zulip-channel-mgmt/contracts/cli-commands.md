@@ -269,6 +269,22 @@ wraps automatically; user syntax is identical to `channel create`.
 }
 ```
 
+**JSON Output** (error): any failure emits the error payload on
+stdout and nothing on stderr. `channel_id` is `null`, since no channel
+has been resolved when the command fails, `channel_name` is the
+positional name or `""` when only `--channel-id` was given, and
+`error` carries the message.
+
+```json
+{
+  "status": "error",
+  "channel_id": null,
+  "channel_name": "missing",
+  "operation": "update",
+  "error": "Channel 'missing' not found"
+}
+```
+
 **Exit Codes**: 0 = success (including no-op), 1 = error
 
 ---
@@ -297,6 +313,22 @@ wraps automatically; user syntax is identical to `channel create`.
   "channel_id": 42,
   "channel_name": "old-project",
   "operation": "archive"
+}
+```
+
+**JSON Output** (error): any failure emits the error payload on
+stdout and nothing on stderr. `channel_id` is `null`, since no channel
+has been resolved when the command fails, `channel_name` is the
+positional name or `""` when only `--channel-id` was given, and
+`error` carries the message.
+
+```json
+{
+  "status": "error",
+  "channel_id": null,
+  "channel_name": "general",
+  "operation": "archive",
+  "error": "Refusing to archive without --yes. Re-run with --yes to confirm."
 }
 ```
 
@@ -336,6 +368,22 @@ archived channels.").
   "channel_id": 42,
   "channel_name": "restored-project",
   "operation": "unarchive"
+}
+```
+
+**JSON Output** (error): any failure emits the error payload on
+stdout and nothing on stderr. `channel_id` is `null`, since no channel
+has been resolved when the command fails, `channel_name` is the
+positional name or `""` when only `--channel-id` was given, and
+`error` carries the message.
+
+```json
+{
+  "status": "error",
+  "channel_id": null,
+  "channel_name": "missing",
+  "operation": "unarchive",
+  "error": "Channel 'missing' not found"
 }
 ```
 
@@ -482,6 +530,22 @@ current policy value for the target channel.
   "channel_name": "general",
   "operation": "topic-policy",
   "topic_policy": "deny"
+}
+```
+
+**JSON Output** (error): in both read and write mode, any
+failure emits the error payload on stdout and nothing on stderr.
+`channel_id` is `null`, since no channel has been resolved when the
+command fails, `channel_name` is the positional name or `""` when
+only `--channel-id` was given, and `error` carries the message.
+
+```json
+{
+  "status": "error",
+  "channel_id": null,
+  "channel_name": "general",
+  "operation": "topic-policy",
+  "error": "Invalid --policy 'bogus'; expected one of allow, deny, follow-default"
 }
 ```
 

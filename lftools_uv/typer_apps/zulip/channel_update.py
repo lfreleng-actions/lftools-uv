@@ -20,9 +20,8 @@ from lftools_uv.typer_apps import zulip as zulip_cli
 from lftools_uv.typer_apps.zulip.apps import channel_app
 from lftools_uv.typer_apps.zulip.helpers import (
     _validate_single_channel_target,
-    emit_error,
     emit_json,
-    handle_zulip_error,
+    mutation_failure,
 )
 
 
@@ -117,15 +116,18 @@ def channel_update(  # noqa: PLR0913 - CLI parity with contract
     ``--by-*`` mutex, and ``--subscribe`` requiring an id-mode) before
     contacting the server so that obvious errors are reported quickly.
     """
-    _validate_single_channel_target(channel, channel_id)
+    options = ctx.obj or {}
+    _validate_single_channel_target(channel, channel_id, options=options, operation="update")
+
+    def fail(message: str) -> typer.Exit:
+        return mutation_failure(options, message, operation="update", channel_name=channel)
 
     parsed_channel_id: int | None = None
     if channel_id is not None:
         try:
             parsed_channel_id = int(channel_id)
         except ValueError:
-            emit_error("--channel-id must be a numeric channel ID.")
-            raise typer.Exit(code=1) from None
+            raise fail("--channel-id must be a numeric channel ID.") from None
 
     # Local at-least-one-setting check so the user-facing error is
     # presented before any network calls are made; the API layer also
@@ -147,18 +149,16 @@ def channel_update(  # noqa: PLR0913 - CLI parity with contract
         )
     ) or bool(subscribe)
     if not any_setting:
-        emit_error(
+        raise fail(
             "channel update requires at least one setting to change "
             "(--name, --description, --type, --topic-policy, --allow-group, "
             "--folder, --subscribe, --can-remove-subscribers-group, "
             "--can-add-subscribers-group, --can-administer-channel-group, "
             "or --can-send-message-group)"
         )
-        raise typer.Exit(code=1)
 
     if folder is not None and folder_id is not None:
-        emit_error("Specify only one of --folder or --folder-id")
-        raise typer.Exit(code=1)
+        raise fail("Specify only one of --folder or --folder-id")
 
     parsed_folder_id: int | None = None
     folder_id_specified = False
@@ -166,37 +166,32 @@ def channel_update(  # noqa: PLR0913 - CLI parity with contract
         try:
             parsed_clear_id = int(folder_id)
         except ValueError:
-            emit_error("--folder-id must be 0 to clear the folder assignment; use --folder id:N to assign by ID")
-            raise typer.Exit(code=1) from None
+            raise fail(
+                "--folder-id must be 0 to clear the folder assignment; use --folder id:N to assign by ID"
+            ) from None
         if parsed_clear_id != 0:
-            emit_error("--folder-id only accepts 0 to clear; use --folder id:N to assign a folder")
-            raise typer.Exit(code=1)
+            raise fail("--folder-id only accepts 0 to clear; use --folder id:N to assign a folder")
         folder_id_specified = True
 
     # Validate --type choice locally so the error is presented before
     # any network calls are made.
     valid_types = {"public", "private", "web-public"}
     if channel_type is not None and channel_type not in valid_types:
-        emit_error(f"Invalid --type {channel_type!r}; expected one of {', '.join(sorted(valid_types))}")
-        raise typer.Exit(code=1)
+        raise fail(f"Invalid --type {channel_type!r}; expected one of {', '.join(sorted(valid_types))}")
 
     valid_policies = {"allow", "deny", "follow-default"}
     if topic_policy is not None and topic_policy not in valid_policies:
-        emit_error(f"Invalid --topic-policy {topic_policy!r}; expected one of {', '.join(sorted(valid_policies))}")
-        raise typer.Exit(code=1)
+        raise fail(f"Invalid --topic-policy {topic_policy!r}; expected one of {', '.join(sorted(valid_policies))}")
 
     # Validate --by-* mutex: at most one, and required when --subscribe
     # is used.
     by_count = sum(1 for v in (by_email, by_id, by_name) if v)
     if by_count > 1:
-        emit_error("Specify only one of --by-email, --by-id, --by-name")
-        raise typer.Exit(code=1)
+        raise fail("Specify only one of --by-email, --by-id, --by-name")
     if subscribe and channel_type != "private":
-        emit_error("--subscribe is only valid when using --type private")
-        raise typer.Exit(code=1)
+        raise fail("--subscribe is only valid when using --type private")
     if subscribe and by_count == 0:
-        emit_error("--subscribe requires one of --by-email, --by-id, --by-name")
-        raise typer.Exit(code=1)
+        raise fail("--subscribe requires one of --by-email, --by-id, --by-name")
     user_id_mode: str | None = None
     if by_email:
         user_id_mode = "email"
@@ -205,7 +200,6 @@ def channel_update(  # noqa: PLR0913 - CLI parity with contract
     elif by_name:
         user_id_mode = "name"
 
-    options = ctx.obj or {}
     try:
         client = zulip_cli.get_client(zuliprc=options.get("zuliprc"))
         if folder is not None:
@@ -231,7 +225,7 @@ def channel_update(  # noqa: PLR0913 - CLI parity with contract
             include_archived=include_archived,
         )
     except ZulipError as exc:
-        raise handle_zulip_error(exc) from exc
+        raise fail(str(exc)) from exc
 
     if options.get("json_output"):
         emit_json(result)
@@ -269,24 +263,24 @@ def channel_topic_policy(
     ),
 ) -> None:
     """View or set a channel's topic editing policy."""
-    _validate_single_channel_target(channel, channel_id)
+    options = {**(ctx.obj or {})}
+    if json_output:
+        options["json_output"] = True
+    _validate_single_channel_target(channel, channel_id, options=options, operation="topic-policy")
+
+    def fail(message: str) -> typer.Exit:
+        return mutation_failure(options, message, operation="topic-policy", channel_name=channel)
 
     parsed_channel_id: int | None = None
     if channel_id is not None:
         try:
             parsed_channel_id = int(channel_id)
         except ValueError:
-            emit_error("--channel-id must be a numeric channel ID.")
-            raise typer.Exit(code=1) from None
+            raise fail("--channel-id must be a numeric channel ID.") from None
 
     valid_policies = {"allow", "deny", "follow-default"}
     if policy is not None and policy not in valid_policies:
-        emit_error(f"Invalid --policy {policy!r}; expected one of {', '.join(sorted(valid_policies))}")
-        raise typer.Exit(code=1)
-
-    options = {**(ctx.obj or {})}
-    if json_output:
-        options["json_output"] = True
+        raise fail(f"Invalid --policy {policy!r}; expected one of {', '.join(sorted(valid_policies))}")
 
     target: str | int
     if parsed_channel_id is not None:
@@ -307,7 +301,7 @@ def channel_topic_policy(
                 include_archived=include_archived,
             )
     except ZulipError as exc:
-        raise handle_zulip_error(exc) from exc
+        raise fail(str(exc)) from exc
 
     if options.get("json_output"):
         emit_json(result)
