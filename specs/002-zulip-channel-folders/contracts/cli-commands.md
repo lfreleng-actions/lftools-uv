@@ -97,6 +97,20 @@ On servers below FL 414, `order` is `null` if Zulip omits the field.
 }
 ```
 
+**JSON Output** (error): Under `--json`, any failure, a flag check included,
+prints this payload on stdout and nothing on stderr, and exits 1.
+`folder_id` is `null` and `folder_name` is the requested `--name`.
+
+```json
+{
+  "status": "error",
+  "folder_id": null,
+  "folder_name": "Projects",
+  "operation": "create",
+  "error": "Failed to create channel folder: Must be an organization administrator"
+}
+```
+
 **Human Output**: Prints the created folder ID.
 
 **Exit Codes**: 0 = success, 1 = error
@@ -132,6 +146,20 @@ the Zulip server.
 }
 ```
 
+**JSON Output** (error): Under `--json`, any failure, a flag check included,
+prints this payload on stdout and nothing on stderr, and exits 1.
+`folder_id` is the requested `--folder-id` and `folder_name` is `null`.
+
+```json
+{
+  "status": "error",
+  "folder_id": 10,
+  "folder_name": null,
+  "operation": "update",
+  "error": "folder update requires at least one of --name or --description"
+}
+```
+
 **Exit Codes**: 0 = success (including no-op), 1 = error
 
 ---
@@ -161,6 +189,20 @@ the Zulip server.
 }
 ```
 
+**JSON Output** (error): Under `--json`, any failure, a flag check included,
+prints this payload on stdout and nothing on stderr, and exits 1.
+`folder_id` is the requested `--folder-id` and `folder_name` is `null`.
+
+```json
+{
+  "status": "error",
+  "folder_id": 10,
+  "folder_name": null,
+  "operation": "archive",
+  "error": "Failed to update channel folder 10: Must be an organization administrator"
+}
+```
+
 **Exit Codes**: 0 = success (including no-op), 1 = error
 
 ---
@@ -187,6 +229,20 @@ server.
   "folder_id": 10,
   "folder_name": "Projects",
   "operation": "unarchive"
+}
+```
+
+**JSON Output** (error): Under `--json`, any failure, a flag check included,
+prints this payload on stdout and nothing on stderr, and exits 1.
+`folder_id` is the requested `--folder-id` and `folder_name` is `null`.
+
+```json
+{
+  "status": "error",
+  "folder_id": 10,
+  "folder_name": null,
+  "operation": "unarchive",
+  "error": "Failed to update channel folder 10: Must be an organization administrator"
 }
 ```
 
@@ -239,7 +295,21 @@ Admin-only on the Zulip server.
 }
 ```
 
-**Errors**:
+**JSON Output** (error): Under `--json`, any failure, a flag check included,
+prints this payload on stdout and nothing on stderr, and exits 1.
+`folder_id` is the requested `--folder-id` and `folder_name` is `null`.
+
+```json
+{
+  "status": "error",
+  "folder_id": 99,
+  "folder_name": null,
+  "operation": "move",
+  "error": "Target folder id 99 not found"
+}
+```
+
+**Errors** (without `--json`, on stderr):
 
 ```text
 Error: Exactly one of --before or --after is required

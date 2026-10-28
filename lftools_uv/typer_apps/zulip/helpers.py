@@ -18,7 +18,7 @@ that several commands apply before contacting the server.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -97,6 +97,36 @@ def mutation_failure(
                 channel_name=channel_name or "",
                 extra={"error": message},
             )
+        )
+    else:
+        emit_error(message)
+    return typer.Exit(code=1)
+
+
+def folder_failure(
+    options: dict[str, Any],
+    message: str,
+    *,
+    operation: str,
+    folder_id: int | None = None,
+    folder_name: str | None = None,
+) -> typer.Exit:
+    """Report a failed folder mutation and return ``typer.Exit``.
+
+    With ``--json`` the failure is the spec 002 ``FolderMutationResult``
+    error payload on stdout, so automation always receives an outcome;
+    otherwise it is the usual error line on stderr. Callers should
+    ``raise`` the returned exit.
+    """
+    if options.get("json_output"):
+        emit_json(
+            {
+                "status": "error",
+                "folder_id": folder_id,
+                "folder_name": folder_name,
+                "operation": operation,
+                "error": message,
+            }
         )
     else:
         emit_error(message)
@@ -213,21 +243,32 @@ def _validate_id_mode_flags(
     return "name"
 
 
-def _resolve_id_mode(by_email: bool, by_id: bool, by_name: bool) -> Literal["email", "id", "name"]:
+def _resolve_id_mode(
+    by_email: bool,
+    by_id: bool,
+    by_name: bool,
+    *,
+    fail: Callable[[str], typer.Exit] | None = None,
+) -> Literal["email", "id", "name"]:
     """Return the canonical id_mode string for the trio of identifier flags.
 
     Emits a usage error and raises :class:`typer.Exit` with code ``1`` when
     zero or more than one flag is provided. We deliberately avoid
     :class:`typer.BadParameter` (which would exit with Click's default code
     ``2``) so the CLI honours the cli-commands.md contract of ``0`` /``1``
-    exit codes only.
+    exit codes only. When ``fail`` is given, it reports the message in
+    place of the stderr line and returns the exit to raise.
     """
     chosen = [name for name, val in (("email", by_email), ("id", by_id), ("name", by_name)) if val]
+    message = None
     if len(chosen) == 0:
-        emit_error("Specify exactly one of --by-email, --by-id, or --by-name")
-        raise typer.Exit(code=1)
-    if len(chosen) > 1:
-        emit_error("--by-email, --by-id, and --by-name are mutually exclusive")
+        message = "Specify exactly one of --by-email, --by-id, or --by-name"
+    elif len(chosen) > 1:
+        message = "--by-email, --by-id, and --by-name are mutually exclusive"
+    if message is not None:
+        if fail is not None:
+            raise fail(message)
+        emit_error(message)
         raise typer.Exit(code=1)
     return cast(Literal["email", "id", "name"], chosen[0])
 

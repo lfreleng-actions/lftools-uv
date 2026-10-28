@@ -430,6 +430,26 @@ positional name or `""` when only `--channel-id` was given, and
 }
 ```
 
+**JSON Output** (error): any failure, a flag check included, emits
+the bulk error payload on stdout and nothing on stderr. When a flag
+check fails, `channel_id` is `null`, `results` is empty,
+`channel_name` is the positional name or `""` when `--channel-id` was
+given or no positional was, and the single `errors` entry carries a
+`null` `user` and the message.
+
+```json
+{
+  "status": "error",
+  "channel_id": null,
+  "channel_name": "general",
+  "operation": "subscribe",
+  "results": [],
+  "errors": [
+    {"user": null, "error": "Specify exactly one of --by-email, --by-id, or --by-name"}
+  ]
+}
+```
+
 **Exit Codes**: 0 = all succeeded (including no-ops), 1 = any error
 
 ---
