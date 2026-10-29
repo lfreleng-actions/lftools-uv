@@ -33,7 +33,7 @@ def mock_volume():
 def mock_cloud():
     """Create a mock OpenStack cloud connection."""
     cloud = MagicMock()
-    cloud.cloud_config.name = "test-cloud"
+    cloud.config.name = "test-cloud"
     return cloud
 
 
@@ -109,7 +109,9 @@ class TestCleanupVolumes:
 
         os_volume.cleanup("test-cloud", days=5)
 
-        mock_cloud.delete_volume.assert_called_once_with(mock_volume.id)
+        mock_cloud.delete_volume.assert_called_once_with(
+            mock_volume.id, timeout=os_volume.VOLUME_DELETE_TIMEOUT_SECONDS
+        )
 
     def test_cleanup_multiple_volumes(self, mock_from_config, mock_cloud):
         """Test cleanup of multiple volumes."""
@@ -138,7 +140,9 @@ class TestCleanupVolumes:
         # Should not raise exception, just skip the volume
         os_volume.cleanup("test-cloud")
 
-        mock_cloud.delete_volume.assert_called_once_with(mock_volume.id)
+        mock_cloud.delete_volume.assert_called_once_with(
+            mock_volume.id, timeout=os_volume.VOLUME_DELETE_TIMEOUT_SECONDS
+        )
 
     def test_cleanup_multiple_matches_new_format(self, mock_from_config, mock_cloud, mock_volume):
         """Test handling of duplicate volume exception with new format."""
@@ -151,16 +155,20 @@ class TestCleanupVolumes:
         # Should not raise exception, just skip the volume
         os_volume.cleanup("test-cloud")
 
-        mock_cloud.delete_volume.assert_called_once_with(mock_volume.id)
+        mock_cloud.delete_volume.assert_called_once_with(
+            mock_volume.id, timeout=os_volume.VOLUME_DELETE_TIMEOUT_SECONDS
+        )
 
     def test_cleanup_unexpected_exception(self, mock_from_config, mock_cloud, mock_volume):
-        """Test that unexpected exceptions are raised."""
+        """Test that an unexpected exception is logged and exits 1."""
         mock_from_config.return_value = mock_cloud
         mock_cloud.list_volumes.return_value = [mock_volume]
         mock_cloud.delete_volume.side_effect = OpenStackCloudException("Unexpected error")
 
-        with pytest.raises(OpenStackCloudException, match="Unexpected error"):
+        with pytest.raises(SystemExit) as exc_info:
             os_volume.cleanup("test-cloud")
+
+        assert exc_info.value.code == 1
 
     def test_cleanup_delete_failed(self, mock_from_config, mock_cloud, mock_volume):
         """Test handling when delete returns False."""
@@ -171,7 +179,9 @@ class TestCleanupVolumes:
         # Should not raise exception, just log warning
         os_volume.cleanup("test-cloud")
 
-        mock_cloud.delete_volume.assert_called_once_with(mock_volume.id)
+        mock_cloud.delete_volume.assert_called_once_with(
+            mock_volume.id, timeout=os_volume.VOLUME_DELETE_TIMEOUT_SECONDS
+        )
 
     def test_cleanup_mixed_results(self, mock_from_config, mock_cloud):
         """Test cleanup with one success and one duplicate exception."""
@@ -224,9 +234,9 @@ class TestCleanupVolumes:
         os_volume.cleanup("test-cloud", days=5)
 
         assert mock_cloud.delete_volume.call_args_list == [
-            call("volume-aaa"),
-            call("volume-bbb"),
-            call("volume-ccc"),
+            call("volume-aaa", timeout=os_volume.VOLUME_DELETE_TIMEOUT_SECONDS),
+            call("volume-bbb", timeout=os_volume.VOLUME_DELETE_TIMEOUT_SECONDS),
+            call("volume-ccc", timeout=os_volume.VOLUME_DELETE_TIMEOUT_SECONDS),
         ]
 
 
@@ -242,7 +252,9 @@ class TestRemoveVolume:
 
         os_volume.remove("test-cloud", "volume-123", minutes=5)
 
-        mock_cloud.delete_volume.assert_called_once_with(mock_volume.id)
+        mock_cloud.delete_volume.assert_called_once_with(
+            mock_volume.id, timeout=os_volume.VOLUME_DELETE_TIMEOUT_SECONDS
+        )
 
     def test_remove_volume_not_found(self, mock_from_config, mock_cloud):
         """Test removal when volume is not found."""
@@ -275,4 +287,6 @@ class TestRemoveVolume:
         os_volume.remove("test-cloud", "volume-123", minutes=0)
 
         # Should delete the volume regardless of age
-        mock_cloud.delete_volume.assert_called_once_with(mock_volume.id)
+        mock_cloud.delete_volume.assert_called_once_with(
+            mock_volume.id, timeout=os_volume.VOLUME_DELETE_TIMEOUT_SECONDS
+        )

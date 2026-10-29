@@ -20,7 +20,6 @@ import sys
 import tempfile
 import urllib
 import urllib.request
-from datetime import datetime, timedelta
 from typing import Any
 
 # aislop-ignore-file hallucinated-import -- the declared openstacksdk dependency provides the `openstack` import package
@@ -28,6 +27,7 @@ import openstack
 import openstack.connection
 from openstack.cloud.exc import OpenStackCloudException
 
+from lftools_uv.openstack._age import created_within
 from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
@@ -48,9 +48,7 @@ def _filter_images(images, days=0, hide_public=False, ci_managed=True):
             continue
         if image.is_protected:
             continue
-        if days and (
-            datetime.strptime(image.created_at, "%Y-%m-%dT%H:%M:%SZ") >= datetime.now() - timedelta(days=days)
-        ):
+        if days and created_within(image.created_at, days):
             continue
 
         filtered.append(image)
@@ -77,11 +75,15 @@ def cleanup(os_cloud, days=0, hide_public=False, ci_managed=True, clouds=None):
     :arg bool hide_public: If true, will ignore public images. (Default: false)
     :arg str clouds: If passed, comma-separated list of clouds to remove image
         from. Otherwise os_cloud will be used.
+
+    A delete that fails is logged and the remaining images are still
+    removed; the command then exits 1.
     """
 
     def _remove_images_from_cloud(images, cloud):
         log.info(f"Removing {len(images)} images from {cloud.config._name}.")
         project_info = cloud._get_project_info()
+        failed = []
         for image in images:
             if image.is_protected:
                 log.warning(f"Image {image.name} ({image.id}) is protected. Cannot remove...")
@@ -111,9 +113,9 @@ def cleanup(os_cloud, days=0, hide_public=False, ci_managed=True, clouds=None):
                 ):
                     log.warning(f"{error_msg}. Skipping image...")
                     continue
-                else:
-                    log.error(f"Unexpected exception: {error_msg}")
-                    raise
+                log.error(f'Failed to remove "{image.name}" ({image.id}) from {cloud.config._name}: {error_msg}')
+                failed.append(image.id)
+                continue
 
             if not result:
                 log.warning(
@@ -121,6 +123,7 @@ def cleanup(os_cloud, days=0, hide_public=False, ci_managed=True, clouds=None):
                 )
             else:
                 log.info(f'Removed "{image.name}" ({image.id}) from {cloud.config._name}.')
+        return failed
 
     cloud_list = []
     if clouds:
@@ -130,6 +133,7 @@ def cleanup(os_cloud, days=0, hide_public=False, ci_managed=True, clouds=None):
     if os_cloud not in cloud_list:
         cloud_list.append(os_cloud)
 
+    failed: builtins.list[str] = []
     for c in cloud_list:
         cloud = openstack.connection.from_config(cloud=c)
         images = cloud.list_images()
@@ -137,7 +141,11 @@ def cleanup(os_cloud, days=0, hide_public=False, ci_managed=True, clouds=None):
         if images:
             filtered_images = _filter_images(images, days, hide_public, ci_managed)
         if filtered_images:
-            _remove_images_from_cloud(filtered_images, cloud)
+            failed.extend(_remove_images_from_cloud(filtered_images, cloud))
+
+    if failed:
+        log.error(f"Failed to remove {len(failed)} image(s): {', '.join(failed)}")
+        sys.exit(1)
 
 
 def share(os_cloud, image, clouds):
