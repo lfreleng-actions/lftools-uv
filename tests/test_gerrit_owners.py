@@ -82,7 +82,6 @@ def _owners(output: str) -> list[str]:
     return [line.strip("'\"") for line in output.splitlines() if line]
 
 
-@pytest.mark.xfail(strict=True, reason="#973: owners show by UUID and BLOCK rules count")
 @FRONT_ENDS
 def test_owners_by_name_without_block(run, gerrit_access):
     """LDAP and SAML owners show by name; a BLOCK rule is not an owner."""
@@ -100,7 +99,6 @@ def test_owners_by_name_without_block(run, gerrit_access):
     assert _owners(result.output) == ["lf-foo-owners", "saml/lf-foo-owners"]
 
 
-@pytest.mark.xfail(strict=True, reason="#973: owners show by UUID and DENY rules count")
 @FRONT_ENDS
 def test_owners_without_deny(run, gerrit_access):
     """A DENY rule is not an owner."""

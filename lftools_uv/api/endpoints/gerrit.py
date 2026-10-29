@@ -555,13 +555,20 @@ class Gerrit(client.RestApi):
         return result
 
     def list_project_permissions(self, project: str) -> list[str]:
-        """List a projects owners."""
+        """List the groups that own a project.
+
+        Only ``ALLOW`` owner rules count; a rule with no ``action`` is
+        ``ALLOW``, as in Gerrit. An LDAP group shows by its cn. Any other
+        group shows by its name from the response's ``groups`` map, or by
+        its UUID when the map has no name for it.
+        """
         response: ApiResponse = self.get(f"access/?project={project}")
         body: dict[str, object] = self._json_body(response)
 
-        # Navigate: body[project]["local"]
+        # Navigate: body[project]["local"] and body[project]["groups"]
         project_obj: dict[str, object] = self._as_dict(body.get(project))
         local_obj: dict[str, object] = self._as_dict(project_obj.get("local"))
+        groups_obj: dict[str, object] = self._as_dict(project_obj.get("groups"))
 
         group_list: list[str] = []
         for k in local_obj:
@@ -569,8 +576,15 @@ class Gerrit(client.RestApi):
             perms_obj: dict[str, object] = self._as_dict(ref_obj.get("permissions"))
             owner_obj: dict[str, object] = self._as_dict(perms_obj.get("owner"))
             rules_obj: dict[str, object] = self._as_dict(owner_obj.get("rules"))
-            for kk in rules_obj:
-                group_list.append(kk.replace("ldap:cn=", "").replace(",ou=Groups,dc=freestandards,dc=org", ""))
+            for uuid, rule in rules_obj.items():
+                action: object = self._as_dict(rule).get("action", "ALLOW")
+                if action != "ALLOW":
+                    continue
+                if uuid.startswith("ldap:"):
+                    group_list.append(uuid.replace("ldap:cn=", "").replace(",ou=Groups,dc=freestandards,dc=org", ""))
+                else:
+                    name: object = self._as_dict(groups_obj.get(uuid)).get("name")
+                    group_list.append(name if isinstance(name, str) and name else uuid)
         return group_list
 
     def list_project_inherits_from(self, gerrit_project: str) -> str:
