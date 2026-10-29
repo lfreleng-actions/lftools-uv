@@ -25,6 +25,7 @@ from git import Remote, Repo
 from jinja2 import Environment, PackageLoader, select_autoescape
 
 from lftools_uv import config
+from lftools_uv.api.endpoints import gerrit as gerrit_api
 
 _LFTOOLS_UV_GIT = "lftools_uv.git"
 
@@ -160,12 +161,21 @@ class Gerrit:
     def add_info_job(self, fqdn: str, gerrit_project: str, issue_id: str | None, agent: str | None) -> None:
         """Add info-verify jenkins job for the new project.
 
+        The job names the new project's own default branch, read from
+        its HEAD in Gerrit, not the JJB repository's branch. The change
+        is still pushed for review to the JJB repository's branch.
+
         Example:
 
         fqdn gerrit.o-ran-sc.org
         gerrit_project test/test1
         jjbrepo ci-mangement
+
+        Raises:
+            requests.HTTPError: If Gerrit cannot report the project's
+                branch. Nothing is written or pushed.
         """
+        project_branch = gerrit_api.Gerrit(fqdn=self.fqdn, creds=self.params["creds"]).project_head(gerrit_project)
         gerrit_project_dashed = gerrit_project.replace("/", "-")
         filename = f"{gerrit_project_dashed}.yaml"
 
@@ -186,7 +196,7 @@ class Gerrit:
             project_name_dashed=gerrit_project_dashed,
             project_name=gerrit_project,
             buildnode=buildnode,
-            default_branch=self.default_branch,
+            default_branch=project_branch,
         )
         log.debug(f"File contents:\n{content}")
 

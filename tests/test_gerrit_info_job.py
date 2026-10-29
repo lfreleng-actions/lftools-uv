@@ -95,7 +95,6 @@ def test_info_job_path(answer):
     assert [path for path, _content in files] == ["jjb/foo-bar/foo-bar.yaml"]
 
 
-@pytest.mark.xfail(strict=True, reason="#975: info job uses the JJB repository's branch")
 def test_info_job_uses_project_head(answer):
     """The branch comes from the project's HEAD in Gerrit."""
     calls, files, commit = answer(_response(200, "refs/heads/develop"))
@@ -110,7 +109,6 @@ def test_info_job_uses_project_head(answer):
     commit.assert_called_once()
 
 
-@pytest.mark.xfail(strict=True, reason="#975: info job uses the JJB repository's branch")
 @pytest.mark.parametrize(
     "response",
     [_response(404), _response(200, {"unexpected": True})],
