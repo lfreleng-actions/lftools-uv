@@ -96,7 +96,6 @@ def _register_build_pages() -> None:
     _get_page(BUILDS_PATH, "limit=10&offset=10&running=True", [{"id": i} for i in range(11, 14)], None)
 
 
-@pytest.mark.xfail(strict=True, reason="#966: project_build_list reads only the first page")
 @responses.activate
 def test_project_build_list_reads_every_page():
     _register_build_pages()
@@ -111,7 +110,6 @@ def test_project_build_list_single_page():
     assert [b["id"] for b in builds] == [1, 2]
 
 
-@pytest.mark.xfail(strict=True, reason="#966: project_list reads only the first page")
 @responses.activate
 def test_project_list_reads_every_page():
     _get_page("projects/", "limit=999", [{"slug": "a"}, {"slug": "b"}], "limit=999&offset=999")
@@ -119,7 +117,6 @@ def test_project_list_reads_every_page():
     assert _rtd().project_list() == ["a", "b", "c", "d"]
 
 
-@pytest.mark.xfail(strict=True, reason="#966: subproject_list reads only the first page")
 @responses.activate
 def test_subproject_list_reads_every_page():
     path = "projects/parent/subprojects/"
@@ -136,7 +133,6 @@ def test_project_version_list_reads_every_page():
     assert _rtd().project_version_list("p") == ["latest", "stable"]
 
 
-@pytest.mark.xfail(strict=True, reason="#966: a failed later page is never requested")
 @responses.activate
 def test_project_build_list_fails_on_failed_page():
     _get_page(BUILDS_PATH, "running=True", [{"id": 1}], "limit=10&offset=10&running=True")
@@ -151,7 +147,6 @@ def test_project_build_list_fails_on_failed_page():
         _ = _rtd().project_build_list("p")
 
 
-@pytest.mark.xfail(strict=True, reason="#966: project-build-list reads only the first page")
 @pytest.mark.parametrize(
     ("run", "args", "key"),
     [
