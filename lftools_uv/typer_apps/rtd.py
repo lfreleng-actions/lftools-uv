@@ -21,6 +21,7 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
+import click
 import typer
 from tabulate import tabulate
 
@@ -88,6 +89,21 @@ def _wants_json(ctx: typer.Context, json_output: bool) -> bool:
 def _client() -> ReadTheDocs:
     """Build an API client."""
     return ReadTheDocs()
+
+
+def _parse_active(value: str) -> bool:
+    """Convert ACTIVE to a boolean, refusing an empty or blank value.
+
+    Click 8.2.2 and later read an empty string as false, which would
+    deactivate the version and take its documentation offline.
+    """
+    if not value.strip():
+        msg = "an empty value is not a boolean; use true or false."
+        raise typer.BadParameter(msg)
+    try:
+        return bool(click.BOOL.convert(value, None, None))
+    except click.BadParameter as exc:
+        raise typer.BadParameter(exc.message) from exc
 
 
 def _json_option() -> Any:
@@ -327,7 +343,11 @@ def project_version_update(
     ctx: typer.Context,
     project_slug: str = typer.Argument(..., help="Project slug name"),
     version_slug_arg: str = typer.Argument(..., metavar="VERSION_SLUG", help="Version slug name"),
-    active: bool = typer.Argument(..., help="Whether the version should be active"),
+    active: bool = typer.Argument(
+        ...,
+        parser=_parse_active,
+        help="Whether the version should be active",
+    ),
     from_branch: bool = typer.Option(
         False,
         "--from-branch",

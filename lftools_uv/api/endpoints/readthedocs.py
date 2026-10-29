@@ -24,6 +24,7 @@ __author__ = "DW Talton"
 import json
 import re
 from typing import TYPE_CHECKING, cast
+from urllib.parse import urlsplit
 
 import lftools_uv.api.client as client
 from lftools_uv import config
@@ -178,6 +179,33 @@ class ReadTheDocs(client.RestApi):
         _ = self._check(response, context)
         return self._json_body(response)
 
+    def _get_all_results(self, url: str, context: str) -> list[object]:
+        """GET every page of a list and return the combined ``results``.
+
+        Read the Docs pages every list and links the following page in
+        ``next``, an absolute URL that keeps the request's query and
+        sets ``limit`` and ``offset``. Only that query is reused, so
+        every request stays on the configured endpoint.
+
+        :param url: Path and first query, relative to the API endpoint.
+        :param context: Description of the list, for error messages.
+        :return: The ``results`` of every page, in order.
+        :raises ReadTheDocsAPIError: When any page fails.
+        """
+        path = url.split("?", 1)[0]
+        results: list[object] = []
+        page_url: str | None = url
+        while page_url is not None:
+            page = self._get_json(page_url, context)
+            data: object = page.get("results")
+            if isinstance(data, list):
+                results.extend(cast(_LIST_OBJECT_TYPE, data))
+            next_url: object = page.get("next")
+            page_url = None
+            if isinstance(next_url, str) and next_url:
+                page_url = f"{path}?{urlsplit(next_url).query}"
+        return results
+
     # -- Projects ------------------------------------------------------------
 
     def project_list(self) -> list[str]:
@@ -189,19 +217,8 @@ class ReadTheDocs(client.RestApi):
 
         :return: [projects]
         """
-        result = self._get_json("projects/?limit=999", "Project list")  # NOQA
-        data: object = result.get("results")
-        project_list: list[str] = []
-
-        if isinstance(data, list):
-            for project in cast(_LIST_OBJECT_TYPE, data):
-                if isinstance(project, dict):
-                    project_dict = cast(_DICT_STR_OBJECT_TYPE, project)
-                    if "slug" in project_dict:
-                        slug: object = project_dict["slug"]
-                        if isinstance(slug, str):
-                            project_list.append(slug)
-        return project_list
+        data = self._get_all_results("projects/?limit=999", "Project list")  # NOQA
+        return self._slugs(data)
 
     def project_details(self, project: str) -> dict[str, object]:
         """Retrieve the details of a specific project.
@@ -236,46 +253,20 @@ class ReadTheDocs(client.RestApi):
         :param project: The project's slug
         :return: [version slugs]
         """
-        result = self._get_json(
+        data = self._get_all_results(
             f"projects/{project}/versions/?active=True",
             f"Version list for project {project!r}",
         )
-        more_results: str | None = None
-        versions: list[str] = []
-
-        initial_versions: object = result.get("results")
-        if isinstance(initial_versions, list):
-            versions.extend(self._version_slugs(initial_versions))
-
-        next_val: object = result.get("next")
-        if isinstance(next_val, str):
-            more_results = next_val.rsplit("/", 1)[-1]
-
-        while more_results is not None:
-            get_more_results = self._get_json(
-                f"projects/{project}/versions/" + more_results,
-                f"Version list for project {project!r}",
-            )
-            raw_next: object = get_more_results.get("next")
-            more_results = raw_next if isinstance(raw_next, str) else None
-
-            results_data: object = get_more_results.get("results")
-            if isinstance(results_data, list):
-                versions.extend(self._version_slugs(results_data))
-
-            if more_results is not None:
-                more_results = more_results.rsplit("/", 1)[-1]
-
-        return versions
+        return self._slugs(data)
 
     @staticmethod
-    def _version_slugs(data: list[object]) -> list[str]:
-        """Extract the ``slug`` field from a list of version objects."""
+    def _slugs(data: list[object]) -> list[str]:
+        """Extract the ``slug`` field from a list of project or version objects."""
         slugs: list[str] = []
-        for version in data:
-            if isinstance(version, dict):
-                version_dict = cast(_DICT_STR_OBJECT_TYPE, version)
-                slug: object = version_dict.get("slug")
+        for item in data:
+            if isinstance(item, dict):
+                item_dict = cast(_DICT_STR_OBJECT_TYPE, item)
+                slug: object = item_dict.get("slug")
                 if isinstance(slug, str):
                     slugs.append(slug)
         return slugs
@@ -388,18 +379,11 @@ class ReadTheDocs(client.RestApi):
         :param project: The project's slug
         :return: [builds]. An empty list when no builds are running.
         """
-        result = self._get_json(
+        data = self._get_all_results(
             f"projects/{project}/builds/?running=True",
             f"Build list for project {project!r}",
         )
-
-        builds: list[dict[str, object]] = []
-        data: object = result.get("results")
-        if isinstance(data, list):
-            for build in cast(_LIST_OBJECT_TYPE, data):
-                if isinstance(build, dict):
-                    builds.append(cast(_DICT_STR_OBJECT_TYPE, build))
-        return builds
+        return [cast(_DICT_STR_OBJECT_TYPE, build) for build in data if isinstance(build, dict)]
 
     def project_build_details(self, project: str, build_id: str) -> dict[str, object]:
         """Retrieve the details of a specific build.
@@ -440,23 +424,21 @@ class ReadTheDocs(client.RestApi):
         :param project: The top-level project's slug
         :return: [subprojects]
         """
-        result = self._get_json(
+        data = self._get_all_results(
             f"projects/{project}/subprojects/?limit=999",  # NOQA
             f"Subproject list for project {project!r}",
         )
-        data: object = result.get("results")
         subproject_list: list[str] = []
 
-        if isinstance(data, list):
-            for subproject in cast(_LIST_OBJECT_TYPE, data):
-                if isinstance(subproject, dict):
-                    subproject_dict = cast(_DICT_STR_OBJECT_TYPE, subproject)
-                    child: object = subproject_dict.get("child")
-                    if isinstance(child, dict):
-                        child_dict = cast(_DICT_STR_OBJECT_TYPE, child)
-                        slug: object = child_dict.get("slug")
-                        if isinstance(slug, str):
-                            subproject_list.append(slug)
+        for subproject in data:
+            if isinstance(subproject, dict):
+                subproject_dict = cast(_DICT_STR_OBJECT_TYPE, subproject)
+                child: object = subproject_dict.get("child")
+                if isinstance(child, dict):
+                    child_dict = cast(_DICT_STR_OBJECT_TYPE, child)
+                    slug: object = child_dict.get("slug")
+                    if isinstance(slug, str):
+                        subproject_list.append(slug)
 
         return subproject_list
 
@@ -469,15 +451,52 @@ class ReadTheDocs(client.RestApi):
         """
         return subproject in self.subproject_list(project)
 
+    def _subproject_alias(self, project: str, subproject: str) -> str:
+        """Return the alias that addresses a subproject relationship.
+
+        Read the Docs keys the subproject detail and delete routes by
+        the relationship's alias (``SubprojectRelationshipViewSet``
+        sets ``lookup_field = "alias"``), not by the child's slug. The
+        alias defaults to the child's slug but can be set to anything,
+        including another child's slug, so a route built from the slug
+        can miss the relationship or address a different one.
+
+        :param project: The top-level project's slug
+        :param subproject: The subordinated project's slug
+        :return: The relationship's alias, or the child's slug when the
+                 entry carries no alias.
+        :raises ReadTheDocsNotFoundError: If ``subproject`` is not a
+            subproject of ``project``.
+        """
+        entries = self._get_all_results(
+            f"projects/{project}/subprojects/?limit=999",  # NOQA
+            f"Subproject list for project {project!r}",
+        )
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            entry_dict = cast(_DICT_STR_OBJECT_TYPE, entry)
+            child: object = entry_dict.get("child")
+            if not isinstance(child, dict) or cast(_DICT_STR_OBJECT_TYPE, child).get("slug") != subproject:
+                continue
+            alias: object = entry_dict.get("alias")
+            return alias if isinstance(alias, str) and alias else subproject
+
+        msg = f"Subproject {subproject!r} of project {project!r} not found"
+        raise ReadTheDocsNotFoundError(msg)
+
     def subproject_details(self, project: str, subproject: str) -> dict[str, object]:
         """Retrieve the details of a specific subproject.
 
         :param project: The top-level project's slug
         :param subproject: The subordinated project's slug
         :return: {result}
+        :raises ReadTheDocsNotFoundError: If ``subproject`` is not a
+            subproject of ``project``.
         """
+        alias = self._subproject_alias(project, subproject)
         return self._get_json(
-            f"projects/{project}/subprojects/{subproject}/",
+            f"projects/{project}/subprojects/{alias}/",
             f"Subproject {subproject!r} of project {project!r}",
         )
 
@@ -525,8 +544,11 @@ class ReadTheDocs(client.RestApi):
         :param project: The top-level project's slug
         :param subproject: The subordinated project's slug
         :return: {status payload}
+        :raises ReadTheDocsNotFoundError: If ``subproject`` is not a
+            subproject of ``project``.
         """
-        result: ApiResponse = self.delete(f"projects/{project}/subprojects/{subproject}/")
+        alias = self._subproject_alias(project, subproject)
+        result: ApiResponse = self.delete(f"projects/{project}/subprojects/{alias}/")
         resp = self._check(
             result,
             f"Deletion of subproject {subproject!r} from project {project!r}",
