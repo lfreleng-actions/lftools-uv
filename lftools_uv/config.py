@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import shutil
 import sys
-from configparser import ConfigParser, NoOptionError, NoSectionError
+from configparser import ConfigParser, InterpolationError, NoOptionError, NoSectionError
 from pathlib import Path
 from typing import overload
 
@@ -93,13 +93,21 @@ def get_setting(section: str, option: None = None) -> list[str]: ...
 
 
 def get_setting(section: str, option: str | None = None) -> str | list[str]:
-    """Get a configuration from a section."""
+    """Get a configuration from a section.
+
+    A value that interpolates cleanly, ``%%`` escapes included, reads as
+    before. A value that cannot be interpolated, such as a password
+    holding a literal ``%``, is returned exactly as written instead of
+    raising.
+    """
     sys.tracebacklimit = 0
     config: ConfigParser = get_config()
 
     if option:
         try:
             return config.get(section, option)
+        except InterpolationError:
+            return config.get(section, option, raw=True)
         except (NoOptionError, NoSectionError) as e:
             raise e
 
@@ -111,9 +119,13 @@ def get_setting(section: str, option: str | None = None) -> str | list[str]:
 
 
 def set_setting(section: str, option: str, value: str) -> None:
-    """Save a configuration setting to config file."""
+    """Save a configuration setting to config file.
+
+    Each ``%`` in the value is stored as ``%%``, so that ``get_setting``
+    reads the value back unchanged.
+    """
     config: ConfigParser = get_config()
-    config.set(section, option, value)
+    config.set(section, option, value.replace("%", "%%"))
 
     with open(LFTOOLS_CONFIG_FILE, "w") as configfile:
         config.write(configfile)

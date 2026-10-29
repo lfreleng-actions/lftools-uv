@@ -56,7 +56,6 @@ def ini_file(tmp_path, monkeypatch):
     return path
 
 
-@pytest.mark.xfail(strict=True, reason="#971: a literal % raises InterpolationSyntaxError")
 def test_get_setting_reads_literal_percent(ini_file):
     """A value with a stray ``%`` reads back as written."""
     assert config.get_setting("global", "password") == PASSWORD
@@ -68,7 +67,6 @@ def test_get_setting_reads_escaped_percent(ini_file):
     assert config.get_setting("gerrit.example.org", "escaped") == "a%b"
 
 
-@pytest.mark.xfail(strict=True, reason="#971: a % under [global] breaks every command")
 @FRONT_ENDS
 def test_passgen_with_percent_in_global(run, ini_file):
     """A ``%`` in the global password does not stop an unrelated command."""
@@ -78,7 +76,6 @@ def test_passgen_with_percent_in_global(run, ini_file):
     assert len(result.output.rstrip("\n")) == 12
 
 
-@pytest.mark.xfail(strict=True, reason="#971: a literal % raises InterpolationSyntaxError")
 @FRONT_ENDS
 def test_config_get_option_with_percent(run, ini_file):
     """``config get`` prints a value holding a ``%`` as written."""
@@ -88,7 +85,6 @@ def test_config_get_option_with_percent(run, ini_file):
     assert result.output.strip() == PASSWORD
 
 
-@pytest.mark.xfail(strict=True, reason="#971: a literal % raises InterpolationSyntaxError")
 @FRONT_ENDS
 def test_config_get_section_with_percent(run, ini_file):
     """``config get`` on a section prints every value as it reads back."""
@@ -99,7 +95,6 @@ def test_config_get_section_with_percent(run, ini_file):
     assert "escaped: a%b" in result.output
 
 
-@pytest.mark.xfail(strict=True, reason="#971: config set cannot store a %")
 @FRONT_ENDS
 def test_config_set_stores_percent(run, ini_file):
     """``config set`` escapes a ``%`` so the value reads back unchanged."""
