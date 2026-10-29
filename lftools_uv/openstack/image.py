@@ -20,7 +20,6 @@ import sys
 import tempfile
 import urllib
 import urllib.request
-from datetime import datetime, timedelta
 from typing import Any
 
 # aislop-ignore-file hallucinated-import -- the declared openstacksdk dependency provides the `openstack` import package
@@ -28,6 +27,7 @@ import openstack
 import openstack.connection
 from openstack.cloud.exc import OpenStackCloudException
 
+from lftools_uv.openstack._age import created_within
 from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
@@ -48,9 +48,7 @@ def _filter_images(images, days=0, hide_public=False, ci_managed=True):
             continue
         if image.is_protected:
             continue
-        if days and (
-            datetime.strptime(image.created_at, "%Y-%m-%dT%H:%M:%SZ") >= datetime.now() - timedelta(days=days)
-        ):
+        if days and created_within(image.created_at, days):
             continue
 
         filtered.append(image)

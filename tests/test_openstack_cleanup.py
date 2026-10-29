@@ -283,7 +283,6 @@ def test_volume_remove_timeout(invoke, cloud, monkeypatch, caplog):
 SHIFTED_ZONES = pytest.mark.parametrize("zone", ["Pacific/Kiritimati", "America/Los_Angeles"])
 
 
-@pytest.mark.xfail(strict=True, reason="#963: --days compares UTC created_at with local time")
 @SHIFTED_ZONES
 @FRONT_ENDS
 def test_image_cleanup_days_in_any_zone(invoke, zone, cloud, monkeypatch, local_tz):
@@ -299,7 +298,6 @@ def test_image_cleanup_days_in_any_zone(invoke, zone, cloud, monkeypatch, local_
     assert delete.ids == [old.id]
 
 
-@pytest.mark.xfail(strict=True, reason="#963: --days compares UTC created_at with local time")
 @SHIFTED_ZONES
 @FRONT_ENDS
 def test_server_list_days_in_any_zone(invoke, zone, cloud, monkeypatch, local_tz):
@@ -314,7 +312,6 @@ def test_server_list_days_in_any_zone(invoke, zone, cloud, monkeypatch, local_tz
     assert result.stdout == "old\n"
 
 
-@pytest.mark.xfail(strict=True, reason="#963: --days compares UTC created_at with local time")
 @SHIFTED_ZONES
 @FRONT_ENDS
 def test_volume_list_days_in_any_zone(invoke, zone, cloud, monkeypatch, local_tz):

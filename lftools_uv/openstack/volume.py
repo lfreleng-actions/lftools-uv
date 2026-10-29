@@ -26,6 +26,7 @@ import openstack.connection
 from openstack.cloud.exc import OpenStackCloudException
 from openstack.exceptions import NotFoundException
 
+from lftools_uv.openstack._age import created_within
 from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
@@ -39,9 +40,7 @@ def _filter_volumes(volumes: builtins.list[Any], days: int = 0) -> builtins.list
     """Filter volume data and return list."""
     filtered = []
     for volume in volumes:
-        if days and (
-            datetime.strptime(volume.created_at, "%Y-%m-%dT%H:%M:%S.%f") >= datetime.now() - timedelta(days=days)
-        ):
+        if days and created_within(volume.created_at, days):
             continue
 
         filtered.append(volume)

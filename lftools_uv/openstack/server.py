@@ -21,6 +21,7 @@ import openstack
 import openstack.connection
 from openstack.cloud.exc import OpenStackCloudException
 
+from lftools_uv.openstack._age import created_within
 from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
@@ -30,9 +31,7 @@ def _filter_servers(servers, days=0):
     """Filter server data and return list."""
     filtered = []
     for server in servers:
-        if days and (
-            datetime.strptime(server.created_at, "%Y-%m-%dT%H:%M:%SZ") >= datetime.now() - timedelta(days=days)
-        ):
+        if days and created_within(server.created_at, days):
             continue
 
         filtered.append(server)
