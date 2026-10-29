@@ -73,7 +73,6 @@ def _write(tmp_path: Path, name: str, text: str) -> str:
     return str(path)
 
 
-@pytest.mark.xfail(strict=True, reason="#972: the schema itself is never checked")
 @FRONT_ENDS
 def test_malformed_schema_exits_1(run, tmp_path):
     """A schema that fails its meta-schema stops validation with exit 1."""
@@ -85,7 +84,6 @@ def test_malformed_schema_exits_1(run, tmp_path):
     assert result.exit_code == 1
 
 
-@pytest.mark.xfail(strict=True, reason="#972: every schema validates as Draft 4")
 @FRONT_ENDS
 def test_draft7_schema_uses_draft7(run, tmp_path):
     """A Draft 7 schema enforces ``const`` and ``contains``."""
