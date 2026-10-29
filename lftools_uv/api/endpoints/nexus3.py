@@ -123,12 +123,8 @@ class Nexus3(client.RestApi):
 
         json_data: str = json.dumps(data, indent=4)
         response: ApiResponse = self.post("service/rest/beta/security/roles", data=json_data)
-        resp = self._response_of(response)
-
-        if resp.status_code == 200:
-            return f"Role {name} created"
-        resp.raise_for_status()
-        return "Failed to create role"
+        _ = self._require_status(response, f"Create role {name}", 200)
+        return f"Role {name} created"
 
     def create_script(self, name: str, content: str) -> str:
         """Create a new script.
@@ -144,12 +140,8 @@ class Nexus3(client.RestApi):
 
         json_data: str = json.dumps(data)
         response: ApiResponse = self.post("service/rest/v1/script", data=json_data)
-        resp = self._response_of(response)
-
-        if resp.status_code == 204:
-            return f"Script {name} successfully added."
-        resp.raise_for_status()
-        return f"Failed to create script {name}"
+        _ = self._require_status(response, f"Create script {name}", 204)
+        return f"Script {name} successfully added."
 
     def delete_script(self, name: str) -> str:
         """Delete a script from the server.
@@ -157,46 +149,26 @@ class Nexus3(client.RestApi):
         :param name: the script name
         """
         response: ApiResponse = self.delete(f"service/rest/v1/script/{name}")
-        resp = self._response_of(response)
+        _ = self._require_status(response, f"Delete script {name}", 204)
+        return f"Successfully deleted {name}"
 
-        if resp.status_code == 204:
-            return f"Successfully deleted {name}"
-        resp.raise_for_status()
-        return f"Failed to delete script {name}"
-
-    def read_script(self, name: str) -> dict[str, object] | str:
+    def read_script(self, name: str) -> dict[str, object]:
         """Get the contents of a script.
 
         :param name: the script name
         """
         response: ApiResponse = self.get(f"service/rest/v1/script/{name}")
-        resp = self._response_of(response)
+        _ = self._require_status(response, f"Read script {name}", 200)
+        return self._json_body(response)
 
-        if resp.status_code == 200:
-            if isinstance(response, tuple):
-                body: client.ApiBody = response[1]
-                if isinstance(body, dict):
-                    return body
-            return cast(_DICT_STR_OBJECT_TYPE, resp.json())
-        resp.raise_for_status()
-        return f"Failed to read script {name}"
-
-    def run_script(self, name: str) -> dict[str, object] | str:
+    def run_script(self, name: str) -> dict[str, object]:
         """Run a script on the server.
 
         :param name: the script name
         """
         response: ApiResponse = self.post(f"service/rest/v1/script/{name}/run")
-        resp = self._response_of(response)
-
-        if resp.status_code == 200:
-            if isinstance(response, tuple):
-                body: client.ApiBody = response[1]
-                if isinstance(body, dict):
-                    return body
-            return cast(_DICT_STR_OBJECT_TYPE, resp.json())
-        resp.raise_for_status()
-        return f"Failed to execute script {name}"
+        _ = self._require_status(response, f"Run script {name}", 200)
+        return self._json_body(response)
 
     def update_script(self, name: str, content: str) -> str:
         """Update an existing script on the server.
@@ -212,12 +184,8 @@ class Nexus3(client.RestApi):
 
         json_data: str = json.dumps(data)
         response: ApiResponse = self.put(f"service/rest/v1/script/{name}", data=json_data)
-        resp = self._response_of(response)
-
-        if resp.status_code == 204:
-            return f"Successfully updated {name}"
-        resp.raise_for_status()
-        return f"Failed to update script {name}"
+        _ = self._require_status(response, f"Update script {name}", 204)
+        return f"Successfully updated {name}"
 
     def list_scripts(self) -> list[str]:
         """List server scripts."""
@@ -245,12 +213,8 @@ class Nexus3(client.RestApi):
 
         json_data: str = json.dumps(data)
         response: ApiResponse = self.post("service/rest/v1/tags", data=json_data)
-        resp = self._response_of(response)
-
-        if resp.status_code == 200:
-            return f"Tag {name} successfully added."
-        resp.raise_for_status()
-        return f"Failed to create tag {name}"
+        _ = self._require_status(response, f"Create tag {name}", 200)
+        return f"Tag {name} successfully added."
 
     def delete_tag(self, name: str) -> str:
         """Delete a tag from the server.
@@ -258,12 +222,8 @@ class Nexus3(client.RestApi):
         :param name: the tag's name
         """
         response: ApiResponse = self.delete(f"service/rest/v1/tags/{name}")
-        resp = self._response_of(response)
-
-        if resp.status_code == 204:
-            return f"Tag {name} successfully deleted."
-        resp.raise_for_status()
-        return f"Failed to delete tag {name}."
+        _ = self._require_status(response, f"Delete tag {name}", 204)
+        return f"Tag {name} successfully deleted."
 
     def show_tag(self, name: str) -> dict[str, object]:
         """Get tag details.
@@ -271,11 +231,8 @@ class Nexus3(client.RestApi):
         :param name: tag name
         """
         response: ApiResponse = self.get(f"service/rest/v1/tags/{name}")
-        if isinstance(response, tuple):
-            body: client.ApiBody = response[1]
-            if isinstance(body, dict):
-                return body
-        return {}
+        _ = self._require_status(response, f"Show tag {name}", 200)
+        return self._json_body(response)
 
     def list_tags(self) -> list[str] | str:
         """List all tags.
@@ -322,7 +279,7 @@ class Nexus3(client.RestApi):
         email_address: str,
         roles: str,
         password: str | None = None,
-    ) -> str | None:
+    ) -> str:
         """Create a new user.
 
         @param username:
@@ -349,13 +306,8 @@ class Nexus3(client.RestApi):
 
         json_data: str = json.dumps(data)
         response: ApiResponse = self.post("service/rest/beta/security/users", data=json_data)
-        resp = self._response_of(response)
-
-        if resp.status_code == 200:
-            return "User {} successfully created with password {}".format(username, data["password"])
-        resp.raise_for_status()
-        log.error("Failed to create user %s", username)
-        return None
+        _ = self._require_status(response, f"Create user {username}", 200)
+        return "User {} successfully created with password {}".format(username, data["password"])
 
     def delete_user(self, username: str) -> str:
         """Delete a user.

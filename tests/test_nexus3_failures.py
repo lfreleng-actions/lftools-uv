@@ -41,8 +41,6 @@ TOKEN = "a+b/c="
 ENCODED_TOKEN = "a%2Bb%2Fc%3D"
 SCRIPT_TEXT = 'log.info("cleanup")\n'
 
-XFAIL_958 = pytest.mark.xfail(strict=True, reason="#958: undocumented HTTP statuses exit 0")
-
 Call = tuple[str, str, object]
 
 # Each command with the status Nexus documents for it, the body it
@@ -285,7 +283,6 @@ def test_script_create_succeeds(run, nexus_api, tmp_path):
 
 
 @FRONT_ENDS
-@XFAIL_958
 @pytest.mark.parametrize(
     ("status", "body", "text"),
     [(401, None, ""), (404, "Tag not found", "Tag not found"), (500, NEXUS_ERROR, NEXUS_ERROR_TEXT)],
@@ -316,7 +313,6 @@ def test_tag_show_prints_tag(run, nexus_api):
 
 
 @FRONT_ENDS
-@XFAIL_958
 @pytest.mark.parametrize("kind", list(WRITES))
 def test_undocumented_status_exits_1(run, nexus_api, kind):
     """A status other than the documented one fails the command."""
@@ -345,7 +341,6 @@ def test_documented_status_succeeds(run, nexus_api, kind):
 
 
 @FRONT_ENDS
-@XFAIL_958
 def test_script_create_undocumented_status_exits_1(run, nexus_api, tmp_path):
     """A 200 to a script upload is not the documented 204, so it fails."""
     script = tmp_path / "cleanup.groovy"
