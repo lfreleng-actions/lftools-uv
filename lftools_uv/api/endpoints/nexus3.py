@@ -17,6 +17,7 @@ __author__ = "DW Talton"
 import json
 import logging
 from typing import cast
+from urllib.parse import urlencode
 
 import requests
 
@@ -63,23 +64,43 @@ class Nexus3(client.RestApi):
             return cast(_DICT_STR_OBJECT_TYPE, obj)
         return {}
 
-    def _items_from_response(self, response: ApiResponse) -> list[dict[str, object]]:
-        """Extract the ``items`` list from a Nexus 3 paged response.
+    def _paged_items(self, path: str, params: dict[str, str], action: str) -> list[dict[str, object]]:
+        """Collect the ``items`` from every page of a Nexus 3 listing.
 
         Nexus 3 wraps paged collection responses in::
 
             {"items": [ ... ], "continuationToken": ...}
 
-        Returns the inner list of dicts, or an empty list when the
-        body cannot be parsed.
+        and expects the token back as a query parameter until it is null.
+
+        :param path: the REST path, without a query string
+        :param params: query parameters sent with every page
+        :param action: what the listing does, for error messages
+
+        Raises:
+            requests.HTTPError: If Nexus refuses a page, or a page is not
+                a JSON object holding an ``items`` list.
         """
-        body: dict[str, object] = self._json_body(response)
-        items: object = body.get("items", [])
-        if isinstance(items, list):
-            return [
-                cast(_DICT_STR_OBJECT_TYPE, item) for item in cast(_LIST_OBJECT_TYPE, items) if isinstance(item, dict)
-            ]
-        return []
+        items: list[dict[str, object]] = []
+        query: dict[str, str] = dict(params)
+        while True:
+            url: str = f"{path}?{urlencode(query)}" if query else path
+            response: ApiResponse = self.get(url)
+            resp: requests.Response = self._require_status(response, action, 200)
+            body: client.ApiBody = response[1] if isinstance(response, tuple) else None
+            page: dict[str, object] = body if isinstance(body, dict) else {}
+            page_items: object = page.get("items")
+            if not isinstance(page_items, list):
+                msg: str = f"{action} failed: the response is not a page of items"
+                raise requests.HTTPError(msg, response=resp)
+            for item in cast(_LIST_OBJECT_TYPE, page_items):
+                if isinstance(item, dict):
+                    items.append(cast(_DICT_STR_OBJECT_TYPE, item))
+
+            token: object = page.get("continuationToken")
+            if token is None:
+                return items
+            query = {**params, "continuationToken": str(token)}
 
     def create_role(self, name: str, description: str, privileges: str, roles: str) -> str:
         """Create a new role.
@@ -102,12 +123,8 @@ class Nexus3(client.RestApi):
 
         json_data: str = json.dumps(data, indent=4)
         response: ApiResponse = self.post("service/rest/beta/security/roles", data=json_data)
-        resp = self._response_of(response)
-
-        if resp.status_code == 200:
-            return f"Role {name} created"
-        resp.raise_for_status()
-        return "Failed to create role"
+        _ = self._require_status(response, f"Create role {name}", 200)
+        return f"Role {name} created"
 
     def create_script(self, name: str, content: str) -> str:
         """Create a new script.
@@ -123,12 +140,8 @@ class Nexus3(client.RestApi):
 
         json_data: str = json.dumps(data)
         response: ApiResponse = self.post("service/rest/v1/script", data=json_data)
-        resp = self._response_of(response)
-
-        if resp.status_code == 204:
-            return f"Script {name} successfully added."
-        resp.raise_for_status()
-        return f"Failed to create script {name}"
+        _ = self._require_status(response, f"Create script {name}", 204)
+        return f"Script {name} successfully added."
 
     def delete_script(self, name: str) -> str:
         """Delete a script from the server.
@@ -136,46 +149,26 @@ class Nexus3(client.RestApi):
         :param name: the script name
         """
         response: ApiResponse = self.delete(f"service/rest/v1/script/{name}")
-        resp = self._response_of(response)
+        _ = self._require_status(response, f"Delete script {name}", 204)
+        return f"Successfully deleted {name}"
 
-        if resp.status_code == 204:
-            return f"Successfully deleted {name}"
-        resp.raise_for_status()
-        return f"Failed to delete script {name}"
-
-    def read_script(self, name: str) -> dict[str, object] | str:
+    def read_script(self, name: str) -> dict[str, object]:
         """Get the contents of a script.
 
         :param name: the script name
         """
         response: ApiResponse = self.get(f"service/rest/v1/script/{name}")
-        resp = self._response_of(response)
+        _ = self._require_status(response, f"Read script {name}", 200)
+        return self._json_body(response)
 
-        if resp.status_code == 200:
-            if isinstance(response, tuple):
-                body: client.ApiBody = response[1]
-                if isinstance(body, dict):
-                    return body
-            return cast(_DICT_STR_OBJECT_TYPE, resp.json())
-        resp.raise_for_status()
-        return f"Failed to read script {name}"
-
-    def run_script(self, name: str) -> dict[str, object] | str:
+    def run_script(self, name: str) -> dict[str, object]:
         """Run a script on the server.
 
         :param name: the script name
         """
         response: ApiResponse = self.post(f"service/rest/v1/script/{name}/run")
-        resp = self._response_of(response)
-
-        if resp.status_code == 200:
-            if isinstance(response, tuple):
-                body: client.ApiBody = response[1]
-                if isinstance(body, dict):
-                    return body
-            return cast(_DICT_STR_OBJECT_TYPE, resp.json())
-        resp.raise_for_status()
-        return f"Failed to execute script {name}"
+        _ = self._require_status(response, f"Run script {name}", 200)
+        return self._json_body(response)
 
     def update_script(self, name: str, content: str) -> str:
         """Update an existing script on the server.
@@ -191,12 +184,8 @@ class Nexus3(client.RestApi):
 
         json_data: str = json.dumps(data)
         response: ApiResponse = self.put(f"service/rest/v1/script/{name}", data=json_data)
-        resp = self._response_of(response)
-
-        if resp.status_code == 204:
-            return f"Successfully updated {name}"
-        resp.raise_for_status()
-        return f"Failed to update script {name}"
+        _ = self._require_status(response, f"Update script {name}", 204)
+        return f"Successfully updated {name}"
 
     def list_scripts(self) -> list[str]:
         """List server scripts."""
@@ -224,12 +213,8 @@ class Nexus3(client.RestApi):
 
         json_data: str = json.dumps(data)
         response: ApiResponse = self.post("service/rest/v1/tags", data=json_data)
-        resp = self._response_of(response)
-
-        if resp.status_code == 200:
-            return f"Tag {name} successfully added."
-        resp.raise_for_status()
-        return f"Failed to create tag {name}"
+        _ = self._require_status(response, f"Create tag {name}", 200)
+        return f"Tag {name} successfully added."
 
     def delete_tag(self, name: str) -> str:
         """Delete a tag from the server.
@@ -237,12 +222,8 @@ class Nexus3(client.RestApi):
         :param name: the tag's name
         """
         response: ApiResponse = self.delete(f"service/rest/v1/tags/{name}")
-        resp = self._response_of(response)
-
-        if resp.status_code == 204:
-            return f"Tag {name} successfully deleted."
-        resp.raise_for_status()
-        return f"Failed to delete tag {name}."
+        _ = self._require_status(response, f"Delete tag {name}", 204)
+        return f"Tag {name} successfully deleted."
 
     def show_tag(self, name: str) -> dict[str, object]:
         """Get tag details.
@@ -250,11 +231,8 @@ class Nexus3(client.RestApi):
         :param name: tag name
         """
         response: ApiResponse = self.get(f"service/rest/v1/tags/{name}")
-        if isinstance(response, tuple):
-            body: client.ApiBody = response[1]
-            if isinstance(body, dict):
-                return body
-        return {}
+        _ = self._require_status(response, f"Show tag {name}", 200)
+        return self._json_body(response)
 
     def list_tags(self) -> list[str] | str:
         """List all tags.
@@ -301,7 +279,7 @@ class Nexus3(client.RestApi):
         email_address: str,
         roles: str,
         password: str | None = None,
-    ) -> str | None:
+    ) -> str:
         """Create a new user.
 
         @param username:
@@ -328,13 +306,8 @@ class Nexus3(client.RestApi):
 
         json_data: str = json.dumps(data)
         response: ApiResponse = self.post("service/rest/beta/security/users", data=json_data)
-        resp = self._response_of(response)
-
-        if resp.status_code == 200:
-            return "User {} successfully created with password {}".format(username, data["password"])
-        resp.raise_for_status()
-        log.error("Failed to create user %s", username)
-        return None
+        _ = self._require_status(response, f"Create user {username}", 200)
+        return "User {} successfully created with password {}".format(username, data["password"])
 
     def delete_user(self, username: str) -> str:
         """Delete a user.
@@ -394,30 +367,34 @@ class Nexus3(client.RestApi):
                 )
         return list_of_users
 
-    def list_assets(self, repository: str) -> list[str] | str:
-        """List the assets of a given repo.
+    def list_assets(self, repository: str) -> list[str]:
+        """List the assets of a given repo, from every page.
 
         :param repository: repo name
+
+        Raises:
+            requests.HTTPError: If Nexus refuses a page or returns a malformed one.
         """
-        response: ApiResponse = self.get(f"service/rest/v1/assets?repository={repository}")
-        items: list[dict[str, object]] = self._items_from_response(response)
+        items: list[dict[str, object]] = self._paged_items(
+            "service/rest/v1/assets", {"repository": repository}, f"List assets in {repository}"
+        )
         if not items:
-            return "This repository has no assets"
+            log.info("Repository %s has no assets", repository)
+        return [str(item.get("path", "")) for item in items]
 
-        item_list: list[str] = []
-        for item in items:
-            item_list.append(str(item.get("path", "")))
-        return item_list
-
-    def list_components(self, repository: str) -> list[dict[str, object]] | str:
-        """List components from a repo.
+    def list_components(self, repository: str) -> list[dict[str, object]]:
+        """List components from a repo, from every page.
 
         :param repository: the repo name
+
+        Raises:
+            requests.HTTPError: If Nexus refuses a page or returns a malformed one.
         """
-        response: ApiResponse = self.get(f"service/rest/v1/components?repository={repository}")
-        items: list[dict[str, object]] = self._items_from_response(response)
+        items: list[dict[str, object]] = self._paged_items(
+            "service/rest/v1/components", {"repository": repository}, f"List components in {repository}"
+        )
         if not items:
-            return "This repository has no components"
+            log.info("Repository %s has no components", repository)
         return items
 
     def search_asset(self, query: str, repository: str, details: bool = False) -> list[str] | str:
@@ -426,18 +403,15 @@ class Nexus3(client.RestApi):
         :param query: querystring to use, eg myjar-1 to find myjar-1.2.3.jar
         :param repository: the repo to search in
         :param details: returns a fully-detailed json dump
-        """
-        data: dict[str, str] = {
-            "q": query,
-            "repository": repository,
-        }
-        json_data: str = json.dumps(data)
-        response: ApiResponse = self.get(
-            f"service/rest/v1/search/assets?q={query}&repository={repository}",
-            data=json_data,
-        )
 
-        items: list[dict[str, object]] = self._items_from_response(response)
+        Raises:
+            requests.HTTPError: If Nexus refuses a page or returns a malformed one.
+        """
+        items: list[dict[str, object]] = self._paged_items(
+            "service/rest/v1/search/assets",
+            {"q": query, "repository": repository},
+            f"Search assets in {repository}",
+        )
 
         if details:
             return json.dumps(items, indent=4)
@@ -499,9 +473,12 @@ class Nexus3(client.RestApi):
         return list_of_roles
 
     def list_tasks(self) -> list[list[object]]:
-        """List all tasks."""
-        response: ApiResponse = self.get("service/rest/v1/tasks")
-        items: list[dict[str, object]] = self._items_from_response(response)
+        """List all tasks, from every page.
+
+        Raises:
+            requests.HTTPError: If Nexus refuses a page or returns a malformed one.
+        """
+        items: list[dict[str, object]] = self._paged_items("service/rest/v1/tasks", {}, "List tasks")
         list_of_tasks: list[list[object]] = []
         for task in items:
             list_of_tasks.append(
