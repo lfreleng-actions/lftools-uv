@@ -587,6 +587,22 @@ class Gerrit(client.RestApi):
                     group_list.append(name if isinstance(name, str) and name else uuid)
         return group_list
 
+    def project_head(self, project: str) -> str:
+        """Return the branch a project's HEAD points to, such as ``master``.
+
+        Raises:
+            requests.HTTPError: If Gerrit does not answer 200, or its
+                answer is not a ``refs/heads/`` branch.
+        """
+        response: ApiResponse = self.get(f"projects/{quote(project, safe='')}/HEAD")
+        resp: requests.Response = self._require_status(response, f"Get HEAD of project {project}", 200)
+        head: object = response[1] if isinstance(response, tuple) else None
+        prefix: str = "refs/heads/"
+        if not isinstance(head, str) or not head.startswith(prefix) or head == prefix:
+            msg: str = f"Gerrit did not report a branch for the HEAD of project {project}: {head!r}"
+            raise requests.HTTPError(msg, response=resp)
+        return head.removeprefix(prefix)
+
     def list_project_inherits_from(self, gerrit_project: str) -> str:
         """List who a project inherits from."""
         gerrit_project = quote(gerrit_project, safe="", encoding=None, errors=None)

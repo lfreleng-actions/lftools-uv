@@ -6,6 +6,7 @@ import logging
 
 import typer
 
+from lftools_uv.jenkins.jobs import JobsError, set_jobs_disabled
 from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
@@ -13,49 +14,31 @@ log = logging.getLogger(__name__)
 jobs_app = typer.Typer(help="Command to update Jenkins Jobs.")
 
 
-# Jobs subcommands
-enable_disable_jobs = """
-import jenkins.*
-import jenkins.model.*
-import hudson.*
-import hudson.model.*
-
-
-def jobTypes = [hudson.model.FreeStyleProject.class]
-
-def filter = {{job->
-    if (job.disabled == true) {{
-        println("${{job.fullName}}")
-    }}
-    job.getDisplayName().contains("{0}")
-}}
-
-def disableClosure = {{job->job.{1}()}}
-
-jobTypes.each{{ className->
-    jenkins.model.Jenkins.instance.getAllItems(className).findAll(filter).each(disableClosure)}}
-"""
+def _set_disabled(ctx: typer.Context, regex: str, disable: bool) -> None:
+    """Print each job changed; exit 1 if none matched or one did not change."""
+    action = "disable" if disable else "enable"
+    try:
+        changed, failed = set_jobs_disabled(ctx.obj["jenkins"].server, regex, disable)
+    except JobsError as exc:
+        log.error("%s", exc)
+        raise typer.Exit(1) from None
+    except Exception:
+        log.exception("Failed to %s jobs", action)
+        raise typer.Exit(1) from None
+    for name in changed:
+        echo(name)
+    if failed:
+        log.error("Could not %s %d job(s): %s", action, len(failed), ", ".join(failed))
+        raise typer.Exit(1)
 
 
 @jobs_app.command("enable")
 def jobs_enable(ctx: typer.Context, regex: str = typer.Argument(..., help="Regex pattern to match job names")) -> None:
     """Enable all Jenkins jobs matching REGEX."""
-    try:
-        jenkins = ctx.obj["jenkins"]
-        result = jenkins.server.run_script(enable_disable_jobs.format(regex, "enable"))
-        echo(result)
-    except Exception:
-        log.exception("Failed to enable jobs")
-        raise typer.Exit(1) from None
+    _set_disabled(ctx, regex, False)
 
 
 @jobs_app.command("disable")
 def jobs_disable(ctx: typer.Context, regex: str = typer.Argument(..., help="Regex pattern to match job names")) -> None:
     """Disable all Jenkins jobs matching REGEX."""
-    try:
-        jenkins = ctx.obj["jenkins"]
-        result = jenkins.server.run_script(enable_disable_jobs.format(regex, "disable"))
-        echo(result)
-    except Exception:
-        log.exception("Failed to disable jobs")
-        raise typer.Exit(1) from None
+    _set_disabled(ctx, regex, True)

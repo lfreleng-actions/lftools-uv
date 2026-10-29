@@ -11,30 +11,29 @@
 
 __author__ = "Anil Belur"
 
+import logging
+import sys
+
 import click
 
+from lftools_uv.jenkins.jobs import JobsError, set_jobs_disabled
 from lftools_uv.output import echo
 
-enable_disable_jobs = """
-import jenkins.*
-import jenkins.model.*
-import hudson.*
-import hudson.model.*
+log = logging.getLogger(__name__)
 
-def jobTypes = [hudson.model.FreeStyleProject.class]
 
-def filter = {{job->
-    if (job.disabled == true) {{
-        println("${{job.fullName}}")
-    }}
-    job.getDisplayName().contains("{0}")
-}}
-
-def disableClosure = {{job->job.{1}()}}
-
-jobTypes.each{{ className->
-    jenkins.model.Jenkins.instance.getAllItems(className).findAll(filter).each(disableClosure)}}
-"""
+def _set_disabled(ctx: click.Context, regex: str, disable: bool) -> None:
+    """Print each job changed; exit 1 if none matched or one did not change."""
+    try:
+        changed, failed = set_jobs_disabled(ctx.obj["jenkins"].server, regex, disable)
+    except JobsError as exc:
+        log.error("%s", exc)
+        sys.exit(1)
+    for name in changed:
+        echo(name)
+    if failed:
+        log.error("Could not %s %d job(s): %s", "disable" if disable else "enable", len(failed), ", ".join(failed))
+        sys.exit(1)
 
 
 @click.group()
@@ -49,10 +48,7 @@ def jobs(ctx):
 @click.pass_context
 def enable(ctx, regex):
     """Enable all Jenkins jobs matching REGEX."""
-    jenkins = ctx.obj["jenkins"]
-
-    result = jenkins.server.run_script(enable_disable_jobs.format(regex, "enable"))
-    echo(result)
+    _set_disabled(ctx, regex, False)
 
 
 @click.command()
@@ -60,10 +56,7 @@ def enable(ctx, regex):
 @click.pass_context
 def disable(ctx, regex):
     """Disable all Jenkins jobs matching REGEX."""
-    jenkins = ctx.obj["jenkins"]
-
-    result = jenkins.server.run_script(enable_disable_jobs.format(regex, "disable"))
-    echo(result)
+    _set_disabled(ctx, regex, True)
 
 
 jobs.add_command(enable)
