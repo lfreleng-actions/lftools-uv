@@ -41,7 +41,6 @@ TOKEN = "a+b/c="
 ENCODED_TOKEN = "a%2Bb%2Fc%3D"
 SCRIPT_TEXT = 'log.info("cleanup")\n'
 
-XFAIL_956 = pytest.mark.xfail(strict=True, reason="#956: asset and task lists read one page and ignore its status")
 XFAIL_957 = pytest.mark.xfail(strict=True, reason="#957: script create uploads the file name, not its contents")
 XFAIL_958 = pytest.mark.xfail(strict=True, reason="#958: undocumented HTTP statuses exit 0")
 
@@ -136,7 +135,6 @@ def test_asset_list_single_page(run, nexus_api):
 
 
 @FRONT_ENDS
-@XFAIL_956
 def test_asset_list_reads_every_page(run, nexus_api):
     """Assets on every page are listed, following the encoded token."""
     calls = nexus_api(_page(["a/1.jar", "a/2.jar"], TOKEN), _page(["a/3.jar"], None))
@@ -153,7 +151,6 @@ def test_asset_list_reads_every_page(run, nexus_api):
 
 
 @FRONT_ENDS
-@XFAIL_956
 def test_asset_search_reads_every_page(run, nexus_api):
     """Search results on every page are listed in order."""
     calls = nexus_api(_page(["a/1.jar"], TOKEN), _page(["a/2.jar"], None))
@@ -167,7 +164,6 @@ def test_asset_search_reads_every_page(run, nexus_api):
 
 
 @FRONT_ENDS
-@XFAIL_956
 def test_asset_search_details_reads_every_page(run, nexus_api):
     """``--details`` dumps the items from every page as one JSON list."""
     nexus_api(_page(["a/1.jar"], TOKEN), _page(["a/2.jar"], None))
@@ -179,7 +175,6 @@ def test_asset_search_details_reads_every_page(run, nexus_api):
 
 
 @FRONT_ENDS
-@XFAIL_956
 @pytest.mark.parametrize(
     "second_page",
     [_response(500, NEXUS_ERROR), _response(200), _response(200, {"continuationToken": None})],
@@ -196,7 +191,6 @@ def test_asset_list_bad_follow_up_page_exits_1(run, nexus_api, second_page):
 
 
 @FRONT_ENDS
-@XFAIL_956
 @pytest.mark.parametrize(
     "args",
     [["asset", "list", "r1"], ["asset", "search", "foo", "r1"], ["task", "list"]],
@@ -215,7 +209,6 @@ def test_list_refused_exits_1(run, nexus_api, caplog, args):
 
 
 @FRONT_ENDS
-@XFAIL_956
 def test_asset_list_empty_repository(run, nexus_api, caplog):
     """An empty repository prints nothing and says so in the log."""
     caplog.set_level(logging.INFO)
