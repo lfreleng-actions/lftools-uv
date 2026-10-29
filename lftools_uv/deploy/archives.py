@@ -263,16 +263,14 @@ def copy_archives(workspace: str, pattern: list[str] | None = None) -> None:
         if len(os.path.basename(src)) > 255:
             log.warning("Filename %s is over 255 characters. Skipping...", os.path.basename(src))
 
-        dest: str = os.path.join(dest_dir, src[len(workspace) + 1 :])
+        # relpath, not slicing the WORKSPACE string, so a trailing slash,
+        # a relative path or "." still keeps each file's own path.
+        dest: str = os.path.join(dest_dir, os.path.relpath(src, workspace))
         log.debug("%s -> %s", src, dest)
 
         if os.path.isfile(src):
-            try:
-                _ = shutil.move(src, dest)
-            except OSError as e:  # Switch to FileNotFoundError when Python 2 support is dropped.
-                log.debug("Missing path, will create it %s.\n%s", os.path.dirname(dest), e)
-                os.makedirs(os.path.dirname(dest))
-                _ = shutil.move(src, dest)
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            _ = shutil.move(src, dest)
         else:
             log.info("Not copying directories: %s.", src)
 
@@ -304,11 +302,15 @@ def deploy_archives(nexus_url: str, nexus_path: str, workspace: str, pattern: li
         :nexus_path: Path on nexus logs repo to place the logs. Eg:
             $SILO/$JENKINS_HOSTNAME/$JOB_NAME/$BUILD_NUMBER
         :workspace: Directory in which to search, typically in Jenkins this is
-            $WORKSPACE
+            $WORKSPACE. A relative path is taken from the current directory.
         :pattern: Space-separated list of Globstar patterns of files to
             archive. (optional)
     """
     nexus_url = _format_url(nexus_url)
+    # Anchor a relative WORKSPACE to the caller's directory before changing
+    # into staging. Path.absolute keeps "..", which must follow a symlink
+    # before it as the shell does; os.path.abspath would fold it away.
+    workspace = str(Path(workspace).absolute())
     previous_dir: str = os.getcwd()
     work_dir: str = tempfile.mkdtemp(prefix="lftools-da.")
     os.chdir(work_dir)

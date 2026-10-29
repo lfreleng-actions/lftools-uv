@@ -292,7 +292,6 @@ def test_absolute_workspace_keeps_paths(tmp_path, stage):
     assert _read_tree(stage) == LOG_FILES
 
 
-@pytest.mark.xfail(strict=True, reason="#981: a trailing slash cuts paths")
 def test_workspace_with_trailing_slash_keeps_paths(tmp_path, stage):
     """A trailing slash on the workspace does not change staged paths."""
     ws = _make_workspace(tmp_path)
@@ -300,7 +299,6 @@ def test_workspace_with_trailing_slash_keeps_paths(tmp_path, stage):
     assert _read_tree(stage) == LOG_FILES
 
 
-@pytest.mark.xfail(strict=True, reason="#981: a relative workspace cuts paths")
 @pytest.mark.parametrize("workspace", ["./ws", "./ws/"])
 def test_relative_workspace_keeps_paths(tmp_path, monkeypatch, workspace):
     """A relative workspace stages files at their own relative paths."""
@@ -310,7 +308,6 @@ def test_relative_workspace_keeps_paths(tmp_path, monkeypatch, workspace):
     assert _read_tree(tmp_path, exclude="ws") == LOG_FILES
 
 
-@pytest.mark.xfail(strict=True, reason="#981: workspace . cuts paths")
 def test_dot_workspace_keeps_paths(tmp_path, monkeypatch):
     """Workspace ``.`` leaves each file at its own path."""
     ws = _make_workspace(tmp_path)
@@ -326,7 +323,6 @@ RELATIVE_FILES = {"archives/report.txt": "report", **LOG_FILES}
 RELATIVE_STAGED = {"report.txt.gz", "a1.log.gz", "b1.log.gz", "q/x.log.gz"}
 
 
-@pytest.mark.xfail(strict=True, reason="#981: a relative workspace is read from staging")
 @pytest.mark.parametrize(("workspace", "cwd"), RELATIVE_WORKSPACES)
 def test_deploy_archives_resolves_relative_workspace(tmp_path, monkeypatch, workspace, cwd):
     """``deploy archives`` reads a relative workspace from the caller's directory."""
@@ -355,7 +351,6 @@ SYMLINK_PARENT_FORMS = pytest.mark.parametrize(
         pytest.param(
             False,
             id="relative",
-            marks=pytest.mark.xfail(strict=True, reason="#981: a relative workspace is read from staging"),
         ),
         pytest.param(True, id="absolute"),
     ],
@@ -472,7 +467,6 @@ def test_s3_uploads_hidden_files(tmp_path, monkeypatch):
     assert Path.cwd() == tmp_path
 
 
-@pytest.mark.xfail(strict=True, reason="#981: a relative workspace is read from staging")
 @pytest.mark.parametrize(("workspace", "cwd"), RELATIVE_WORKSPACES)
 def test_s3_resolves_relative_workspace(tmp_path, monkeypatch, workspace, cwd):
     """``deploy s3`` reads a relative workspace from the caller's directory."""

@@ -16,6 +16,7 @@ import mimetypes
 import os
 import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import boto3
@@ -151,7 +152,7 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
         :build_url: URL of the Jenkins build. Jenkins typically provides this
                     via the $BUILD_URL environment variable.
         :workspace: Directory in which to search, typically in Jenkins this is
-            $WORKSPACE
+            $WORKSPACE. A relative path is taken from the current directory.
         :pattern: Space-separated list of Globstar patterns of files to
             archive. (optional)
 
@@ -160,6 +161,10 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
     all uploads have been attempted. When deleting a marker also fails,
     that error propagates with the HTTPError as its context.
     """
+    # Anchor a relative WORKSPACE to the caller's directory before changing
+    # into staging. Path.absolute keeps "..", which must follow a symlink
+    # before it as the shell does; os.path.abspath would fold it away.
+    workspace = str(Path(workspace).absolute())
     previous_dir: str = os.getcwd()
     work_dir: str = tempfile.mkdtemp(prefix="lftools-dl.")
     os.chdir(work_dir)
