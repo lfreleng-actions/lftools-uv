@@ -381,6 +381,15 @@ def test_subproject_exists(datafiles):
 @responses.activate
 def test_subproject_details(datafiles):
     os.chdir(str(datafiles))
+    with open("subproject_list.json") as list_file:
+        list_data = json.loads(list_file.read())
+    responses.add(
+        responses.GET,
+        url="https://readthedocs.org/api/v3/projects/TestProject1/subprojects/?limit=999",
+        json=list_data,
+        status=200,
+        match_querystring=True,
+    )
     json_file = open("subproject_details.json")
     json_data = json.loads(json_file.read())
     responses.add(
@@ -460,8 +469,22 @@ def test_subproject_create_sends_empty_alias():
     assert payload == {"child": "testproject2", "alias": ""}
 
 
+_SUBPROJECT_LIST = {"next": None, "results": [{"child": {"slug": "testproject2"}, "alias": "testproject2"}]}
+
+
+def _add_subproject_list():
+    responses.add(
+        responses.GET,
+        url="https://readthedocs.org/api/v3/projects/TestProject1/subprojects/?limit=999",
+        json=_SUBPROJECT_LIST,
+        status=200,
+        match_querystring=True,
+    )
+
+
 @responses.activate
 def test_subproject_delete():
+    _add_subproject_list()
     responses.add(
         responses.DELETE,
         url="https://readthedocs.org/api/v3/projects/TestProject1/subprojects/testproject2/",
@@ -474,11 +497,7 @@ def test_subproject_delete():
 @responses.activate
 def test_subproject_delete_missing():
     """Deleting an absent relationship raises a typed error."""
-    responses.add(
-        responses.DELETE,
-        url="https://readthedocs.org/api/v3/projects/TestProject1/subprojects/nope/",
-        json={"detail": "Not found."},
-        status=404,
-    )
+    _add_subproject_list()
     with pytest.raises(ReadTheDocsNotFoundError):
         rtd.subproject_delete("TestProject1", "nope")
+    assert [call.request.method for call in responses.calls] == ["GET"]

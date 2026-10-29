@@ -451,15 +451,52 @@ class ReadTheDocs(client.RestApi):
         """
         return subproject in self.subproject_list(project)
 
+    def _subproject_alias(self, project: str, subproject: str) -> str:
+        """Return the alias that addresses a subproject relationship.
+
+        Read the Docs keys the subproject detail and delete routes by
+        the relationship's alias (``SubprojectRelationshipViewSet``
+        sets ``lookup_field = "alias"``), not by the child's slug. The
+        alias defaults to the child's slug but can be set to anything,
+        including another child's slug, so a route built from the slug
+        can miss the relationship or address a different one.
+
+        :param project: The top-level project's slug
+        :param subproject: The subordinated project's slug
+        :return: The relationship's alias, or the child's slug when the
+                 entry carries no alias.
+        :raises ReadTheDocsNotFoundError: If ``subproject`` is not a
+            subproject of ``project``.
+        """
+        entries = self._get_all_results(
+            f"projects/{project}/subprojects/?limit=999",  # NOQA
+            f"Subproject list for project {project!r}",
+        )
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            entry_dict = cast(_DICT_STR_OBJECT_TYPE, entry)
+            child: object = entry_dict.get("child")
+            if not isinstance(child, dict) or cast(_DICT_STR_OBJECT_TYPE, child).get("slug") != subproject:
+                continue
+            alias: object = entry_dict.get("alias")
+            return alias if isinstance(alias, str) and alias else subproject
+
+        msg = f"Subproject {subproject!r} of project {project!r} not found"
+        raise ReadTheDocsNotFoundError(msg)
+
     def subproject_details(self, project: str, subproject: str) -> dict[str, object]:
         """Retrieve the details of a specific subproject.
 
         :param project: The top-level project's slug
         :param subproject: The subordinated project's slug
         :return: {result}
+        :raises ReadTheDocsNotFoundError: If ``subproject`` is not a
+            subproject of ``project``.
         """
+        alias = self._subproject_alias(project, subproject)
         return self._get_json(
-            f"projects/{project}/subprojects/{subproject}/",
+            f"projects/{project}/subprojects/{alias}/",
             f"Subproject {subproject!r} of project {project!r}",
         )
 
@@ -507,8 +544,11 @@ class ReadTheDocs(client.RestApi):
         :param project: The top-level project's slug
         :param subproject: The subordinated project's slug
         :return: {status payload}
+        :raises ReadTheDocsNotFoundError: If ``subproject`` is not a
+            subproject of ``project``.
         """
-        result: ApiResponse = self.delete(f"projects/{project}/subprojects/{subproject}/")
+        alias = self._subproject_alias(project, subproject)
+        result: ApiResponse = self.delete(f"projects/{project}/subprojects/{alias}/")
         resp = self._check(
             result,
             f"Deletion of subproject {subproject!r} from project {project!r}",

@@ -182,7 +182,6 @@ def _register_delete(alias: str) -> None:
     responses.add(responses.DELETE, url=f"{ENDPOINT}{SUBPROJECTS_PATH}{alias}/", status=204)
 
 
-@pytest.mark.xfail(strict=True, reason="#967: subproject-delete uses the child slug, not the alias")
 @FRONT_ENDS
 @responses.activate
 def test_subproject_delete_uses_alias(settings, run):
@@ -193,7 +192,6 @@ def test_subproject_delete_uses_alias(settings, run):
     assert len(_calls("DELETE", f"{SUBPROJECTS_PATH}cps/")) == 1
 
 
-@pytest.mark.xfail(strict=True, reason="#967: subproject-delete removes another relationship")
 @FRONT_ENDS
 @responses.activate
 def test_subproject_delete_spares_other_relationship(settings, run):
@@ -206,7 +204,6 @@ def test_subproject_delete_spares_other_relationship(settings, run):
     assert _calls("DELETE", f"{SUBPROJECTS_PATH}onap-cps/") == []
 
 
-@pytest.mark.xfail(strict=True, reason="#967: subproject-delete matches an alias, not the child")
 @FRONT_ENDS
 @responses.activate
 def test_subproject_delete_refuses_non_child(settings, run):
@@ -227,7 +224,6 @@ def test_subproject_delete_alias_equal_to_slug(settings, run):
     assert len(_calls("DELETE", f"{SUBPROJECTS_PATH}onap-cps/")) == 1
 
 
-@pytest.mark.xfail(strict=True, reason="#967: subproject-details uses the child slug, not the alias")
 @FRONT_ENDS
 @responses.activate
 def test_subproject_details_uses_alias(settings, run):
