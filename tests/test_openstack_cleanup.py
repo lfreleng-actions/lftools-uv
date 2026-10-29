@@ -167,7 +167,6 @@ def _errors(caplog: pytest.LogCaptureFixture) -> str:
 # --- #961: read the cloud name from the connection's config ---------------
 
 
-@pytest.mark.xfail(strict=True, reason="#961: cleanup reads cloud.cloud_config, which a Connection lacks")
 @FRONT_ENDS
 def test_server_cleanup_deletes_old_servers(invoke, cloud, monkeypatch, caplog):
     """``server cleanup`` deletes only the servers older than ``--days``."""
@@ -183,7 +182,6 @@ def test_server_cleanup_deletes_old_servers(invoke, cloud, monkeypatch, caplog):
     assert "Removing 1 servers from defaults." in caplog.text
 
 
-@pytest.mark.xfail(strict=True, reason="#961: cleanup reads cloud.cloud_config, which a Connection lacks")
 @FRONT_ENDS
 def test_volume_cleanup_deletes_old_volumes(invoke, cloud, monkeypatch, caplog):
     """``volume cleanup`` deletes only the volumes older than ``--days``."""

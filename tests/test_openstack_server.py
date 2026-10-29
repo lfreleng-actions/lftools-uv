@@ -33,7 +33,7 @@ def mock_server():
 def mock_cloud():
     """Create a mock OpenStack cloud connection."""
     cloud = MagicMock()
-    cloud.cloud_config.name = "test-cloud"
+    cloud.config.name = "test-cloud"
     return cloud
 
 

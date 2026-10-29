@@ -61,7 +61,7 @@ def cleanup(os_cloud: str, days: int = 0) -> None:
     """
 
     def _remove_volumes_from_cloud(volumes: builtins.list[Any], cloud: Any) -> None:
-        log.info("Removing %d volumes from %s.", len(volumes), cloud.cloud_config.name)
+        log.info("Removing %d volumes from %s.", len(volumes), cloud.config.name)
         for volume in volumes:
             try:
                 # Delete by id, not name. Names are not unique, and a duplicate
@@ -86,10 +86,10 @@ def cleanup(os_cloud: str, days: int = 0) -> None:
                     'Failed to remove "%s" (%s) from %s. Possibly already deleted.',
                     volume.name,
                     volume.id,
-                    cloud.cloud_config.name,
+                    cloud.config.name,
                 )
             else:
-                log.info('Removed "%s" (%s) from %s.', volume.name, volume.id, cloud.cloud_config.name)
+                log.info('Removed "%s" (%s) from %s.', volume.name, volume.id, cloud.config.name)
 
     cloud = openstack.connection.from_config(cloud=os_cloud)
     volumes = cloud.list_volumes()

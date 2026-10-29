@@ -57,7 +57,7 @@ def cleanup(os_cloud, days=0):
     """
 
     def _remove_servers_from_cloud(servers, cloud):
-        log.info("Removing %d servers from %s.", len(servers), cloud.cloud_config.name)
+        log.info("Removing %d servers from %s.", len(servers), cloud.config.name)
         for server in servers:
             try:
                 # Delete by id, not name. Names are not unique, and a duplicate
@@ -82,10 +82,10 @@ def cleanup(os_cloud, days=0):
                     'Failed to remove "%s" (%s) from %s. Possibly already deleted.',
                     server.name,
                     server.id,
-                    cloud.cloud_config.name,
+                    cloud.config.name,
                 )
             else:
-                log.info('Removed "%s" (%s) from %s.', server.name, server.id, cloud.cloud_config.name)
+                log.info('Removed "%s" (%s) from %s.', server.name, server.id, cloud.config.name)
 
     cloud = openstack.connection.from_config(cloud=os_cloud)
     servers = cloud.list_servers()
