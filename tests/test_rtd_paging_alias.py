@@ -246,7 +246,6 @@ def test_subproject_details_uses_alias(settings, run):
 VERSION_PATH = "projects/p/versions/v/"
 
 
-@pytest.mark.xfail(strict=True, reason="#968: an empty ACTIVE reads as false")
 @pytest.mark.parametrize("value", ["", " "], ids=["empty", "blank"])
 @FRONT_ENDS
 @responses.activate

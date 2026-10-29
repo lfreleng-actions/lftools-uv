@@ -42,6 +42,20 @@ _DEPRECATION_NOTICE = (
 )
 
 
+class _StrictBool(click.types.BoolParamType):
+    """A boolean that refuses an empty or blank value.
+
+    Click 8.2.2 and later read an empty string as false, which would
+    deactivate a version and take its documentation offline.
+    """
+
+    def convert(self, value, param, ctx):
+        """Fail on a blank string; otherwise convert as Click does."""
+        if isinstance(value, str) and not value.strip():
+            self.fail("an empty value is not a boolean; use true or false.", param, ctx)
+        return super().convert(value, param, ctx)
+
+
 def _emit_json(data: object) -> None:
     """Print a payload as JSON, matching the historical output format."""
     echo(json.dumps(data, indent=2))
@@ -92,7 +106,7 @@ def project_version_list(ctx, project_slug):
 @click.command(name="project-version-update")
 @click.argument("project-slug")
 @click.argument("version-slug")
-@click.argument("active", type=click.BOOL)
+@click.argument("active", type=_StrictBool())
 @click.pass_context
 def project_version_update(ctx, project_slug, version_slug, active):
     """Update projects active version.
