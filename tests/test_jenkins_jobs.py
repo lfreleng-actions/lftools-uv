@@ -54,7 +54,6 @@ def _script(server: mock.MagicMock) -> str:
     return str(server.run_script.call_args.args[0])
 
 
-@pytest.mark.xfail(strict=True, reason="#976: jobs enable/disable print the wrong jobs")
 @FRONT_ENDS
 @ACTIONS
 def test_prints_changed_jobs(run: Run, action: str) -> None:
@@ -66,7 +65,6 @@ def test_prints_changed_jobs(run: Run, action: str) -> None:
     assert result.stdout == "ci-foo-verify\nfolder/ci-bar-verify\n"
 
 
-@pytest.mark.xfail(strict=True, reason="#976: jobs enable/disable exit 0 when nothing matches")
 @FRONT_ENDS
 @ACTIONS
 def test_no_match_exits_one(run: Run, action: str, caplog: pytest.LogCaptureFixture) -> None:
@@ -79,7 +77,6 @@ def test_no_match_exits_one(run: Run, action: str, caplog: pytest.LogCaptureFixt
     assert "no-such-job" in caplog.text
 
 
-@pytest.mark.xfail(strict=True, reason="#976: jobs enable/disable ignore jobs that did not change")
 @FRONT_ENDS
 @ACTIONS
 def test_failed_job_exits_one(run: Run, action: str, caplog: pytest.LogCaptureFixture) -> None:
@@ -92,7 +89,23 @@ def test_failed_job_exits_one(run: Run, action: str, caplog: pytest.LogCaptureFi
     assert "ci-odd-verify" in caplog.text
 
 
-@pytest.mark.xfail(strict=True, reason="#976: REGEX is pasted into the Groovy source")
+@FRONT_ENDS
+@pytest.mark.parametrize(
+    "output",
+    ["", "java.lang.RuntimeException: boom", "CHANGED ci-foo-verify", "MATCHED=abc"],
+    ids=["empty", "script-error", "no-count", "bad-count"],
+)
+def test_unusable_answer_exits_1(run: Run, output: str, caplog: pytest.LogCaptureFixture) -> None:
+    server = _server(output)
+
+    result = run(server, ["disable", "verify"])
+
+    assert result.exit_code == 1
+    assert isinstance(result.exception, SystemExit)
+    assert "did not report how many jobs match" in caplog.text
+    assert result.stdout == ""
+
+
 @FRONT_ENDS
 @pytest.mark.parametrize("regex", [REGEX, 'a"b\\d$c'], ids=["anchored", "quotes"])
 def test_regex_sent_base64(run: Run, regex: str) -> None:
@@ -105,7 +118,6 @@ def test_regex_sent_base64(run: Run, regex: str) -> None:
     assert regex not in script
 
 
-@pytest.mark.xfail(strict=True, reason="#976: jobs enable/disable match display names literally")
 @FRONT_ENDS
 @ACTIONS
 def test_script_matches_full_name_by_regex(run: Run, action: str) -> None:
