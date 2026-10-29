@@ -11,7 +11,6 @@
 
 from __future__ import annotations
 
-import glob
 import mimetypes
 import os
 import tempfile
@@ -29,7 +28,7 @@ from botocore.exceptions import ClientError
 from lftools_uv.deploy._build_logs import _capture_build_logs
 from lftools_uv.deploy._common import _BANNER_HASHES, _CONTENT_TYPE_TEXT, _CONTENT_TYPE_XML, log
 from lftools_uv.deploy._late import _copy_archives
-from lftools_uv.deploy._util import _compress_text
+from lftools_uv.deploy._util import _compress_text, _files_below
 
 # Uploaded to each top level "directory" so that s3, which has no filesystem,
 # generates or updates the index.html file there.
@@ -127,13 +126,13 @@ def _delete_index_markers(s3: Any, target: _S3Target) -> None:
 
 
 def _files_in_work_dir() -> list[str]:
-    """List the files below the current directory, recursively."""
-    file_list: list[str] = []
-    files: list[str] = glob.glob("**/*", recursive=True)
-    for file in files:
-        if os.path.isfile(file):
-            file_list.append(file)
-    return file_list
+    """List the files below the current directory, recursively.
+
+    Hidden files and directories are included, because ``copy_archives``
+    stages them too. Symlinked directories are not followed; see
+    ``_files_below``.
+    """
+    return [f for f in _files_below(".") if os.path.isfile(f)]
 
 
 def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, pattern: list[str] | None = None) -> None:

@@ -9,6 +9,7 @@ staged. Every test works on real files under ``tmp_path``; the S3
 resource is a fake, so no test reaches AWS, Nexus or the network.
 """
 
+import gzip
 import logging
 import os
 import zipfile
@@ -18,6 +19,7 @@ from unittest.mock import ANY, patch
 
 import pytest
 
+from lftools_uv.deploy._util import _compress_text
 from lftools_uv.deploy.archives import copy_archives, deploy_archives
 from lftools_uv.deploy.s3 import deploy_s3
 
@@ -432,7 +434,6 @@ class FakeS3:
         """Accept the deletion of an index marker."""
 
 
-@pytest.mark.xfail(strict=True, reason="#982: hidden files are not uploaded")
 def test_s3_uploads_hidden_files(tmp_path, monkeypatch):
     """``deploy s3`` compresses and uploads files under dot-directories."""
     ws = _make_workspace(
@@ -487,3 +488,118 @@ def test_s3_resolves_relative_workspace(tmp_path, monkeypatch, workspace, cwd):
     }
     assert uploaded == RELATIVE_STAGED
     assert Path.cwd() == tmp_path / cwd
+
+
+def _make_outside(root: Path) -> Path:
+    """Create ``root/outside`` holding ``secret.txt`` and ``sub/secret.bin``."""
+    outside = root / "outside"
+    (outside / "sub").mkdir(parents=True)
+    (outside / "secret.txt").write_text("secret")
+    (outside / "sub" / "secret.bin").write_text("binary secret")
+    return outside
+
+
+@pytest.mark.parametrize("link_name", [".hidden", "visible"])
+def test_s3_does_not_follow_directory_symlinks_in_archives(tmp_path, monkeypatch, link_name):
+    """A symlinked directory in ``archives/`` is neither compressed nor uploaded."""
+    outside = _make_outside(tmp_path)
+    ws = _make_workspace(tmp_path, {"archives/report.txt": "report"})
+    os.symlink(outside, ws / "archives" / link_name, target_is_directory=True)
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    monkeypatch.chdir(tmp_path)
+    s3 = FakeS3()
+    with (
+        patch("lftools_uv.deploy.s3.boto3.resource", return_value=s3),
+        patch("lftools_uv.deploy.s3.tempfile.mkdtemp", return_value=str(work_dir)),
+        patch("lftools_uv.deploy.s3._capture_build_logs"),
+    ):
+        deploy_s3("bucket", S3_PATH, BUILD_URL, str(ws), None)
+
+    uploaded = {
+        key.removeprefix(S3_PATH) for key in s3.uploaded if key.startswith(S3_PATH) and not key.endswith(INDEX_MARKER)
+    }
+    assert uploaded == {"report.txt.gz"}
+    assert _read_tree(outside) == {"secret.txt": "secret", "sub/secret.bin": "binary secret"}
+
+
+def test_compress_text_does_not_follow_directory_symlinks(tmp_path):
+    """``_compress_text`` gzips hidden files but leaves linked directories alone."""
+    outside = _make_outside(tmp_path)
+    staging = tmp_path / "stage"
+    (staging / ".hidden").mkdir(parents=True)
+    (staging / ".hidden" / "run.log").write_text("run")
+    os.symlink(outside, staging / "link", target_is_directory=True)
+
+    _compress_text(str(staging))
+
+    assert sorted(path.relative_to(staging).as_posix() for path in staging.rglob("*") if path.is_file()) == [
+        ".hidden/run.log.gz"
+    ]
+    assert gzip.decompress((staging / ".hidden" / "run.log.gz").read_bytes()) == b"run"
+    assert _read_tree(outside) == {"secret.txt": "secret", "sub/secret.bin": "binary secret"}
+
+
+@pytest.mark.parametrize("sub", [".hidden", "visible"])
+def test_compress_text_does_not_write_through_gz_symlink(tmp_path, sub):
+    """A symlink at the ``.gz`` path is replaced, never written through."""
+    outside = tmp_path / "outside.bin"
+    outside.write_text("outside data")
+    staging = tmp_path / "stage"
+    (staging / sub).mkdir(parents=True)
+    (staging / sub / "run.log").write_text("log line")
+    os.symlink(outside, staging / sub / "run.log.gz")
+
+    _compress_text(str(staging))
+
+    assert outside.read_text() == "outside data"
+    compressed = staging / sub / "run.log.gz"
+    assert not compressed.is_symlink()
+    assert compressed.is_file()
+    assert gzip.decompress(compressed.read_bytes()) == b"log line"
+    assert not (staging / sub / "run.log").exists()
+    assert sorted(path.name for path in (staging / sub).iterdir()) == ["run.log.gz"]
+
+
+@pytest.mark.parametrize(("target", "link"), [("aaa.log", "report.html"), ("z.html", "a.log")])
+def test_compress_text_compresses_symlink_to_text_file(tmp_path, target, link):
+    """A symlink to another text file is compressed whichever comes first."""
+    staging = tmp_path / "stage"
+    staging.mkdir()
+    (staging / target).write_text("shared text")
+    os.symlink(target, staging / link)
+
+    _compress_text(str(staging))
+
+    assert sorted(path.name for path in staging.iterdir()) == sorted([f"{target}.gz", f"{link}.gz"])
+    for name in (target, link):
+        assert gzip.decompress((staging / f"{name}.gz").read_bytes()) == b"shared text"
+
+
+def test_compress_text_removes_temporary_on_failure(tmp_path):
+    """A failed compression leaves no temporary and keeps the original."""
+    staging = tmp_path / "stage"
+    staging.mkdir()
+    (staging / "run.log").write_text("log line")
+
+    with (
+        patch("lftools_uv.deploy._util.shutil.copyfileobj", side_effect=OSError("disk full")),
+        pytest.raises(OSError, match="disk full"),
+    ):
+        _compress_text(str(staging))
+
+    assert _read_tree(staging) == {"run.log": "log line"}
+
+
+def test_compress_text_handles_name_near_length_limit(tmp_path):
+    """A log whose ``.gz`` name is 255 bytes long compresses, with no temporary left."""
+    staging = tmp_path / "stage"
+    staging.mkdir()
+    name = "x" * 248 + ".log"
+    (staging / name).write_text("log line")
+
+    _compress_text(str(staging))
+
+    assert sorted(path.name for path in staging.iterdir()) == [f"{name}.gz"]
+    assert len(f"{name}.gz".encode()) == 255
+    assert gzip.decompress((staging / f"{name}.gz").read_bytes()) == b"log line"
