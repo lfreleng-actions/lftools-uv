@@ -54,10 +54,14 @@ def cleanup(os_cloud, days=0):
 
     :arg str os_cloud: Cloud name as defined in OpenStack clouds.yaml.
     :arg int days: Filter servers that are older than number of days.
+
+    A delete that fails is logged and the remaining servers are still
+    removed; the command then exits 1.
     """
 
     def _remove_servers_from_cloud(servers, cloud):
         log.info("Removing %d servers from %s.", len(servers), cloud.config.name)
+        failed = []
         for server in servers:
             try:
                 # Delete by id, not name. Names are not unique, and a duplicate
@@ -73,9 +77,11 @@ def cleanup(os_cloud, days=0):
                 ):
                     log.warning("%s. Skipping server...", error_msg)
                     continue
-                else:
-                    log.error("Unexpected exception: %s", error_msg)
-                    raise
+                log.error(
+                    'Failed to remove "%s" (%s) from %s: %s', server.name, server.id, cloud.config.name, error_msg
+                )
+                failed.append(server.id)
+                continue
 
             if not result:
                 log.warning(
@@ -86,11 +92,15 @@ def cleanup(os_cloud, days=0):
                 )
             else:
                 log.info('Removed "%s" (%s) from %s.', server.name, server.id, cloud.config.name)
+        return failed
 
     cloud = openstack.connection.from_config(cloud=os_cloud)
     servers = cloud.list_servers()
     filtered_servers = _filter_servers(servers, days)
-    _remove_servers_from_cloud(filtered_servers, cloud)
+    failed = _remove_servers_from_cloud(filtered_servers, cloud)
+    if failed:
+        log.error("Failed to remove %d server(s): %s", len(failed), ", ".join(failed))
+        sys.exit(1)
 
 
 def remove(os_cloud, server_name, minutes=0):

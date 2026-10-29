@@ -200,7 +200,6 @@ def test_volume_cleanup_deletes_old_volumes(invoke, cloud, monkeypatch, caplog):
 # --- #962: keep cleaning up after a failed delete --------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="#962: a refused delete stops image cleanup")
 @FRONT_ENDS
 def test_image_cleanup_continues_after_failure(invoke, cloud, monkeypatch, caplog):
     """A refused image delete is logged, the rest are removed, and it exits 1."""
@@ -216,7 +215,6 @@ def test_image_cleanup_continues_after_failure(invoke, cloud, monkeypatch, caplo
     assert images[0].id in _errors(caplog)
 
 
-@pytest.mark.xfail(strict=True, reason="#962: a refused delete stops server cleanup")
 @FRONT_ENDS
 def test_server_cleanup_continues_after_failure(invoke, cloud, monkeypatch, caplog):
     """A refused server delete is logged, the rest are removed, and it exits 1."""
@@ -232,7 +230,6 @@ def test_server_cleanup_continues_after_failure(invoke, cloud, monkeypatch, capl
     assert servers[0].id in _errors(caplog)
 
 
-@pytest.mark.xfail(strict=True, reason="#962: volume deletes wait without limit and stop cleanup")
 @FRONT_ENDS
 def test_volume_cleanup_bounds_and_survives_timeout(invoke, cloud, monkeypatch, caplog):
     """A timed-out volume delete is logged, the rest are removed, and it exits 1."""
@@ -249,7 +246,6 @@ def test_volume_cleanup_bounds_and_survives_timeout(invoke, cloud, monkeypatch, 
     assert volumes[0].id in _errors(caplog)
 
 
-@pytest.mark.xfail(strict=True, reason="#962: an unknown volume ID ends in a NotFoundException traceback")
 @FRONT_ENDS
 def test_volume_remove_unknown_id(invoke, cloud, monkeypatch, caplog):
     """``volume remove`` with an unknown ID logs it and exits 1."""
@@ -265,7 +261,6 @@ def test_volume_remove_unknown_id(invoke, cloud, monkeypatch, caplog):
     assert "vol-missing" in _errors(caplog)
 
 
-@pytest.mark.xfail(strict=True, reason="#962: volume remove waits without limit for the delete")
 @FRONT_ENDS
 def test_volume_remove_timeout(invoke, cloud, monkeypatch, caplog):
     """A timed-out ``volume remove`` is bounded, logged, and exits 1."""

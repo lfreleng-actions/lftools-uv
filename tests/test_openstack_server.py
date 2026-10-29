@@ -154,13 +154,15 @@ class TestCleanupServers:
         mock_cloud.delete_server.assert_called_once_with(mock_server.id)
 
     def test_cleanup_unexpected_exception(self, mock_from_config, mock_cloud, mock_server):
-        """Test that unexpected exceptions are raised."""
+        """Test that an unexpected exception is logged and exits 1."""
         mock_from_config.return_value = mock_cloud
         mock_cloud.list_servers.return_value = [mock_server]
         mock_cloud.delete_server.side_effect = OpenStackCloudException("Unexpected error")
 
-        with pytest.raises(OpenStackCloudException, match="Unexpected error"):
+        with pytest.raises(SystemExit) as exc_info:
             os_server.cleanup("test-cloud")
+
+        assert exc_info.value.code == 1
 
     def test_cleanup_delete_failed(self, mock_from_config, mock_cloud, mock_server):
         """Test handling when delete returns False."""

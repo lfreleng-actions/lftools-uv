@@ -24,10 +24,15 @@ from typing import Any
 import openstack
 import openstack.connection
 from openstack.cloud.exc import OpenStackCloudException
+from openstack.exceptions import NotFoundException
 
 from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
+
+# openstacksdk waits for a volume to disappear with no time limit by
+# default, so a volume stuck in error_deleting would hang the command.
+VOLUME_DELETE_TIMEOUT_SECONDS = 600
 
 
 def _filter_volumes(volumes: builtins.list[Any], days: int = 0) -> builtins.list[Any]:
@@ -58,16 +63,20 @@ def cleanup(os_cloud: str, days: int = 0) -> None:
 
     :arg str os_cloud: Cloud name as defined in OpenStack clouds.yaml.
     :arg int days: Filter volumes that are older than number of days.
+
+    A delete that fails is logged and the remaining volumes are still
+    removed; the command then exits 1.
     """
 
-    def _remove_volumes_from_cloud(volumes: builtins.list[Any], cloud: Any) -> None:
+    def _remove_volumes_from_cloud(volumes: builtins.list[Any], cloud: Any) -> builtins.list[str]:
         log.info("Removing %d volumes from %s.", len(volumes), cloud.config.name)
+        failed: builtins.list[str] = []
         for volume in volumes:
             try:
                 # Delete by id, not name. Names are not unique, and a duplicate
                 # name made the lookup ambiguous, which skipped the volume on
                 # every run.
-                result = cloud.delete_volume(volume.id)
+                result = cloud.delete_volume(volume.id, timeout=VOLUME_DELETE_TIMEOUT_SECONDS)
             except OpenStackCloudException as e:
                 # Deleting by id cannot raise these duplicate-name errors. The
                 # branch stays as a safety net, so keep it and its tests.
@@ -77,9 +86,11 @@ def cleanup(os_cloud: str, days: int = 0) -> None:
                 ):
                     log.warning("%s. Skipping volume...", error_msg)
                     continue
-                else:
-                    log.error("Unexpected exception: %s", error_msg)
-                    raise
+                log.error(
+                    'Failed to remove "%s" (%s) from %s: %s', volume.name, volume.id, cloud.config.name, error_msg
+                )
+                failed.append(volume.id)
+                continue
 
             if not result:
                 log.warning(
@@ -90,11 +101,15 @@ def cleanup(os_cloud: str, days: int = 0) -> None:
                 )
             else:
                 log.info('Removed "%s" (%s) from %s.', volume.name, volume.id, cloud.config.name)
+        return failed
 
     cloud = openstack.connection.from_config(cloud=os_cloud)
     volumes = cloud.list_volumes()
     filtered_volumes = _filter_volumes(volumes, days)
-    _remove_volumes_from_cloud(filtered_volumes, cloud)
+    failed = _remove_volumes_from_cloud(filtered_volumes, cloud)
+    if failed:
+        log.error("Failed to remove %d volume(s): %s", len(failed), ", ".join(failed))
+        sys.exit(1)
 
 
 def remove(os_cloud: str, volume_id: str, minutes: int = 0) -> None:
@@ -105,15 +120,23 @@ def remove(os_cloud: str, volume_id: str, minutes: int = 0) -> None:
     :arg int minutes: Only delete volume if it is older than number of minutes.
     """
     cloud = openstack.connection.from_config(cloud=os_cloud)
-    volume = cloud.get_volume_by_id(volume_id)
+    try:
+        volume = cloud.get_volume_by_id(volume_id)
+    except NotFoundException:
+        volume = None
 
     if not volume:
-        log.error("volume not found.")
+        log.error("Volume %s not found.", volume_id)
         sys.exit(1)
 
     if datetime.strptime(volume.created_at, "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=UTC) >= datetime.now(
         UTC
     ) - timedelta(minutes=minutes):
         log.warning('volume "%s" (%s) is not older than %d minutes.', volume.name, volume.id, minutes)
-    else:
-        cloud.delete_volume(volume.id)
+        return
+
+    try:
+        cloud.delete_volume(volume.id, timeout=VOLUME_DELETE_TIMEOUT_SECONDS)
+    except OpenStackCloudException as e:
+        log.error('Failed to remove volume "%s" (%s): %s', volume.name, volume.id, e)
+        sys.exit(1)
