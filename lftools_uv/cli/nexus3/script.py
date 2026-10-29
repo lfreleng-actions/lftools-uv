@@ -12,6 +12,8 @@
 
 __author__ = "DW Talton"
 
+from pathlib import Path
+
 import click
 
 from lftools_uv.output import echo
@@ -26,12 +28,12 @@ def script(ctx):
 
 @script.command(name="create")
 @click.argument("name")
-@click.argument("filename")
+@click.argument("filename", type=click.Path(exists=True, dir_okay=False, readable=True, path_type=Path))
 @click.pass_context
 def create_script(ctx, name, filename):
-    """Create a new script."""
+    """Create a new script from a Groovy file."""
     r = ctx.obj["nexus3"]
-    data = r.create_script(name, filename)
+    data = r.create_script(name, filename.read_text(encoding="utf-8"))
     echo(data)
 
 

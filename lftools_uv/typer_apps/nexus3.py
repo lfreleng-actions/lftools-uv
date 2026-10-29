@@ -10,6 +10,7 @@
 """Typer Nexus3 CLI commands."""
 
 import logging
+from pathlib import Path
 from pprint import pformat
 
 import typer
@@ -159,12 +160,14 @@ def create_role(
 def create_script(
     ctx: typer.Context,
     name: str = typer.Argument(..., help="Script name"),
-    filename: str = typer.Argument(..., help="Script filename"),
+    filename: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="File holding the Groovy script"
+    ),
 ) -> None:
-    """Create a new script."""
+    """Create a new script from a Groovy file."""
     try:
         r = ctx.obj["nexus3"]
-        data = r.create_script(name, filename)
+        data = r.create_script(name, filename.read_text(encoding="utf-8"))
         echo(data)
     except Exception:
         log.exception("Failed to create script")

@@ -41,7 +41,6 @@ TOKEN = "a+b/c="
 ENCODED_TOKEN = "a%2Bb%2Fc%3D"
 SCRIPT_TEXT = 'log.info("cleanup")\n'
 
-XFAIL_957 = pytest.mark.xfail(strict=True, reason="#957: script create uploads the file name, not its contents")
 XFAIL_958 = pytest.mark.xfail(strict=True, reason="#958: undocumented HTTP statuses exit 0")
 
 Call = tuple[str, str, object]
@@ -239,7 +238,6 @@ def test_task_list_prints_task(run, nexus_api):
 
 
 @FRONT_ENDS
-@XFAIL_957
 def test_script_create_uploads_file_text(run, nexus_api, tmp_path):
     """``script create`` sends the file's text as the script content."""
     script = tmp_path / "cleanup.groovy"
@@ -258,7 +256,6 @@ def test_script_create_uploads_file_text(run, nexus_api, tmp_path):
 
 
 @FRONT_ENDS
-@XFAIL_957
 def test_script_create_missing_file_is_usage_error(run, nexus_api, tmp_path):
     """A missing script file is a usage error, and nothing is sent."""
     calls = nexus_api()
