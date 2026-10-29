@@ -9,7 +9,10 @@ staged. Every test works on real files under ``tmp_path``; the S3
 resource is a fake, so no test reaches AWS, Nexus or the network.
 """
 
+import logging
+import os
 import zipfile
+from collections.abc import Iterator
 from pathlib import Path
 from unittest.mock import ANY, patch
 
@@ -72,7 +75,6 @@ def stage(tmp_path, monkeypatch):
     return staging
 
 
-@pytest.mark.xfail(strict=True, reason="#980: ** after a directory needs a separator")
 @pytest.mark.parametrize("pattern", ["logs/**/*.txt", "./logs/**/*.txt"])
 def test_globstar_inside_pattern_matches_zero_directories(tmp_path, stage, pattern):
     """``**`` in the middle of a pattern matches files directly below it."""
@@ -95,6 +97,192 @@ def test_patterns_stage_matching_files(tmp_path, stage, pattern, expected):
     ws = _make_workspace(tmp_path)
     copy_archives(str(ws), [pattern])
     assert _read_tree(stage) == expected
+
+
+def test_double_star_inside_component_crosses_directories(tmp_path, stage):
+    """``**`` inside a component keeps matching any characters, ``/`` included."""
+    ws = _make_workspace(tmp_path)
+    copy_archives(str(ws), ["logs/**.txt"])
+    assert _read_tree(stage) == TXT_FILES
+
+
+def test_whole_and_embedded_double_stars_combine(tmp_path, stage):
+    """A whole ``**`` still matches zero directories beside an embedded one."""
+    files = {
+        "logs/report1.txt": "1",
+        "logs/sub/report2.txt": "2",
+        "logs/sub/deeper/report3.txt": "3",
+        "logs/other.txt": "other",
+    }
+    ws = _make_workspace(tmp_path, files)
+    copy_archives(str(ws), ["logs/**/report**.txt"])
+    assert _read_tree(stage) == {name: text for name, text in files.items() if "report" in name}
+
+
+EMBEDDED_FILES = {
+    "real/top.txt": "top",
+    "real/sub/deep.txt": "deep",
+    "logs/report1.txt": "1",
+    "logs/sub/report2.txt": "2",
+    ".tox/run.log": "tox",
+    "a.log": "a",
+}
+
+
+@pytest.mark.parametrize(
+    ("pattern", "expected"),
+    [
+        ("real/**.txt", ["real/top.txt", "real/sub/deep.txt"]),
+        ("logs/**/report**.txt", ["logs/report1.txt", "logs/sub/report2.txt"]),
+        ("***.log", ["a.log", ".tox/run.log"]),
+        ("./logs/**", ["logs/report1.txt", "logs/sub/report2.txt"]),
+        ("**/*.log", ["a.log", ".tox/run.log"]),
+    ],
+)
+def test_embedded_double_stars_stage_matching_files(tmp_path, stage, pattern, expected):
+    """Embedded ``**`` runs cross directories, hidden ones included, beside whole ``**`` components."""
+    ws = _make_workspace(tmp_path, EMBEDDED_FILES)
+    copy_archives(str(ws), [pattern])
+    assert _read_tree(stage) == {name: EMBEDDED_FILES[name] for name in expected}
+
+
+def test_embedded_star_runs_walk_the_workspace_once(tmp_path, stage):
+    """Many embedded ``**`` runs are matched in one walk, not one glob per combination."""
+    files = {"aaaaaaaaaaaa.log": "flat", "a/a/a/a/a/a/a/a/a/a/a/a.log": "deep", "a.log": "short"}
+    ws = _make_workspace(tmp_path, files)
+    real_glob = Path.glob
+    calls: list[str] = []
+
+    def counting_glob(self: Path, pattern: str, *args: object, **kwargs: object) -> Iterator[Path]:
+        calls.append(pattern)
+        return real_glob(self, pattern, *args, **kwargs)
+
+    with patch.object(Path, "glob", counting_glob):
+        copy_archives(str(ws), ["a**" * 12 + ".log"])
+
+    # Path.rglob calls Path.glob once on Python 3.13 and later.
+    assert len(calls) <= 1
+    assert _read_tree(stage) == {"aaaaaaaaaaaa.log": "flat", "a/a/a/a/a/a/a/a/a/a/a/a.log": "deep"}
+
+
+@pytest.mark.parametrize("pattern", ["logs/*.txt", "logs/**/*.txt", "logs/**"])
+def test_files_below_symlinked_directory_are_not_staged(tmp_path, stage, caplog, pattern):
+    """A symlinked directory cannot pull outside files into the archive."""
+    outside = tmp_path / "outside"
+    (outside / "sub").mkdir(parents=True)
+    (outside / "secret.txt").write_text("secret")
+    (outside / "sub" / "deep-secret.txt").write_text("deep secret")
+    ws = _make_workspace(tmp_path, {})
+    os.symlink(outside, ws / "logs", target_is_directory=True)
+
+    with caplog.at_level(logging.WARNING, logger="lftools_uv.deploy"):
+        copy_archives(str(ws), [pattern])
+
+    assert _read_tree(stage) == {}
+    assert _read_tree(outside) == {"secret.txt": "secret", "sub/deep-secret.txt": "deep secret"}
+    assert "symbolic link" in caplog.text
+    assert str(ws / "logs") in caplog.text
+
+
+def test_double_star_inside_brackets_matches_one_name(tmp_path, stage):
+    """``[**]`` matches a literal ``*`` and never crosses directories."""
+    files = {"logs/*.txt": "star", "logs/[private/secret].txt": "secret", "logs/top.txt": "top"}
+    ws = _make_workspace(tmp_path, files)
+    copy_archives(str(ws), ["logs/[**].txt"])
+    assert _read_tree(stage) == {"logs/*.txt": "star"}
+    assert (ws / "logs" / "[private" / "secret].txt").read_text() == "secret"
+
+
+@pytest.mark.parametrize("pattern", ["logs/*.txt/", "logs/**/", "logs/**/.", "logs/.", "."])
+def test_directory_only_pattern_stages_nothing(tmp_path, stage, pattern):
+    """A pattern ending in ``/`` or ``/.`` matches only directories, so no file is staged."""
+    ws = _make_workspace(tmp_path)
+    copy_archives(str(ws), [pattern])
+    assert _read_tree(stage) == {}
+    assert _read_tree(ws) == DEFAULT_FILES
+
+
+def test_bracket_ranges_keep_adjacent_star_endpoints(tmp_path, stage):
+    """``[*-**-z]`` is two ranges, ``*`` to ``*`` and ``*`` to ``z``, as fnmatch reads it."""
+    files = {"logs/*.txt": "star", "logs/-.txt": "dash", "logs/x.txt": "x", "logs/top.txt": "top"}
+    ws = _make_workspace(tmp_path, files)
+    copy_archives(str(ws), ["logs/[*-**-z].txt"])
+    assert _read_tree(stage) == {"logs/*.txt": "star", "logs/-.txt": "dash", "logs/x.txt": "x"}
+    assert _read_tree(ws) == {"logs/top.txt": "top"}
+
+
+@pytest.mark.parametrize(
+    ("pattern", "expected"),
+    [
+        ("logs/[!**]op.txt", {"logs/top.txt": "top"}),
+        ("logs/**/[**].txt", {"logs/*.txt": "star", "logs/sub/*.txt": "deep star"}),
+    ],
+)
+def test_bracket_star_runs_match_by_component(tmp_path, stage, pattern, expected):
+    """Bracket patterns keep their meaning, and a whole ``**`` beside them matches zero or more directories."""
+    files = {"logs/*.txt": "star", "logs/sub/*.txt": "deep star", "logs/top.txt": "top"}
+    ws = _make_workspace(tmp_path, files)
+    copy_archives(str(ws), [pattern])
+    assert _read_tree(stage) == expected
+
+
+@pytest.mark.parametrize(
+    ("pattern", "expected"),
+    [
+        ("logs/[!**]/**.txt", {"logs/a/top.txt": "top", "logs/a/sub/deep.txt": "deep"}),
+        ("logs/[**]/**.txt", {"logs/*/x.txt": "x"}),
+        ("logs/[!**]/*.txt", {"logs/a/top.txt": "top"}),
+        ("logs/[!**]/?**.txt", {"logs/a/top.txt": "top", "logs/a/sub/deep.txt": "deep"}),
+        ("logs/[!**]/s?b**.txt", {"logs/a/sub/deep.txt": "deep"}),
+        ("logs/[!**]/su*/**.txt", {"logs/a/sub/deep.txt": "deep"}),
+        ("logs/[!**]/a[!x]sub**.txt", {}),
+        ("logs/[!**]/*[s]*.txt", {}),
+    ],
+)
+def test_bracket_star_run_beside_embedded_double_star(tmp_path, stage, pattern, expected):
+    """An embedded ``**`` beside a bracket star run still crosses directories, and nothing else does."""
+    files = {"logs/a/top.txt": "top", "logs/a/sub/deep.txt": "deep", "logs/*/x.txt": "x", "logs/top.txt": "flat"}
+    ws = _make_workspace(tmp_path, files)
+    copy_archives(str(ws), [pattern])
+    assert _read_tree(stage) == expected
+
+
+def test_bracket_star_run_with_trailing_double_star_stages_only_descendants(tmp_path, stage):
+    """A trailing ``**`` after a bracket star run selects only files below the matching directories."""
+    ws = _make_workspace(tmp_path, {"logs/a": "a", "logs/b/run.log": "run"})
+    copy_archives(str(ws), ["logs/[!**]/**"])
+    assert _read_tree(stage) == {"logs/b/run.log": "run"}
+    assert (ws / "logs" / "a").read_text() == "a"
+
+
+def test_bracket_star_run_below_symlinked_directory_is_not_staged(tmp_path, stage):
+    """The component matcher skips files below a symlinked directory too."""
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "*.txt").write_text("secret")
+    ws = _make_workspace(tmp_path, {})
+    os.symlink(outside, ws / "link", target_is_directory=True)
+    copy_archives(str(ws), ["link/[**].txt"])
+    assert _read_tree(stage) == {}
+    assert _read_tree(outside) == {"*.txt": "secret"}
+
+
+@pytest.mark.parametrize("pattern", ["../neighbor/**/*.log", "../neighbor/*.log", "absolute"])
+def test_patterns_outside_workspace_are_refused(tmp_path, stage, pattern):
+    """An absolute pattern or one with ``..`` fails before anything moves."""
+    ws = _make_workspace(tmp_path, {"archives/report.txt": "report", "a1.log": "first"})
+    neighbor = tmp_path / "neighbor"
+    neighbor.mkdir()
+    (neighbor / "secret.log").write_text("secret")
+    if pattern == "absolute":
+        pattern = str(neighbor / "secret.log")
+
+    with pytest.raises(ValueError, match="must stay inside the workspace"):
+        copy_archives(str(ws), [pattern])
+
+    assert _read_tree(stage) == {}
+    assert _read_tree(ws) == {"archives/report.txt": "report", "a1.log": "first"}
+    assert _read_tree(neighbor) == {"secret.log": "secret"}
 
 
 def test_absolute_workspace_keeps_paths(tmp_path, stage):
