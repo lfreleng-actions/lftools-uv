@@ -296,7 +296,6 @@ def _feed_requests() -> list[str]:
     return [str(call.request.url) for call in responses.calls if "update-center" in str(call.request.url)]
 
 
-@pytest.mark.xfail(strict=True, reason="#991: plugins sec misses applicable advisories")
 @FRONT_ENDS
 def test_plugins_sec_reports_every_applicable_advisory(run: Run, server: jenkins.Jenkins) -> None:
     _serve_plugins()
@@ -355,7 +354,6 @@ def _line(last: str, installed: str, warning: dict[str, Any]) -> str:
     return f"pipeline-maven:{last}\tpipeline-maven:{installed}\t{warning['url']}\n"
 
 
-@pytest.mark.xfail(strict=True, reason="#991: plugins sec misses applicable advisories")
 @FRONT_ENDS
 @pytest.mark.parametrize(
     ("installed", "warning", "stdout"),
@@ -391,7 +389,6 @@ def test_plugins_sec_reports_last_range(run: Run, server: jenkins.Jenkins) -> No
     assert result.stdout == _line("2.0-beta-5", "2.0-beta-4", MULTI_RANGE)
 
 
-@pytest.mark.xfail(strict=True, reason="#991: the advisory feed is fetched over plain HTTP")
 @FRONT_ENDS
 def test_plugins_sec_fetches_feed_over_https(run: Run, server: jenkins.Jenkins) -> None:
     _serve_plugins()
@@ -403,7 +400,6 @@ def test_plugins_sec_fetches_feed_over_https(run: Run, server: jenkins.Jenkins) 
     assert _feed_requests() == [FEED]
 
 
-@pytest.mark.xfail(strict=True, reason="#991: the advisory feed is fetched over plain HTTP")
 @FRONT_ENDS
 def test_plugins_sec_refuses_redirect_off_https(
     run: Run, server: jenkins.Jenkins, caplog: pytest.LogCaptureFixture
@@ -422,7 +418,6 @@ def test_plugins_sec_refuses_redirect_off_https(
     assert mirror not in _feed_requests()
 
 
-@pytest.mark.xfail(strict=True, reason="#991: plugins sec misses applicable advisories")
 @FRONT_ENDS
 def test_plugins_sec_follows_redirects_over_https(run: Run, server: jenkins.Jenkins) -> None:
     _serve_plugins()
@@ -437,7 +432,6 @@ def test_plugins_sec_follows_redirects_over_https(run: Run, server: jenkins.Jenk
     assert mirror in _feed_requests()
 
 
-@pytest.mark.xfail(strict=True, reason="#991: an unusable advisory feed is not reported clearly")
 @FRONT_ENDS
 @pytest.mark.parametrize(
     "answer",

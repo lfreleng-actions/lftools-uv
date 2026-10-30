@@ -4,9 +4,9 @@
 
 import logging
 
-import requests
 import typer
 
+from lftools_uv.jenkins.plugins import AdvisoriesError, fetch_warnings, vulnerable_plugins
 from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
@@ -154,49 +154,12 @@ def plugins_sec(ctx: typer.Context) -> None:
     Vulnerable Version\t Installed Version\t Link.
     """
     try:
-        r = requests.get("http://updates.jenkins-ci.org/update-center.actual.json")
-        warn = r.json()["warnings"]
-
-        secdict = {}
-        for w in warn:
-            name = w["name"]
-            lastversion = None
-            for version in w["versions"]:
-                lastversion = version.get("lastVersion")
-            nv = {name: lastversion}
-            secdict.update(nv)
-
-        activedict = {}
-        jenkins = ctx.obj["jenkins"]
-        plugins = jenkins.server.get_plugins()
-        for key in plugins.keys():
-            _, plugin_name = key
-            plugin = plugins[plugin_name]
-            if plugin["active"]:
-                name = plugin["shortName"]
-                version = plugin["version"]
-                nv = {name: version}
-                activedict.update(nv)
-
-        # find the delta
-        shared = []
-        for key in set(secdict.keys()) & set(activedict.keys()):
-            shared.append(key)
-            ourversion = activedict[key]
-            theirversion = secdict[key]
-            t1 = (ourversion,)
-            t2 = (theirversion,)
-            if t1 <= t2:
-                for w in warn:
-                    name = w["name"]
-                    url = w["url"]
-                    lastversion = None
-                    for version in w["versions"]:
-                        lastversion = version.get("lastVersion")
-                    if name == key and secdict[key] == lastversion:
-                        # Tab-separated columns: vulnerable version,
-                        # installed version, then the advisory URL.
-                        echo(f"{key}:{secdict[key]}\t{key}:{activedict[key]}\t{url}")
+        advisories = vulnerable_plugins(ctx.obj["jenkins"].server, fetch_warnings())
+    except AdvisoriesError as exc:
+        log.error("%s", exc)
+        raise typer.Exit(1) from None
     except Exception:
         log.exception("Failed to check plugin security")
         raise typer.Exit(1) from None
+    for advisory in advisories:
+        echo(f"{advisory.plugin}:{advisory.last_affected}\t{advisory.plugin}:{advisory.installed}\t{advisory.url}")
