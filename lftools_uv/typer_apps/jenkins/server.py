@@ -9,7 +9,13 @@ import typer
 
 from lftools_uv.cli.state import LazyClient
 from lftools_uv.jenkins import JJB_INI, Jenkins
-from lftools_uv.jenkins.script import echo_output, read_credentials, run_groovy
+from lftools_uv.jenkins.script import (
+    FORCE_REMOVE_OFFLINE_NODES_SCRIPT,
+    REMOVE_OFFLINE_NODES_SCRIPT,
+    echo_output,
+    read_credentials,
+    run_groovy,
+)
 from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
@@ -167,63 +173,8 @@ def remove_offline_nodes(
     try:
         jenkins = ctx.obj["jenkins"]
 
-        groovy_script = """
-import hudson.model.*
-
-def numberOfflineNodes = 0
-def numberNodes = 0
-
-slaveNodes = hudson.model.Hudson.instance
-
-for (slave in slaveNodes.nodes) {
-    def node = slave.computer
-    numberNodes ++
-    println ""
-    println "Checking node ${node.name}:"
-    println '\tcomputer.isOffline: ${slave.getComputer().isOffline()}'
-    println '\tcomputer.offline: ${node.offline}'
-
-    if (node.offline) {
-        numberOfflineNodes ++
-        println '\tRemoving node ${node.name}'
-        slaveNodes.removeNode(slave)
-    }
-}
-
-println "Number of Offline Nodes: " + numberOfflineNodes
-println "Number of Nodes: " + numberNodes
-"""
-
-        force_script = """
-import jenkins.*
-import jenkins.model.*
-import hudson.*
-import hudson.model.*
-
-for (node in Jenkins.instance.computers) {
-    try {
-        println "Checking node: ${node.name}"
-        println "\tdisplay-name: ${node.properties.displayName}"
-        println "\toffline: ${node.properties.offline}"
-        println "\ttemporarily-offline: ${node.properties.temporarilyOffline}"
-        if (node.properties.offline) {
-            println "Removing bad node: ${node.name}"
-            Jenkins.instance.removeComputer(node)
-        }
-        println ""
-    }
-    catch (NullPointerException nullPointer) {
-        println "NullPointerException caught"
-        println ""
-    }
-}
-"""
-
-        if force:
-            result = jenkins.server.run_script(force_script)
-        else:
-            result = jenkins.server.run_script(groovy_script)
-        echo(result)
+        script = FORCE_REMOVE_OFFLINE_NODES_SCRIPT if force else REMOVE_OFFLINE_NODES_SCRIPT
+        echo_output(run_groovy(jenkins.server, script))
     except Exception:
         log.exception("Failed to remove offline nodes")
         raise typer.Exit(1) from None

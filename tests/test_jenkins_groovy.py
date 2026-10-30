@@ -172,7 +172,6 @@ def _nodes_server() -> mock.MagicMock:
     return server
 
 
-@pytest.mark.xfail(strict=True, reason="#987: single-quoted Groovy strings print ${node.name} literally")
 @FRONT_ENDS
 def test_remove_offline_nodes_script_interpolates(run: Run) -> None:
     server = _nodes_server()
