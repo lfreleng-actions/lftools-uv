@@ -136,7 +136,6 @@ def test_readable_credentials_are_printed(run: Run, command: str, field: str) ->
     assert "nexus-deploy : s3cret" in result.stdout
 
 
-@pytest.mark.xfail(strict=True, reason="#986: an unreadable credential is skipped and the command exits 0")
 @FRONT_ENDS
 @CREDENTIAL_COMMANDS
 def test_unreadable_credential_exits_one(run: Run, command: str, field: str, caplog: pytest.LogCaptureFixture) -> None:
@@ -155,7 +154,6 @@ def test_unreadable_credential_exits_one(run: Run, command: str, field: str, cap
     assert field in caplog.text
 
 
-@pytest.mark.xfail(strict=True, reason="#986: catch (MissingPropertyException) catches every exception")
 @FRONT_ENDS
 @CREDENTIAL_COMMANDS
 def test_credentials_script_has_no_untyped_catch(run: Run, command: str, field: str) -> None:

@@ -25,7 +25,7 @@ from lftools_uv.cli.jenkins.plugins import plugins_init
 from lftools_uv.cli.jenkins.token import token
 from lftools_uv.cli.state import LazyClient
 from lftools_uv.jenkins import JJB_INI, Jenkins
-from lftools_uv.jenkins.script import echo_output, run_groovy
+from lftools_uv.jenkins.script import echo_output, read_credentials, run_groovy
 from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
@@ -54,56 +54,27 @@ def jenkins_cli(ctx, server, user, password, conf):
         state.jenkins = jenkins_client
 
 
+def _print_credentials(ctx: click.Context, field: str) -> None:
+    """Print every credential's *field*; exit 1 if one could not be read."""
+    output, unreadable = read_credentials(ctx.obj["jenkins"].server, field)
+    echo_output(output)
+    if unreadable:
+        log.error("Could not read the %s of %d credential(s): %s", field, len(unreadable), "; ".join(unreadable))
+        sys.exit(1)
+
+
 @click.command()
 @click.pass_context
 def get_credentials(ctx):
     """Print all available Credentials."""
-    jenkins = ctx.obj["jenkins"]
-    groovy_script = """
-import com.cloudbees.plugins.credentials.*
-
-println "Printing all the credentials and passwords..."
-def creds = com.cloudbees.plugins.credentials.CredentialsProvider.lookupCredentials(
-    com.cloudbees.plugins.credentials.common.StandardUsernameCredentials.class,
-    Jenkins.instance,
-    null,
-    null
-);
-
-for (c in creds) {
-    try {
-        println(c.id + " : " + c.password )
-    } catch (MissingPropertyException) {}
-}
-"""
-    result = jenkins.server.run_script(groovy_script)
-    echo(result)
+    _print_credentials(ctx, "password")
 
 
 @click.command()
 @click.pass_context
 def get_secrets(ctx):
     """Print all available secrets."""
-    jenkins = ctx.obj["jenkins"]
-    groovy_script = """
-import com.cloudbees.plugins.credentials.*
-
-println "Printing all secrets..."
-def creds = com.cloudbees.plugins.credentials.CredentialsProvider.lookupCredentials(
-    com.cloudbees.plugins.credentials.common.StandardCredentials.class,
-    Jenkins.instance,
-    null,
-    null
-);
-
-for (c in creds) {
-    try {
-        println(c.id + " : " + c.secret )
-    } catch (MissingPropertyException) {}
-}
-"""
-    result = jenkins.server.run_script(groovy_script)
-    echo(result)
+    _print_credentials(ctx, "secret")
 
 
 @click.command()
