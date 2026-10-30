@@ -79,16 +79,13 @@ def console_server():
         yield server
 
 
-XFAIL_LAST_LINE = pytest.mark.xfail(strict=True, reason="#985: run_script drops a last line without a newline")
-
-
 @FRONT_ENDS
 @pytest.mark.parametrize(
     ("script", "stdout"),
     [
-        pytest.param('print "alpha"', "alpha\n", id="no-newline", marks=XFAIL_LAST_LINE),
-        pytest.param('println "alpha"\nprint "beta"', "alpha\nbeta\n", id="last-line", marks=XFAIL_LAST_LINE),
-        pytest.param("", "", id="prints-nothing", marks=XFAIL_LAST_LINE),
+        pytest.param('print "alpha"', "alpha\n", id="no-newline"),
+        pytest.param('println "alpha"\nprint "beta"', "alpha\nbeta\n", id="last-line"),
+        pytest.param("", "", id="prints-nothing"),
         pytest.param('println "alpha"\nprintln "beta"', "alpha\nbeta\n", id="newline"),
         pytest.param('println ""', "\n", id="empty-line"),
     ],

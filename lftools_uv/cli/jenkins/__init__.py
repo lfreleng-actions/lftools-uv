@@ -25,6 +25,7 @@ from lftools_uv.cli.jenkins.plugins import plugins_init
 from lftools_uv.cli.jenkins.token import token
 from lftools_uv.cli.state import LazyClient
 from lftools_uv.jenkins import JJB_INI, Jenkins
+from lftools_uv.jenkins.script import echo_output, run_groovy
 from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
@@ -144,8 +145,7 @@ def groovy(ctx, groovy_file):
         data = f.read()
 
     jenkins = ctx.obj["jenkins"]
-    result = jenkins.server.run_script(data)
-    echo(result)
+    echo_output(run_groovy(jenkins.server, data))
 
 
 @click.command()

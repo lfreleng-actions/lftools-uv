@@ -9,6 +9,7 @@ import typer
 
 from lftools_uv.cli.state import LazyClient
 from lftools_uv.jenkins import JJB_INI, Jenkins
+from lftools_uv.jenkins.script import echo_output, run_groovy
 from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
@@ -146,8 +147,7 @@ def groovy(ctx: typer.Context, groovy_file: str = typer.Argument(..., help="Path
             data = f.read()
 
         jenkins = ctx.obj["jenkins"]
-        result = jenkins.server.run_script(data)
-        echo(result)
+        echo_output(run_groovy(jenkins.server, data))
     except FileNotFoundError:
         log.error(f"Groovy file not found: {groovy_file}")
         raise typer.Exit(1) from None
