@@ -11,10 +11,15 @@
 
 __author__ = "Trevor Bramwell"
 
-import click
-import requests
+import logging
+import sys
 
+import click
+
+from lftools_uv.jenkins.plugins import AdvisoriesError, fetch_warnings, vulnerable_plugins
 from lftools_uv.output import echo
+
+log = logging.getLogger(__name__)
 
 
 def checkmark(truthy):
@@ -133,49 +138,13 @@ def sec(ctx):
 
     Vulnerable Version\t Installed Version\t Link.
     """
-    r = requests.get("http://updates.jenkins-ci.org/update-center.actual.json")
-    warn = r.json()["warnings"]
-
-    # create a dict of relevant info from jenkins update center
-    secdict = {}
-    for w in warn:
-        name = w["name"]
-        lastversion = None
-        for version in w["versions"]:
-            lastversion = version.get("lastVersion")
-        nv = {name: lastversion}
-        secdict.update(nv)
-
-    # create a dict of our active plugins
-    activedict = {}
-    plugins = ctx.obj["jenkins"].server.get_plugins()
-    for key in plugins.keys():
-        _, plugin_name = key
-        plugin = plugins[plugin_name]
-        if plugin["active"]:
-            name = plugin["shortName"]
-            version = plugin["version"]
-            nv = {name: version}
-            activedict.update(nv)
-
-    # find the delta
-    shared = []
-    for key in set(secdict.keys()) & set(activedict.keys()):
-        shared.append(key)
-        ourversion = activedict[key]
-        theirversion = secdict[key]
-        t1 = (ourversion,)
-        t2 = (theirversion,)
-        if t1 <= t2:
-            # Print Vulnerable Version\t Installed Version\t Link
-            for w in warn:
-                name = w["name"]
-                url = w["url"]
-                lastversion = None
-                for version in w["versions"]:
-                    lastversion = version.get("lastVersion")
-                if name == key and secdict[key] == lastversion:
-                    echo(f"{key}:{secdict[key]}\t{key}:{activedict[key]}\t{url}")
+    try:
+        advisories = vulnerable_plugins(ctx.obj["jenkins"].server, fetch_warnings())
+    except AdvisoriesError as exc:
+        log.error("%s", exc)
+        sys.exit(1)
+    for advisory in advisories:
+        echo(f"{advisory.plugin}:{advisory.last_affected}\t{advisory.plugin}:{advisory.installed}\t{advisory.url}")
 
 
 plugins_init.add_command(list_plugins, name="list")

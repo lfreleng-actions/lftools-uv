@@ -6,6 +6,7 @@ import logging
 
 import typer
 
+from lftools_uv.jenkins.builds import BuildsError, running_builds
 from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
@@ -17,14 +18,15 @@ builds_app = typer.Typer(help="Information regarding current builds and the queu
 def builds_running(ctx: typer.Context) -> None:
     """Show all the currently running builds."""
     try:
-        jenkins = ctx.obj["jenkins"]
-        running_builds = jenkins.server.get_running_builds()
-
-        for build in running_builds:
-            echo(f"- {build['name']} on {build['node']}")
+        found = running_builds(ctx.obj["jenkins"].server)
+    except BuildsError as exc:
+        log.error("%s", exc)
+        raise typer.Exit(1) from None
     except Exception:
         log.exception("Failed to get running builds")
         raise typer.Exit(1) from None
+    for build in found:
+        echo(f"- {build.job} on {build.node}")
 
 
 @builds_app.command("queued")
