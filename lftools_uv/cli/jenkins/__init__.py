@@ -25,6 +25,13 @@ from lftools_uv.cli.jenkins.plugins import plugins_init
 from lftools_uv.cli.jenkins.token import token
 from lftools_uv.cli.state import LazyClient
 from lftools_uv.jenkins import JJB_INI, Jenkins
+from lftools_uv.jenkins.script import (
+    FORCE_REMOVE_OFFLINE_NODES_SCRIPT,
+    REMOVE_OFFLINE_NODES_SCRIPT,
+    echo_output,
+    read_credentials,
+    run_groovy,
+)
 from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
@@ -53,56 +60,27 @@ def jenkins_cli(ctx, server, user, password, conf):
         state.jenkins = jenkins_client
 
 
+def _print_credentials(ctx: click.Context, field: str) -> None:
+    """Print every credential's *field*; exit 1 if one could not be read."""
+    output, unreadable = read_credentials(ctx.obj["jenkins"].server, field)
+    echo_output(output)
+    if unreadable:
+        log.error("Could not read the %s of %d credential(s): %s", field, len(unreadable), "; ".join(unreadable))
+        sys.exit(1)
+
+
 @click.command()
 @click.pass_context
 def get_credentials(ctx):
     """Print all available Credentials."""
-    jenkins = ctx.obj["jenkins"]
-    groovy_script = """
-import com.cloudbees.plugins.credentials.*
-
-println "Printing all the credentials and passwords..."
-def creds = com.cloudbees.plugins.credentials.CredentialsProvider.lookupCredentials(
-    com.cloudbees.plugins.credentials.common.StandardUsernameCredentials.class,
-    Jenkins.instance,
-    null,
-    null
-);
-
-for (c in creds) {
-    try {
-        println(c.id + " : " + c.password )
-    } catch (MissingPropertyException) {}
-}
-"""
-    result = jenkins.server.run_script(groovy_script)
-    echo(result)
+    _print_credentials(ctx, "password")
 
 
 @click.command()
 @click.pass_context
 def get_secrets(ctx):
     """Print all available secrets."""
-    jenkins = ctx.obj["jenkins"]
-    groovy_script = """
-import com.cloudbees.plugins.credentials.*
-
-println "Printing all secrets..."
-def creds = com.cloudbees.plugins.credentials.CredentialsProvider.lookupCredentials(
-    com.cloudbees.plugins.credentials.common.StandardCredentials.class,
-    Jenkins.instance,
-    null,
-    null
-);
-
-for (c in creds) {
-    try {
-        println(c.id + " : " + c.secret )
-    } catch (MissingPropertyException) {}
-}
-"""
-    result = jenkins.server.run_script(groovy_script)
-    echo(result)
+    _print_credentials(ctx, "secret")
 
 
 @click.command()
@@ -144,8 +122,7 @@ def groovy(ctx, groovy_file):
         data = f.read()
 
     jenkins = ctx.obj["jenkins"]
-    result = jenkins.server.run_script(data)
-    echo(result)
+    echo_output(run_groovy(jenkins.server, data))
 
 
 @click.command()
@@ -179,63 +156,8 @@ def quiet_down(ctx, yes, legacy_yes):
 def remove_offline_nodes(ctx, force):
     """Remove any offline nodes."""
     jenkins = ctx.obj["jenkins"]
-    groovy_script = """
-import hudson.model.*
-
-def numberOfflineNodes = 0
-def numberNodes = 0
-
-slaveNodes = hudson.model.Hudson.instance
-
-for (slave in slaveNodes.nodes) {
-    def node = slave.computer
-    numberNodes ++
-    println ""
-    println "Checking node ${node.name}:"
-    println '\tcomputer.isOffline: ${slave.getComputer().isOffline()}'
-    println '\tcomputer.offline: ${node.offline}'
-
-    if (node.offline) {
-        numberOfflineNodes ++
-        println '\tRemoving node ${node.name}'
-        slaveNodes.removeNode(slave)
-    }
-}
-
-println "Number of Offline Nodes: " + numberOfflineNodes
-println "Number of Nodes: " + numberNodes
-"""
-
-    force_script = """
-import jenkins.*
-import jenkins.model.*
-import hudson.*
-import hudson.model.*
-
-for (node in Jenkins.instance.computers) {
-    try {
-        println "Checking node: ${node.name}"
-        println "\tdisplay-name: ${node.properties.displayName}"
-        println "\toffline: ${node.properties.offline}"
-        println "\ttemporarily-offline: ${node.properties.temporarilyOffline}"
-        if (node.properties.offline) {
-            println "Removing bad node: ${node.name}"
-            Jenkins.instance.removeComputer(node)
-        }
-        println ""
-    }
-    catch (NullPointerException nullPointer) {
-        println "NullPointerException caught"
-        println ""
-    }
-}
-"""
-
-    if force:
-        result = jenkins.server.run_script(force_script)
-    else:
-        result = jenkins.server.run_script(groovy_script)
-    echo(result)
+    script = FORCE_REMOVE_OFFLINE_NODES_SCRIPT if force else REMOVE_OFFLINE_NODES_SCRIPT
+    echo_output(run_groovy(jenkins.server, script))
 
 
 jenkins_cli.add_command(plugins_init, name="plugins")
