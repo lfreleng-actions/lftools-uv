@@ -112,7 +112,6 @@ def _serve_answer(answer: Any) -> None:
     responses.add(responses.GET, re.compile(rf"{re.escape(URL)}/computer/.*"), json=answer)
 
 
-@pytest.mark.xfail(strict=True, reason="#990: builds running drops builds")
 @FRONT_ENDS
 def test_builds_running_lists_every_build(run: Run, server: jenkins.Jenkins) -> None:
     _serve_computers(COMPUTERS)
@@ -125,7 +124,6 @@ def test_builds_running_lists_every_build(run: Run, server: jenkins.Jenkins) -> 
     )
 
 
-@pytest.mark.xfail(strict=True, reason="#990: an executable without a URL is skipped silently")
 @FRONT_ENDS
 def test_builds_running_warns_about_executable_without_url(
     run: Run, server: jenkins.Jenkins, caplog: pytest.LogCaptureFixture
@@ -143,7 +141,6 @@ def test_builds_running_warns_about_executable_without_url(
     assert "no URL" in caplog.text
 
 
-@pytest.mark.xfail(strict=True, reason="#990: an unusable answer is not reported clearly")
 @FRONT_ENDS
 @pytest.mark.parametrize(
     "answer",

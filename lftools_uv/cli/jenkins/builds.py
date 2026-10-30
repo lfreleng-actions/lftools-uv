@@ -11,9 +11,15 @@
 
 __author__ = "Trevor Bramwell"
 
+import logging
+import sys
+
 import click
 
+from lftools_uv.jenkins.builds import BuildsError, running_builds
 from lftools_uv.output import echo
+
+log = logging.getLogger(__name__)
 
 
 @click.group()
@@ -27,11 +33,13 @@ def builds(ctx):
 @click.pass_context
 def running(ctx):
     """Show all the currently running builds."""
-    jenkins = ctx.obj["jenkins"]
-    running_builds = jenkins.server.get_running_builds()
-
-    for build in running_builds:
-        echo(f"- {build['name']} on {build['node']}")
+    try:
+        found = running_builds(ctx.obj["jenkins"].server)
+    except BuildsError as exc:
+        log.error("%s", exc)
+        sys.exit(1)
+    for build in found:
+        echo(f"- {build.job} on {build.node}")
 
 
 @click.command()
