@@ -14,16 +14,172 @@ from __future__ import annotations
 import datetime
 import errno
 import fnmatch
+import functools
 import os
+import re
 import shutil
 import tempfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from lftools_uv.deploy._build_logs import _capture_build_logs
 from lftools_uv.deploy._common import log
 from lftools_uv.deploy._late import _copy_archives
 from lftools_uv.deploy._util import _compress_text, _format_url, _remove_duplicates_and_sort
 from lftools_uv.deploy.nexus import deploy_nexus_zip
+
+# A bracket expression within one component, as fnmatch reads one: a
+# "]" straight after "[" or "[!" is a member, so "[]" and "[!]" are not.
+_BRACKET = re.compile(r"\[!?+\]?+[^\]/]*\]")
+# One piece of a pattern component: a run of "*", one "*", a bracket
+# expression, or any other single character.
+_PIECE = re.compile(rf"\*{{2,}}|\*|{_BRACKET.pattern}|.", re.DOTALL)
+
+
+def _below_symlink(workspace: Path, path: Path) -> bool:
+    """Return whether a directory between *workspace* and *path* is a symlink."""
+    parts = path.relative_to(workspace).parts
+    return any((workspace / Path(*parts[:i])).is_symlink() for i in range(1, len(parts)))
+
+
+def _check_pattern(pattern: str) -> None:
+    """Raise ``ValueError`` if *pattern* could match outside the workspace."""
+    path = PurePosixPath(pattern)
+    if path.is_absolute() or ".." in path.parts:
+        raise ValueError(f"Pattern {pattern!r} must stay inside the workspace: it may not be absolute or contain '..'")
+
+
+def _directory_only(pattern: str) -> bool:
+    """Return whether *pattern*, as written, matches only directories."""
+    return pattern.endswith(("/", "/.")) or pattern == "."
+
+
+def _has_star_run(pattern: str) -> bool:
+    """Return whether *pattern* holds a run of ``*`` that is not a whole ``**`` component.
+
+    Such a run, inside a bracket expression or outside one, is matched by
+    ``_fnmatch_components``: pathlib on Python 3.11 and 3.12 rejects it,
+    and no rewrite into plain globstar patterns keeps every meaning it can
+    have without multiplying the patterns, and the walks, for each run.
+    """
+    return any(re.search(r"\*{2,}", part) and part != "**" for part in pattern.split("/"))
+
+
+def _spanning_match(text: str, part: str) -> bool:
+    """Return whether *text*, names joined by ``/``, matches pattern component *part*.
+
+    Only a run of ``*`` outside brackets matches ``/``. A single ``*``,
+    ``?``, a bracket expression and any other character match within one
+    name, as they do for ``Path.glob``.
+    """
+    pieces: list[str] = _PIECE.findall(part)
+
+    @functools.cache
+    def match(piece: int, start: int) -> bool:
+        if piece == len(pieces):
+            return start == len(text)
+        current: str = pieces[piece]
+        if current.startswith("**"):
+            return any(match(piece + 1, end) for end in range(start, len(text) + 1))
+        if current == "*":
+            slash: int = text.find("/", start)
+            limit: int = len(text) if slash < 0 else slash
+            return any(match(piece + 1, end) for end in range(start, limit + 1))
+        if start == len(text) or text[start] == "/":
+            return False
+        if current == "?" or fnmatch.fnmatchcase(text[start], current):
+            return match(piece + 1, start + 1)
+        return False
+
+    return match(0, 0)
+
+
+def _components_match(names: tuple[str, ...], parts: tuple[str, ...]) -> bool:
+    """Return whether path components *names* match pattern components *parts*.
+
+    A whole ``**`` part matches zero or more names. A part holding a run
+    of ``*`` outside its bracket expressions matches one or more names,
+    the run crossing directories as it does everywhere else. Any other
+    part matches exactly one name. Results are memoized on the positions
+    in *names* and *parts*, so the work grows polynomially with them.
+    """
+
+    @functools.cache
+    def match(name: int, part: int) -> bool:
+        if part == len(parts):
+            return name == len(names)
+        current: str = parts[part]
+        if current == "**":
+            return any(match(i, part + 1) for i in range(name, len(names) + 1))
+        if any(piece.startswith("**") for piece in _PIECE.findall(current)):
+            return any(
+                _spanning_match("/".join(names[name:i]), current) and match(i, part + 1)
+                for i in range(name + 1, len(names) + 1)
+            )
+        return name < len(names) and fnmatch.fnmatchcase(names[name], current) and match(name + 1, part + 1)
+
+    return match(0, 0)
+
+
+def _fnmatch_components(workspace: Path, pattern: str) -> list[Path]:
+    """Return the paths below *workspace* whose components match *pattern*'s.
+
+    The workspace is walked once, and each path's components are matched
+    with ``_components_match``. A whole ``**`` component matches zero or
+    more components, and repeated ones mean the same as one. Bracket
+    expressions keep their exact meaning, as in ``logs/[*-**-z].txt``, and
+    a run of ``*`` outside brackets crosses directories. A trailing ``**``
+    selects what lies below the directories before it, as for
+    ``Path.glob``.
+    """
+    parts: list[str] = []
+    for part in pattern.split("/"):
+        if part in ("", ".") or (part == "**" and parts and parts[-1] == "**"):
+            continue
+        parts.append(part)
+    if parts and parts[-1] == "**":
+        parts.append("*")
+    return [path for path in workspace.rglob("*") if _components_match(path.relative_to(workspace).parts, tuple(parts))]
+
+
+def _globstar(workspace: Path, pattern: str) -> list[Path]:
+    """Return the files below *workspace* that match globstar *pattern*.
+
+    ``**`` matches zero or more directories wherever it appears, as in
+    bash with globstar set, so ``logs/**/*.txt`` matches ``logs/top.txt``
+    as well as ``logs/sub/deep.txt``. A leading ``./`` is ignored, and
+    hidden files and directories match. A run of ``*`` inside a
+    component, as in ``logs/**.txt`` or ``logs/[**].txt``, keeps its
+    meaning: outside brackets it matches any characters, ``/`` included.
+    A pattern holding such a run is matched by ``_fnmatch_components`` in
+    one walk of the workspace; any other pattern by ``Path.glob``.
+
+    A file below a symlinked directory is never returned, so a symlink
+    cannot pull files from outside the workspace into the archive. A
+    symlinked file is returned as any other file.
+    """
+    # Only files are archived, and a pattern ending in "/" or "/." matches
+    # directories only.
+    if _directory_only(pattern):
+        return []
+    candidates: list[Path]
+    if _has_star_run(pattern):
+        candidates = _fnmatch_components(workspace, pattern)
+    else:
+        normalized: str = str(PurePosixPath(pattern))
+        # pathlib returns only directories for a trailing **, so select
+        # the files below them instead.
+        if normalized == "**" or normalized.endswith("/**"):
+            normalized += "/*"
+        candidates = list(workspace.glob(normalized))
+    matches: dict[Path, None] = {}
+    for path in candidates:
+        if path in matches or not path.is_file():
+            continue
+        if _below_symlink(workspace, path):
+            log.warning("Not archiving %s: a directory on its path is a symbolic link", path)
+            continue
+        matches[path] = None
+    return list(matches)
 
 
 def copy_archives(workspace: str, pattern: list[str] | None = None) -> None:
@@ -41,7 +197,14 @@ def copy_archives(workspace: str, pattern: list[str] | None = None) -> None:
 
         :arg str pattern: Space-separated list of Unix style glob patterns.
             (default: None)
+
+    :raises ValueError: if a pattern is absolute or contains ``..``,
+        before any file is moved.
     """
+    for p in pattern or []:
+        if p:
+            _check_pattern(p)
+
     archives_dir: str = os.path.join(workspace, "archives")
     dest_dir: str = os.getcwd()
 
@@ -89,29 +252,7 @@ def copy_archives(workspace: str, pattern: list[str] | None = None) -> None:
 
         log.debug("Searching for pattern: %s", p)
 
-        # Handle recursive patterns with pathlib.rglob() for better Python 3.8 compatibility
-        found_paths: list[Path]
-        if p.startswith("**/"):
-            # Use rglob for recursive patterns like "**/*.txt"
-            pattern_suffix: str = p[3:]  # Remove "**/" prefix
-            found_paths = list(workspace_path.rglob(pattern_suffix))
-            log.debug("Using rglob for pattern '%s' -> rglob('%s')", p, pattern_suffix)
-        elif "**" in p:
-            # For other recursive patterns, fall back to manual traversal with fnmatch
-            found_paths = []
-            for file_path in workspace_path.rglob("*"):
-                if file_path.is_file():
-                    relative_path: Path = file_path.relative_to(workspace_path)
-                    if fnmatch.fnmatch(str(relative_path), p):
-                        found_paths.append(file_path)
-            log.debug("Using fnmatch for complex pattern '%s'", p)
-        else:
-            # For simple patterns without **, use glob
-            found_paths = list(workspace_path.glob(p))
-            log.debug("Using glob for simple pattern '%s'", p)
-
-        # Convert to absolute string paths
-        absolute_paths: list[str] = [str(path) for path in found_paths if path.is_file()]
+        absolute_paths: list[str] = [str(path) for path in _globstar(workspace_path, p)]
         log.debug("Found files for pattern '%s': %s", p, absolute_paths)
         paths.extend(absolute_paths)
 
@@ -122,16 +263,14 @@ def copy_archives(workspace: str, pattern: list[str] | None = None) -> None:
         if len(os.path.basename(src)) > 255:
             log.warning("Filename %s is over 255 characters. Skipping...", os.path.basename(src))
 
-        dest: str = os.path.join(dest_dir, src[len(workspace) + 1 :])
+        # relpath, not slicing the WORKSPACE string, so a trailing slash,
+        # a relative path or "." still keeps each file's own path.
+        dest: str = os.path.join(dest_dir, os.path.relpath(src, workspace))
         log.debug("%s -> %s", src, dest)
 
         if os.path.isfile(src):
-            try:
-                _ = shutil.move(src, dest)
-            except OSError as e:  # Switch to FileNotFoundError when Python 2 support is dropped.
-                log.debug("Missing path, will create it %s.\n%s", os.path.dirname(dest), e)
-                os.makedirs(os.path.dirname(dest))
-                _ = shutil.move(src, dest)
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            _ = shutil.move(src, dest)
         else:
             log.info("Not copying directories: %s.", src)
 
@@ -163,11 +302,15 @@ def deploy_archives(nexus_url: str, nexus_path: str, workspace: str, pattern: li
         :nexus_path: Path on nexus logs repo to place the logs. Eg:
             $SILO/$JENKINS_HOSTNAME/$JOB_NAME/$BUILD_NUMBER
         :workspace: Directory in which to search, typically in Jenkins this is
-            $WORKSPACE
+            $WORKSPACE. A relative path is taken from the current directory.
         :pattern: Space-separated list of Globstar patterns of files to
             archive. (optional)
     """
     nexus_url = _format_url(nexus_url)
+    # Anchor a relative WORKSPACE to the caller's directory before changing
+    # into staging. Path.absolute keeps "..", which must follow a symlink
+    # before it as the shell does; os.path.abspath would fold it away.
+    workspace = str(Path(workspace).absolute())
     previous_dir: str = os.getcwd()
     work_dir: str = tempfile.mkdtemp(prefix="lftools-da.")
     os.chdir(work_dir)
