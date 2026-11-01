@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import sys
 from configparser import ConfigParser, InterpolationError, NoOptionError, NoSectionError
@@ -121,11 +122,20 @@ def get_setting(section: str, option: str | None = None) -> str | list[str]:
 def set_setting(section: str, option: str, value: str) -> None:
     """Save a configuration setting to config file.
 
-    Each ``%`` in the value is stored as ``%%``, so that ``get_setting``
-    reads the value back unchanged.
+    The section is added if the file does not have it yet. Each ``%`` in
+    the value is stored as ``%%``, so that ``get_setting`` reads the value
+    back unchanged.
+
+    The file holds credentials, so one this creates is readable by its
+    owner only; an existing file keeps its permissions.
     """
     config: ConfigParser = get_config()
+    # ConfigParser.set writes an empty or DEFAULT section to the defaults;
+    # add any other section the file lacks.
+    if section and section != config.default_section and not config.has_section(section):
+        config.add_section(section)
     config.set(section, option, value.replace("%", "%%"))
 
-    with open(LFTOOLS_CONFIG_FILE, "w") as configfile:
+    fd = os.open(LFTOOLS_CONFIG_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as configfile:
         config.write(configfile)

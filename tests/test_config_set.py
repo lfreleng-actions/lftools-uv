@@ -26,8 +26,6 @@ from lftools_uv import config
 from lftools_uv.cli import cli
 from lftools_uv.typer_apps.root import app
 
-XFAIL = pytest.mark.xfail(strict=True, reason="#1007: config set cannot add a section or create the file")
-
 
 def _run_click(args: list[str]) -> ClickResult:
     return ClickRunner().invoke(cli, args, obj={})
@@ -62,7 +60,6 @@ def _mode(path: Path) -> int:
     return stat.S_IMODE(path.stat().st_mode)
 
 
-@XFAIL
 def test_set_setting_adds_missing_section(ini_path: Path) -> None:
     ini_path.write_text("[nexus]\nusername = alice\n")
 
@@ -72,7 +69,6 @@ def test_set_setting_adds_missing_section(ini_path: Path) -> None:
     assert config.get_setting("nexus", "username") == "alice"
 
 
-@XFAIL
 @pytest.mark.usefixtures("permissive_umask")
 def test_set_setting_creates_private_file(ini_path: Path) -> None:
     config.set_setting("gerrit.example.org", "password", "s3cret")
@@ -103,7 +99,6 @@ def test_set_setting_keeps_existing_file_mode(ini_path: Path, mode: int) -> None
     assert _mode(ini_path) == mode
 
 
-@XFAIL
 @FRONT_ENDS
 def test_config_set_new_section(run, ini_path: Path) -> None:  # type: ignore[no-untyped-def]
     ini_path.write_text("[nexus]\nusername = alice\n")
