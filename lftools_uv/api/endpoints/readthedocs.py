@@ -26,14 +26,14 @@ import re
 from typing import TYPE_CHECKING, cast
 from urllib.parse import urlsplit
 
+import requests
+
 import lftools_uv.api.client as client
 from lftools_uv import config
 from lftools_uv.api.client import ApiResponse
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
-
-    import requests
 
 _LIST_OBJECT_TYPE = list[object]
 _DICT_STR_OBJECT_TYPE = dict[str, object]
@@ -103,6 +103,15 @@ class ReadTheDocsValidationError(ReadTheDocsError):
     """Raised for client-side validation failures."""
 
 
+class ReadTheDocsRequestError(ReadTheDocsError):
+    """Raised when a request to Read the Docs could not be completed.
+
+    For example, the server could not be reached, the request timed out,
+    or a redirect was refused. The underlying ``requests`` exception is
+    chained as ``__cause__``.
+    """
+
+
 def version_slug(branch: str) -> str:
     """Convert a branch name into a Read the Docs version slug.
 
@@ -158,6 +167,24 @@ class ReadTheDocs(client.RestApi):
             params["creds"] = creds
 
         super().__init__(**params)
+
+    def _request(
+        self,
+        url: str,
+        method: str,
+        data: str | bytes | None = None,
+        timeout: int = 30,
+    ) -> ApiResponse:
+        """Execute the request, reporting a failed request as a :class:`ReadTheDocsError`.
+
+        Raises:
+            ReadTheDocsRequestError: If the request could not be completed.
+        """
+        try:
+            return super()._request(url, method, data=data, timeout=timeout)
+        except requests.RequestException as exc:
+            msg = f"{method} request to Read the Docs failed: {exc}"
+            raise ReadTheDocsRequestError(msg) from exc
 
     def _is_community_service(self) -> bool:
         """Return whether the configured endpoint is the community service, readthedocs.org."""

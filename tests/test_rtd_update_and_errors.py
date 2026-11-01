@@ -22,7 +22,6 @@ from lftools_uv.typer_apps.rtd import rtd_app
 ENDPOINT = "https://readthedocs.org/api/v3/"
 PROJECT_URL = f"{ENDPOINT}projects/foo/"
 BUSINESS_ENDPOINT = "https://readthedocs.com/api/v3/"
-XFAIL_ERRORS = pytest.mark.xfail(strict=True, reason="#1004: a failed request escapes the rtd error handling")
 
 # The fields Read the Docs' v3 ProjectUpdateSerializer accepts.
 DOCUMENTED_FIELDS = [
@@ -129,7 +128,6 @@ FAILURES = pytest.mark.parametrize(
 )
 
 
-@XFAIL_ERRORS
 @FAILURES
 @pytest.mark.parametrize(
     ("call", "url"),
@@ -152,7 +150,6 @@ def test_failed_request_is_a_read_the_docs_error(call: object, url: str, failure
     assert str(failure) in str(raised.value)
 
 
-@XFAIL_ERRORS
 @FAILURES
 @responses.activate
 def test_cli_reports_failed_request_in_one_line(failure: Exception, monkeypatch: pytest.MonkeyPatch) -> None:
