@@ -44,6 +44,37 @@ _HTTP_BAD_REQUEST = 400
 #: Characters Read the Docs preserves verbatim in a version slug.
 _SLUG_KEEP = re.compile(r"[^a-z0-9._-]+")
 
+#: The fields Read the Docs accepts when a project is updated, those of its
+#: v3 API's ``ProjectUpdateSerializer``. It silently ignores any other key
+#: and still answers 204, so a misspelt field would look like a success.
+PROJECT_UPDATE_FIELDS = frozenset(
+    {
+        "analytics_code",
+        "analytics_disabled",
+        "default_branch",
+        "default_version",
+        "external_builds_enabled",
+        "external_builds_privacy_level",
+        "homepage",
+        "language",
+        "name",
+        "privacy_level",
+        "programming_language",
+        "readthedocs_yaml_path",
+        "repository",
+        "show_version_warning",
+        "tags",
+        "versioning_scheme",
+    }
+)
+
+#: Fields the update serializer drops unless the deployment allows private
+#: repositories. readthedocs.org does not, so there it ignores them as well.
+PRIVACY_FIELDS = frozenset({"external_builds_privacy_level", "privacy_level"})
+
+#: The community service's host, where private repositories are not allowed.
+_COMMUNITY_HOST = "readthedocs.org"
+
 
 class ReadTheDocsError(Exception):
     """Base class for all Read the Docs errors raised by this module."""
@@ -127,6 +158,11 @@ class ReadTheDocs(client.RestApi):
             params["creds"] = creds
 
         super().__init__(**params)
+
+    def _is_community_service(self) -> bool:
+        """Return whether the configured endpoint is the community service, readthedocs.org."""
+        host = (urlsplit(self.endpoint).hostname or "").lower()
+        return host == _COMMUNITY_HOST or host.endswith(f".{_COMMUNITY_HOST}")
 
     # -- Response handling ---------------------------------------------------
 
@@ -314,10 +350,29 @@ class ReadTheDocs(client.RestApi):
         :param project: Project's name (slug).
         :param updates: Any of the JSON keys allowed by the RTD API.
         :return: {status payload}
-        :raises ReadTheDocsValidationError: If ``updates`` is empty.
+        :raises ReadTheDocsValidationError: If ``updates`` is empty, names a
+            field Read the Docs does not update, or names a privacy field
+            while the endpoint is readthedocs.org, which ignores those.
+            Nothing is sent.
         """
         if not updates:
             msg = f"No fields supplied to update for project {project!r}"
+            raise ReadTheDocsValidationError(msg)
+
+        unknown = sorted(set(updates) - PROJECT_UPDATE_FIELDS)
+        if unknown:
+            msg = (
+                f"Read the Docs cannot update {', '.join(map(repr, unknown))} on project {project!r}; "
+                f"the fields it updates are: {', '.join(sorted(PROJECT_UPDATE_FIELDS))}"
+            )
+            raise ReadTheDocsValidationError(msg)
+
+        privacy = sorted(set(updates) & PRIVACY_FIELDS)
+        if privacy and self._is_community_service():
+            msg = (
+                f"{_COMMUNITY_HOST} ignores {', '.join(map(repr, privacy))} on project {project!r}: "
+                "privacy settings need Read the Docs for Business"
+            )
             raise ReadTheDocsValidationError(msg)
 
         json_data: str = json.dumps(dict(updates))

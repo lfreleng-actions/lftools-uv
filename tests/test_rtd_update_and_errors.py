@@ -22,7 +22,6 @@ from lftools_uv.typer_apps.rtd import rtd_app
 ENDPOINT = "https://readthedocs.org/api/v3/"
 PROJECT_URL = f"{ENDPOINT}projects/foo/"
 BUSINESS_ENDPOINT = "https://readthedocs.com/api/v3/"
-XFAIL_FIELDS = pytest.mark.xfail(strict=True, reason="#1003: project-update sends fields Read the Docs ignores")
 XFAIL_ERRORS = pytest.mark.xfail(strict=True, reason="#1004: a failed request escapes the rtd error handling")
 
 # The fields Read the Docs' v3 ProjectUpdateSerializer accepts.
@@ -54,7 +53,6 @@ def _rtd(endpoint: str = ENDPOINT) -> ReadTheDocs:
     return ReadTheDocs(creds={"authtype": "token", "endpoint": endpoint, "token": "xyz"})
 
 
-@XFAIL_FIELDS
 @pytest.mark.parametrize(
     "updates",
     [{"defualt_version": "latest"}, {"default_version": "latest", "colour": "red"}],
@@ -96,7 +94,6 @@ def test_project_update_sends_privacy_fields_elsewhere(field: str) -> None:
     assert len(responses.calls) == 1
 
 
-@XFAIL_FIELDS
 @pytest.mark.parametrize("field", PRIVACY_FIELDS)
 @pytest.mark.parametrize("endpoint", [ENDPOINT, "https://api.readthedocs.org/api/v3/"], ids=["apex", "subdomain"])
 @responses.activate
@@ -112,7 +109,6 @@ def test_project_update_refuses_privacy_fields_on_community_service(field: str, 
     assert len(responses.calls) == 0
 
 
-@XFAIL_FIELDS
 @responses.activate
 def test_cli_project_update_refuses_unknown_field(monkeypatch: pytest.MonkeyPatch) -> None:
     responses.add(responses.PATCH, PROJECT_URL, status=204)
