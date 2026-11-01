@@ -26,14 +26,14 @@ import re
 from typing import TYPE_CHECKING, cast
 from urllib.parse import urlsplit
 
+import requests
+
 import lftools_uv.api.client as client
 from lftools_uv import config
 from lftools_uv.api.client import ApiResponse
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
-
-    import requests
 
 _LIST_OBJECT_TYPE = list[object]
 _DICT_STR_OBJECT_TYPE = dict[str, object]
@@ -43,6 +43,37 @@ _HTTP_BAD_REQUEST = 400
 
 #: Characters Read the Docs preserves verbatim in a version slug.
 _SLUG_KEEP = re.compile(r"[^a-z0-9._-]+")
+
+#: The fields Read the Docs accepts when a project is updated, those of its
+#: v3 API's ``ProjectUpdateSerializer``. It silently ignores any other key
+#: and still answers 204, so a misspelt field would look like a success.
+PROJECT_UPDATE_FIELDS = frozenset(
+    {
+        "analytics_code",
+        "analytics_disabled",
+        "default_branch",
+        "default_version",
+        "external_builds_enabled",
+        "external_builds_privacy_level",
+        "homepage",
+        "language",
+        "name",
+        "privacy_level",
+        "programming_language",
+        "readthedocs_yaml_path",
+        "repository",
+        "show_version_warning",
+        "tags",
+        "versioning_scheme",
+    }
+)
+
+#: Fields the update serializer drops unless the deployment allows private
+#: repositories. readthedocs.org does not, so there it ignores them as well.
+PRIVACY_FIELDS = frozenset({"external_builds_privacy_level", "privacy_level"})
+
+#: The community service's host, where private repositories are not allowed.
+_COMMUNITY_HOST = "readthedocs.org"
 
 
 class ReadTheDocsError(Exception):
@@ -70,6 +101,15 @@ class ReadTheDocsNotFoundError(ReadTheDocsAPIError):
 
 class ReadTheDocsValidationError(ReadTheDocsError):
     """Raised for client-side validation failures."""
+
+
+class ReadTheDocsRequestError(ReadTheDocsError):
+    """Raised when a request to Read the Docs could not be completed.
+
+    For example, the server could not be reached, the request timed out,
+    or a redirect was refused. The underlying ``requests`` exception is
+    chained as ``__cause__``.
+    """
 
 
 def version_slug(branch: str) -> str:
@@ -127,6 +167,29 @@ class ReadTheDocs(client.RestApi):
             params["creds"] = creds
 
         super().__init__(**params)
+
+    def _request(
+        self,
+        url: str,
+        method: str,
+        data: str | bytes | None = None,
+        timeout: int = 30,
+    ) -> ApiResponse:
+        """Execute the request, reporting a failed request as a :class:`ReadTheDocsError`.
+
+        Raises:
+            ReadTheDocsRequestError: If the request could not be completed.
+        """
+        try:
+            return super()._request(url, method, data=data, timeout=timeout)
+        except requests.RequestException as exc:
+            msg = f"{method} request to Read the Docs failed: {exc}"
+            raise ReadTheDocsRequestError(msg) from exc
+
+    def _is_community_service(self) -> bool:
+        """Return whether the configured endpoint is the community service, readthedocs.org."""
+        host = (urlsplit(self.endpoint).hostname or "").lower()
+        return host == _COMMUNITY_HOST or host.endswith(f".{_COMMUNITY_HOST}")
 
     # -- Response handling ---------------------------------------------------
 
@@ -314,10 +377,29 @@ class ReadTheDocs(client.RestApi):
         :param project: Project's name (slug).
         :param updates: Any of the JSON keys allowed by the RTD API.
         :return: {status payload}
-        :raises ReadTheDocsValidationError: If ``updates`` is empty.
+        :raises ReadTheDocsValidationError: If ``updates`` is empty, names a
+            field Read the Docs does not update, or names a privacy field
+            while the endpoint is readthedocs.org, which ignores those.
+            Nothing is sent.
         """
         if not updates:
             msg = f"No fields supplied to update for project {project!r}"
+            raise ReadTheDocsValidationError(msg)
+
+        unknown = sorted(set(updates) - PROJECT_UPDATE_FIELDS)
+        if unknown:
+            msg = (
+                f"Read the Docs cannot update {', '.join(map(repr, unknown))} on project {project!r}; "
+                f"the fields it updates are: {', '.join(sorted(PROJECT_UPDATE_FIELDS))}"
+            )
+            raise ReadTheDocsValidationError(msg)
+
+        privacy = sorted(set(updates) & PRIVACY_FIELDS)
+        if privacy and self._is_community_service():
+            msg = (
+                f"{_COMMUNITY_HOST} ignores {', '.join(map(repr, privacy))} on project {project!r}: "
+                "privacy settings need Read the Docs for Business"
+            )
             raise ReadTheDocsValidationError(msg)
 
         json_data: str = json.dumps(dict(updates))
