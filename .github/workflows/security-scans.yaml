@@ -41,6 +41,14 @@ jobs:
     uses: lfreleng-actions/security-workflows/.github/workflows/sonatype-lifecycle.yaml@378fcc19ebdf37f17fde4888d4b71c83b21d6cf3  # v0.9.7
     with:
       application_id: "lftools-uv"
+      # Nexus IQ cannot read pyproject.toml or uv.lock, so the lane's
+      # Python mode exports uv.lock, downloads the pinned artefacts and
+      # scans those. 3.11 is the requires-python floor; pinning it stops
+      # a new Python release without wheels for an old pin from breaking
+      # resolution. Dependency markers differ only for Windows and PyPy,
+      # so every supported CPython resolves the same set.
+      build_type: 'python'
+      python_version: '3.11'
     secrets:
       nexus_iq_password: "${{ secrets.NEXUS_IQ_PASSWORD }}"
 
