@@ -19,8 +19,6 @@ from pathlib import Path
 
 import pytest
 
-XFAIL = pytest.mark.xfail(strict=True, reason="#997: tests inherit the outer git's GIT_DIR and GIT_INDEX_FILE")
-
 
 def _git_alone(cwd: Path, *args: str) -> str:
     """Run git with no ``GIT_*`` variable at all, so it can only act on *cwd*."""
@@ -51,7 +49,6 @@ def outer(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
         yield repo
 
 
-@XFAIL
 @pytest.mark.usefixtures("outer")
 def test_hook_variables_are_cleared() -> None:
     """A test never sees the variables that tie git to the outer repository."""
@@ -59,7 +56,6 @@ def test_hook_variables_are_cleared() -> None:
     assert "GIT_INDEX_FILE" not in os.environ
 
 
-@XFAIL
 def test_git_leaves_outer_repository_alone(outer: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The DCO tests' git commands change only the repositories they create.
 
