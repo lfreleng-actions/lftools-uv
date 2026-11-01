@@ -11,10 +11,10 @@
 
 from __future__ import annotations
 
-import glob
 import gzip
 import os
 import re
+import secrets
 import shutil
 import sys
 import zipfile
@@ -26,33 +26,70 @@ from lftools_uv.deploy._common import _DEFAULT_URL_SCHEME, log
 from lftools_uv.deploy._late import _fail
 
 
+def _files_below(root: str) -> list[str]:
+    """Return the files below *root*, relative to it, sorted.
+
+    Hidden files and directories are included. Symlinked directories are
+    skipped, never followed: ``copy_archives`` stages the workspace's
+    ``archives/`` directory as it is, symlinks included, and following
+    one would compress, delete or upload files outside the staging tree.
+    """
+    files: list[str] = []
+    for dirpath, _dirnames, filenames in os.walk(root, followlinks=False):
+        files.extend(os.path.relpath(os.path.join(dirpath, name), root) for name in filenames)
+    return sorted(files)
+
+
+def _gzip_beside(path: str) -> None:
+    """Write *path*'s contents, gzipped, to ``<path>.gz``.
+
+    The output never goes through a symlink at ``<path>.gz``: staging can
+    hold symlinks from the workspace's ``archives/`` directory, and
+    writing through one would overwrite a file outside the staging tree.
+    The data goes to a new temporary file beside *path*, created
+    exclusively, which then replaces ``<path>.gz`` by rename.
+    """
+    # A short name of its own, so a source name near the length limit
+    # still fits; it is renamed away or removed before anything lists it.
+    temporary = os.path.join(os.path.dirname(path), f".lftools-gz-{secrets.token_hex(8)}")
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+    try:
+        with (
+            os.fdopen(descriptor, "wb") as raw,
+            open(path, "rb") as src,  # noqa: PTH123
+            gzip.GzipFile(filename=f"{os.path.basename(path)}.gz", mode="wb", fileobj=raw) as dest,
+        ):
+            shutil.copyfileobj(src, dest)
+        os.replace(temporary, f"{path}.gz")
+    except BaseException:
+        if os.path.lexists(temporary):
+            os.remove(temporary)
+        raise
+
+
 def _compress_text(dir: str) -> None:
-    """Compress all text files in directory."""
-    save_dir: str = os.getcwd()
-    os.chdir(dir)
+    """Gzip every text file below *dir* in place, hidden ones included.
 
-    compress_types: list[str] = [
-        "**/*.html",
-        "**/*.log",
-        "**/*.txt",
-        "**/*.xml",
-    ]
-    paths: list[str] = []
-    for _type in compress_types:
-        search: str = os.path.join(dir, _type)
-        paths.extend(glob.glob(search, recursive=True))
-
-    for _file in paths:
-        # glob may follow symlink paths that open can't find
+    Symlinked directories are not followed; see ``_files_below``.
+    """
+    compress_suffixes: tuple[str, ...] = (".html", ".log", ".txt", ".xml")
+    compressed: list[str] = []
+    for name in _files_below(dir):
+        if not name.endswith(compress_suffixes):
+            continue
+        _file: str = os.path.join(dir, name)
+        # A broken symlink can't be read
         if os.path.exists(_file):
             log.debug("Compressing file %s", _file)
-            with open(_file, "rb") as src, gzip.open(f"{_file}.gz", "wb") as dest:  # noqa: PTH123
-                shutil.copyfileobj(src, dest)
-                os.remove(_file)
+            _gzip_beside(_file)
+            compressed.append(_file)
         else:
-            log.info(f"Could not open path from glob {_file}")
-
-    os.chdir(save_dir)
+            log.info(f"Could not open path {_file}")
+    # Remove the originals only once every file is compressed: a staged
+    # symlink may point at another text file, which must still be there
+    # when the symlink is read.
+    for _file in compressed:
+        os.remove(_file)
 
 
 def _format_url(url: str) -> str:

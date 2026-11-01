@@ -11,11 +11,11 @@
 
 from __future__ import annotations
 
-import glob
 import mimetypes
 import os
 import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import boto3
@@ -28,7 +28,7 @@ from botocore.exceptions import ClientError
 from lftools_uv.deploy._build_logs import _capture_build_logs
 from lftools_uv.deploy._common import _BANNER_HASHES, _CONTENT_TYPE_TEXT, _CONTENT_TYPE_XML, log
 from lftools_uv.deploy._late import _copy_archives
-from lftools_uv.deploy._util import _compress_text
+from lftools_uv.deploy._util import _compress_text, _files_below
 
 # Uploaded to each top level "directory" so that s3, which has no filesystem,
 # generates or updates the index.html file there.
@@ -126,13 +126,13 @@ def _delete_index_markers(s3: Any, target: _S3Target) -> None:
 
 
 def _files_in_work_dir() -> list[str]:
-    """List the files below the current directory, recursively."""
-    file_list: list[str] = []
-    files: list[str] = glob.glob("**/*", recursive=True)
-    for file in files:
-        if os.path.isfile(file):
-            file_list.append(file)
-    return file_list
+    """List the files below the current directory, recursively.
+
+    Hidden files and directories are included, because ``copy_archives``
+    stages them too. Symlinked directories are not followed; see
+    ``_files_below``.
+    """
+    return [f for f in _files_below(".") if os.path.isfile(f)]
 
 
 def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, pattern: list[str] | None = None) -> None:
@@ -151,7 +151,7 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
         :build_url: URL of the Jenkins build. Jenkins typically provides this
                     via the $BUILD_URL environment variable.
         :workspace: Directory in which to search, typically in Jenkins this is
-            $WORKSPACE
+            $WORKSPACE. A relative path is taken from the current directory.
         :pattern: Space-separated list of Globstar patterns of files to
             archive. (optional)
 
@@ -160,6 +160,10 @@ def deploy_s3(s3_bucket: str, s3_path: str, build_url: str, workspace: str, patt
     all uploads have been attempted. When deleting a marker also fails,
     that error propagates with the HTTPError as its context.
     """
+    # Anchor a relative WORKSPACE to the caller's directory before changing
+    # into staging. Path.absolute keeps "..", which must follow a symlink
+    # before it as the shell does; os.path.abspath would fold it away.
+    workspace = str(Path(workspace).absolute())
     previous_dir: str = os.getcwd()
     work_dir: str = tempfile.mkdtemp(prefix="lftools-dl.")
     os.chdir(work_dir)
