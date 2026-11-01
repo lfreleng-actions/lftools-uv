@@ -23,7 +23,6 @@ ORIGIN = "https://api.example.org/v3/projects/foo/"
 TARGET = "https://api.example.org/moved/v3/projects/foo/"
 BODY = '{"default_branch": "release"}'
 WRITES = pytest.mark.parametrize("method", ["POST", "PUT", "PATCH", "DELETE"])
-XFAIL = pytest.mark.xfail(strict=True, reason="#999: a redirect drops a write's method or body and reports success")
 
 
 def _api() -> client.RestApi:
@@ -43,7 +42,6 @@ def _serve_redirect(method: str, status: int, location: str = TARGET) -> None:
         responses.add(resent, TARGET, json={"slug": "foo"}, status=200)
 
 
-@XFAIL
 @WRITES
 @pytest.mark.parametrize("status", [301, 302, 303])
 @responses.activate
@@ -60,7 +58,6 @@ def test_write_redirect_losing_body_is_refused(method: str, status: int) -> None
     assert [call.request.url for call in responses.calls] == [ORIGIN]
 
 
-@XFAIL
 @pytest.mark.parametrize("method", ["PUT", "PATCH", "DELETE"])
 @pytest.mark.parametrize("status", [302, 303])
 @responses.activate
@@ -73,7 +70,6 @@ def test_bodyless_write_turned_into_get_is_refused(method: str, status: int) -> 
     assert [call.request.url for call in responses.calls] == [ORIGIN]
 
 
-@XFAIL
 @responses.activate
 def test_bodyless_post_behind_301_is_refused() -> None:
     """A 301 turns a POST into a GET, body or not."""
@@ -85,7 +81,6 @@ def test_bodyless_post_behind_301_is_refused() -> None:
     assert [call.request.url for call in responses.calls] == [ORIGIN]
 
 
-@XFAIL
 @responses.activate
 def test_relative_location_is_named_in_full() -> None:
     _serve_redirect("PATCH", 302, location="/moved/v3/projects/foo/")
@@ -94,7 +89,6 @@ def test_relative_location_is_named_in_full() -> None:
         _send("PATCH")
 
 
-@XFAIL
 @pytest.mark.parametrize(
     ("origin", "location", "secrets"),
     [
@@ -116,7 +110,6 @@ def test_refusal_keeps_url_secrets_out_of_message(origin: str, location: str, se
     assert "https://api.example.org/" in message
 
 
-@XFAIL
 @responses.activate
 def test_session_response_hooks_still_run() -> None:
     """The refusal sits beside hooks registered on the session, never in place of them."""
@@ -133,7 +126,6 @@ def test_session_response_hooks_still_run() -> None:
     assert seen == [200, 302]
 
 
-@XFAIL
 @pytest.mark.parametrize("location", ["https://api.example.org:70000/moved/", "https://[api.example.org/moved/"])
 @responses.activate
 def test_malformed_location_is_still_refused(location: str) -> None:
@@ -148,7 +140,6 @@ def test_malformed_location_is_still_refused(location: str) -> None:
     assert [call.request.url for call in responses.calls] == [ORIGIN]
 
 
-@XFAIL
 @responses.activate
 def test_refused_response_is_closed() -> None:
     """The refused redirect's response is read and closed, releasing its connection."""
@@ -163,7 +154,6 @@ def test_refused_response_is_closed() -> None:
     assert response.content == b"moved"
 
 
-@XFAIL
 @pytest.mark.parametrize(
     "failure",
     [requests.exceptions.ChunkedEncodingError("connection broken"), RuntimeError("content already consumed")],
