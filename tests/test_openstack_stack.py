@@ -84,7 +84,10 @@ def test_delete_stale_matches_by_name_and_deletes_by_id(mock_from_config, mock_j
     ]
     jenkins = mock_jenkins.return_value
     jenkins.url = "https://jenkins.example.org/releng/"
-    jenkins.server.get_running_builds.return_value = [{"name": "csit-job", "number": 112}]
+    build = {"number": 112, "url": "https://jenkins.example.org/releng/job/csit-job/112/"}
+    jenkins.server.get_info.return_value = {
+        "computer": [{"displayName": "agent-1", "executors": [{"currentExecutable": build}], "oneOffExecutors": []}]
+    }
 
     os_stack.delete_stale("test-cloud", ["https://jenkins.example.org/releng"])
 
@@ -113,10 +116,9 @@ def test_delete_stale_with_no_stacks_exits_cleanly(mock_from_config, mock_delete
 def test_delete_stale_protects_young_stacks(mock_from_config, mock_jenkins, mock_delete):
     """A stack younger than min_age_hours is never reaped.
 
-    python-jenkins' get_running_builds() walks the node list and silently
-    skips any node that returns HTTP 500 or that disappears mid-query, both
-    routine with ephemeral cloud agents. The resulting short build list makes
-    live stacks look orphaned, so age alone has to veto the deletion.
+    Jenkins lists a running build only to a client allowed to read its job,
+    so a live stack's build can be missing from the list without an error.
+    Age alone has to veto the deletion.
     """
     mock_cloud = MagicMock()
     mock_from_config.return_value = mock_cloud
@@ -126,7 +128,7 @@ def test_delete_stale_protects_young_stacks(mock_from_config, mock_jenkins, mock
     ]
     jenkins = mock_jenkins.return_value
     jenkins.url = "https://jenkins.example.org/releng/"
-    jenkins.server.get_running_builds.return_value = []
+    jenkins.server.get_info.return_value = {"computer": []}
 
     os_stack.delete_stale("test-cloud", ["https://jenkins.example.org/releng"])
 
@@ -156,7 +158,7 @@ def test_delete_stale_skips_stacks_of_unknown_age(mock_from_config, mock_jenkins
     ]
     jenkins = mock_jenkins.return_value
     jenkins.url = "https://jenkins.example.org/releng/"
-    jenkins.server.get_running_builds.return_value = []
+    jenkins.server.get_info.return_value = {"computer": []}
 
     os_stack.delete_stale("test-cloud", ["https://jenkins.example.org/releng"])
 
@@ -180,7 +182,7 @@ def test_delete_stale_honours_custom_min_age(mock_from_config, mock_jenkins, moc
     ]
     jenkins = mock_jenkins.return_value
     jenkins.url = "https://jenkins.example.org/releng/"
-    jenkins.server.get_running_builds.return_value = []
+    jenkins.server.get_info.return_value = {"computer": []}
 
     os_stack.delete_stale("test-cloud", ["https://jenkins.example.org/releng"])
     mock_delete.assert_not_called()  # 12h < default 24h
@@ -257,7 +259,7 @@ def test_delete_stale_exits_non_zero_when_a_delete_fails(mock_from_config, mock_
     ]
     jenkins = mock_jenkins.return_value
     jenkins.url = "https://jenkins.example.org/releng/"
-    jenkins.server.get_running_builds.return_value = []
+    jenkins.server.get_info.return_value = {"computer": []}
 
     with pytest.raises(SystemExit) as exc_info:
         os_stack.delete_stale("test-cloud", ["https://jenkins.example.org/releng"])

@@ -32,8 +32,6 @@ from typer.testing import Result as TyperResult
 from lftools_uv.openstack import cmd as os_cmd
 from lftools_uv.typer_apps.openstack import openstack_app
 
-XFAIL = pytest.mark.xfail(strict=True, reason="#1011: delete-stale misses builds python-jenkins does not list")
-
 URL = "https://jenkins.example.org/releng"
 
 Run = Callable[[list[str]], ClickResult | TyperResult]
@@ -145,7 +143,6 @@ def deleted():
         yield delete
 
 
-@XFAIL
 @FRONT_ENDS
 def test_delete_stale_keeps_stacks_of_running_builds(run: Run, deleted: mock.MagicMock) -> None:
     _serve_jenkins()
@@ -209,7 +206,6 @@ def test_delete_stale_deletes_nothing_without_build_list(
     deleted.assert_not_called()
 
 
-@XFAIL
 @FRONT_ENDS
 @UNREADABLE
 @pytest.mark.usefixtures("deleted")
