@@ -598,7 +598,7 @@ deploy_nexus() {
     if hash parallel 2>/dev/null; then
         export -f upload_to_nexus
         parallel --no-notice --jobs 200% --halt now,fail=1 \
-            "upload_to_nexus $nexus_repo_url {}" ::: "${file_list[@]}"
+            "upload_to_nexus $nexus_repo_url {}" ::: "${file_list[@]}" || exit 1
     else
         for file in "${file_list[@]}"; do
             upload_to_nexus "$nexus_repo_url" "$file"
@@ -627,7 +627,7 @@ deploy_nexus_stage() {
     fi
 
     local staging_repo_id
-    staging_repo_id=$(nexus_stage_repo_create "${nexus_url}" "${staging_profile_id}")
+    staging_repo_id=$(nexus_stage_repo_create "${nexus_url}" "${staging_profile_id}") || exit 1
     echo "Staging repository $staging_repo_id created."
 
     deploy_nexus "${nexus_url}/service/local/staging/deployByRepositoryId/${staging_repo_id}" "${deploy_dir}"
@@ -685,7 +685,7 @@ nexus_stage_repo_create() {
     #     staging_profile_id:  The staging profile id as defined in Nexus for the
     #                          staging repo.
     #
-    # Returns: staging_repo_id
+    # Prints the staging_repo_id, and errors to stderr: a caller captures stdout.
     local nexus_url="${1%/}"
     local staging_profile_id="$2"
 
@@ -709,14 +709,20 @@ EOF
     if echo "$resp" | grep -q nexus-error; then
         local msg
         msg=$(sed -n -e 's/.*<msg>\(.*\)<\/msg>.*/\1/p' <<< "$resp")
-        echo "ERROR: $msg"
+        echo "ERROR: $msg" >&2
         exit "$status"
     elif [ "$status" != "201" ]; then
-        echo "ERROR: Failed with status code $status"
+        echo "ERROR: Failed with status code $status" >&2
         exit "$status"
     fi
 
-    sed -n -e 's/.*<stagedRepositoryId>\(.*\)<\/stagedRepositoryId>.*/\1/p' <<< "$resp"
+    local staging_repo_id
+    staging_repo_id=$(sed -n -e 's/.*<stagedRepositoryId>\(.*\)<\/stagedRepositoryId>.*/\1/p' <<< "$resp")
+    if [ -z "$staging_repo_id" ]; then
+        echo "ERROR: Nexus created no staging repository: $resp" >&2
+        exit 1
+    fi
+    echo "$staging_repo_id"
 }
 
 deploy_nexus_zip() {

@@ -25,7 +25,6 @@ from typing import Any
 
 import pytest
 
-XFAIL_829 = pytest.mark.xfail(strict=True, reason="#829: deploy nexus ignores failed uploads and repo creation")
 XFAIL_830 = pytest.mark.xfail(strict=True, reason="#830: a failed Nexus request exits with its HTTP code, 0 for 000")
 XFAIL_832 = pytest.mark.xfail(strict=True, reason="#832: logs and archives exit 0 when downloads or uploads fail")
 XFAIL_833 = pytest.mark.xfail(strict=True, reason="#833: deploy file sends each form field with a leading space")
@@ -263,7 +262,7 @@ def test_nexus_uploads_every_file(sandbox: dict[str, str], m2repo: Path, paralle
     ]
 
 
-@pytest.mark.parametrize("parallel", [pytest.param(True, marks=XFAIL_829), False], ids=["parallel", "serial"])
+@pytest.mark.parametrize("parallel", [True, False], ids=["parallel", "serial"])
 def test_nexus_failed_upload_exits_1(sandbox: dict[str, str], m2repo: Path, parallel: bool) -> None:
     if parallel:
         _use_parallel(sandbox)
@@ -288,7 +287,7 @@ def test_nexus_failed_upload_reported_on_stderr(sandbox: dict[str, str], m2repo:
     assert "ERROR" in result.stderr
 
 
-@pytest.mark.parametrize("parallel", [pytest.param(True, marks=XFAIL_829), False], ids=["parallel", "serial"])
+@pytest.mark.parametrize("parallel", [True, False], ids=["parallel", "serial"])
 def test_nexus_stage_failed_upload_leaves_repo_open(sandbox: dict[str, str], m2repo: Path, parallel: bool) -> None:
     if parallel:
         _use_parallel(sandbox)
@@ -301,7 +300,6 @@ def test_nexus_stage_failed_upload_leaves_repo_open(sandbox: dict[str, str], m2r
     assert "Completed uploading" not in result.stdout
 
 
-@XFAIL_829
 @pytest.mark.parametrize(
     "answer",
     [{"code": 400, "body": NEXUS_ERROR}, {"code": 201, "body": "<promoteResponse><data/></promoteResponse>"}],
