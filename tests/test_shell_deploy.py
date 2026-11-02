@@ -25,7 +25,6 @@ from typing import Any
 
 import pytest
 
-XFAIL_832 = pytest.mark.xfail(strict=True, reason="#832: logs and archives exit 0 when downloads or uploads fail")
 XFAIL_833 = pytest.mark.xfail(strict=True, reason="#833: deploy file sends each form field with a leading space")
 
 SCRIPT = Path(__file__).resolve().parent.parent / "shell" / "deploy"
@@ -398,7 +397,6 @@ def test_archives_uploads_log_and_zip(sandbox: dict[str, str], workspace: Path) 
     ]
 
 
-@XFAIL_832
 @UPLOAD_FAILURES
 @pytest.mark.parametrize("match", ["archives.log.gz", "content-compressed"])
 def test_archives_failed_upload_exits_1(
@@ -420,7 +418,6 @@ def test_logs_uploads_console_logs(sandbox: dict[str, str]) -> None:
     assert f"Console of {BUILD_URL}consoleText" in _uploaded_log(sandbox, "console.log.gz")
 
 
-@XFAIL_832
 @UPLOAD_FAILURES
 def test_logs_failed_upload_exits_1(sandbox: dict[str, str], failure: dict[str, Any]) -> None:
     _plan(sandbox, "curl", {"match": "content-compressed", **failure})
@@ -431,7 +428,6 @@ def test_logs_failed_upload_exits_1(sandbox: dict[str, str], failure: dict[str, 
     assert "ERROR" in result.stderr
 
 
-@XFAIL_832
 @pytest.mark.parametrize("match", ["consoleText", "timestamps"])
 def test_logs_unreachable_jenkins_uploads_nothing(sandbox: dict[str, str], match: str) -> None:
     _plan(sandbox, "wget", {"match": match, "exit": 4})
@@ -447,7 +443,6 @@ def _leftovers(env: dict[str, str]) -> list[str]:
     return [path for [path] in _calls(env, "mktemp") if Path(path).exists()]
 
 
-@XFAIL_832
 @pytest.mark.parametrize(
     ("command", "plan"),
     [
@@ -479,7 +474,6 @@ def test_successful_transfer_removes_working_directory(sandbox: dict[str, str], 
     assert _leftovers(sandbox) == []
 
 
-@XFAIL_832
 def test_logs_http_error_leaves_placeholder(sandbox: dict[str, str]) -> None:
     """An HTTP error from Jenkins is not fatal: one without the Timestamper plugin answers 404."""
     _plan(sandbox, "wget", {"match": "timestamps", "exit": 8})

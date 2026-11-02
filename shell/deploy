@@ -177,11 +177,11 @@ deploy_archives() {
         gzip --force "$workspace/archives.log"
 
         echo "Pushing archives.log.gz"
-        curl --netrc --upload-file "$workspace/archives.log.gz" \
+        upload_file "$workspace/archives.log.gz" \
             "${nexus_url}/content/repositories/logs/${nexus_path}/archives.log.gz"
 
         echo "Pushing archives.zip"
-        curl --netrc --upload-file "$workspace/archives.zip" \
+        upload_file "$workspace/archives.zip" \
             "${nexus_url}/service/local/repositories/logs/content-compressed/${nexus_path}"
     else
         echo "Nothing to archive."
@@ -261,19 +261,44 @@ deploy_logs() {
     MAGIC_STRING="-----END_OF_BUILD-----"
     echo "$MAGIC_STRING"
 
-    wget --no-verbose -O "console.log" "${build_url}consoleText"
-    wget --no-verbose -O "console-timestamp.log" "${build_url}/timestamps?time=HH:mm:ss&appendLog"
+    fetch_console_log "${build_url}consoleText" "console.log"
+    fetch_console_log "${build_url}/timestamps?time=HH:mm:ss&appendLog" "console-timestamp.log"
     sed -i "/^$MAGIC_STRING$/q" "console.log"
     sed -i "/^.*$MAGIC_STRING$/q" "console-timestamp.log"
 
     gzip -- *.log
     zip -r console-logs.zip -- *.log.gz
 
-    curl --netrc --upload-file console-logs.zip \
+    upload_file console-logs.zip \
         "${nexus_url}/service/local/repositories/logs/content-compressed/${nexus_path}"
 
     popd || exit
     rm -rf "$tmpdir"
+}
+
+fetch_console_log() {
+    # Save a Jenkins console log with wget.
+    #
+    # An HTTP error from Jenkins leaves a one-line placeholder: a Jenkins
+    # without the Timestamper plugin answers 404 for timestamps. Exits 1 if
+    # the log cannot be fetched at all.
+    #
+    # Parameters:
+    #     url:   The URL of the console log.
+    #     file:  The file to save it to.
+    local url="$1"
+    local file="$2"
+
+    local rc=0
+    wget --no-verbose -O "$file" "$url" || rc=$?
+    if [ "$rc" -eq 8 ]; then
+        # wget exits 8 when the server answers with an error status.
+        echo "WARNING: Jenkins answered $url with an error; $file holds a placeholder" >&2
+        echo "Console log unavailable: $url returned an HTTP error" > "$file"
+    elif [ "$rc" -ne 0 ]; then
+        echo "ERROR: Could not fetch $url: wget exited $rc" >&2
+        exit 1
+    fi
 }
 
 deploy_maven_file_usage () {
@@ -776,6 +801,29 @@ deploy_nexus_zip() {
     fi
 }
 
+upload_file() {
+    # Upload a file with cURL, exiting 1 unless curl succeeds and the server
+    # answers 2xx.
+    #
+    # Parameters:
+    #     file:  The file to upload.
+    #     url:   The URL to upload it to.
+    local file="$1"
+    local url="$2"
+
+    local resp
+    local status
+    local rc=0
+    resp=$(curl -sS -w "\\n\\n%{http_code}" --netrc --upload-file "$file" "$url") || rc=$?
+    status=$(echo "$resp" | awk 'END {print $NF}')
+
+    if [ "$rc" -ne 0 ] || [[ "$status" != 2* ]]; then
+        echo "ERROR: Failed to upload $file to $url with status code $status (curl exit status $rc)" >&2
+        echo "HTTP Response: $(echo "$resp" | head -n1)" >&2
+        exit 1
+    fi
+}
+
 upload_maven_file_to_nexus() {
     # Upload file to Nexus as a Maven artifact using cURL.
     #
@@ -866,5 +914,11 @@ upload_to_nexus() {
 # Only run the script if it is being called directly and not sourced.
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]
 then
+    # A failed transfer exits before deploy archives or deploy logs removes
+    # its working directory, tmpdir. An EXIT trap keeps the exit status, and
+    # is set only when the script itself runs, never in a shell sourcing it.
+    # tmpdir starts empty, so a value from the environment is never removed.
+    tmpdir=""
+    trap '[ -z "$tmpdir" ] || rm -rf "$tmpdir"' EXIT
     deploy "$@"
 fi
