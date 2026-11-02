@@ -25,6 +25,8 @@ from typing import Any
 
 import pytest
 
+XFAIL_836 = pytest.mark.xfail(strict=True, reason="#836: deploy nexus and nexus-stage succeed with nothing to deploy")
+
 SCRIPT = Path(__file__).resolve().parent.parent / "shell" / "deploy"
 BASH = shutil.which("bash") or "/bin/bash"
 NEXUS = "http://nexus.invalid"
@@ -320,6 +322,62 @@ def test_stage_repo_create_prints_repository_id(sandbox: dict[str, str]) -> None
 
     assert result.returncode == 0, result.stderr
     assert result.stdout == "x-1001\n"
+
+
+@pytest.fixture
+def unpublished(tmp_path):
+    """Return a Maven repository holding only maven-metadata.xml, which deploy nexus skips."""
+    root = tmp_path / "unpublished"
+    (root / "org" / "example").mkdir(parents=True)
+    (root / "org" / "example" / "maven-metadata.xml").write_text("<metadata/>")
+    return root
+
+
+@XFAIL_836
+def test_nexus_nothing_to_deploy_exits_1(sandbox: dict[str, str], unpublished: Path) -> None:
+    result = _run(sandbox, "nexus", f"{NEXUS}/content/repositories/releases", str(unpublished))
+
+    assert result.returncode == 1
+    assert _urls(sandbox, "curl") == []
+    assert "Nothing to deploy" in result.stderr
+
+
+@XFAIL_836
+def test_nexus_allow_empty_deploys_nothing(sandbox: dict[str, str], unpublished: Path) -> None:
+    result = _run(sandbox, "nexus", "-a", f"{NEXUS}/content/repositories/releases", str(unpublished))
+
+    assert result.returncode == 0, result.stderr
+    assert _urls(sandbox, "curl") == []
+
+
+@XFAIL_836
+@pytest.mark.parametrize("missing", [False, True], ids=["empty", "missing"])
+def test_nexus_stage_nothing_to_deploy_creates_no_repository(
+    sandbox: dict[str, str], unpublished: Path, missing: bool
+) -> None:
+    deploy_dir = unpublished / "missing" if missing else unpublished
+
+    result = _run(sandbox, "nexus-stage", NEXUS, "prof", str(deploy_dir))
+
+    assert result.returncode == 1
+    assert _urls(sandbox, "curl") == []
+    assert "Nothing to deploy" in result.stderr
+
+
+@XFAIL_836
+@pytest.mark.parametrize("files", [False, True], ids=["empty", "with-files"])
+def test_nexus_stage_allow_empty(sandbox: dict[str, str], unpublished: Path, m2repo: Path, files: bool) -> None:
+    """-a stages an empty repository, and still uploads every file of a full one."""
+    _plan(sandbox, "curl", {"match": "/start", "body": STAGED})
+
+    result = _run(sandbox, "nexus-stage", "-a", NEXUS, "prof", str(m2repo if files else unpublished))
+
+    assert result.returncode == 0, result.stderr
+    urls = _urls(sandbox, "curl")
+    staged = f"{NEXUS}/service/local/staging/deployByRepositoryId/x-1001/org/example/app/1.0"
+    assert urls[0] == f"{NEXUS}/service/local/staging/profiles/prof/start"
+    assert urls[-1] == f"{NEXUS}/service/local/staging/profiles/prof/finish"
+    assert sorted(urls[1:-1]) == ([f"{staged}/app-1.0.{extension}" for extension in ("jar", "pom")] if files else [])
 
 
 def _arguments(command: str, tmp_path: Path) -> list[str]:
