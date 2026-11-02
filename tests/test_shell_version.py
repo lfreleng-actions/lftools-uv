@@ -18,8 +18,6 @@ from pathlib import Path
 
 import pytest
 
-XFAIL = pytest.mark.xfail(strict=True, reason="#862: version patch exits 0 when fetching, merging or tagging fails")
-
 SCRIPT = Path(__file__).resolve().parent.parent / "shell" / "version"
 BASH = shutil.which("bash") or "/bin/bash"
 GIT = shutil.which("git") or "git"
@@ -117,7 +115,6 @@ def test_patch_merges_bundle_and_tags_release(env: dict[str, str], project: tupl
     assert (repo / "pom.xml").read_text() == "<version>1.0.0-Helium</version>\n"
 
 
-@XFAIL
 def test_missing_bundle_exits_1(env: dict[str, str], project: tuple[Path, Path]) -> None:
     repo, patches = project
     (patches / "project.bundle").unlink()
@@ -129,7 +126,6 @@ def test_missing_bundle_exits_1(env: dict[str, str], project: tuple[Path, Path])
     assert "Tagging complete" not in result.stdout
 
 
-@XFAIL
 def test_merge_conflict_exits_1(env: dict[str, str], project: tuple[Path, Path]) -> None:
     """A bundle that conflicts with the checkout is not merged, and nothing is tagged."""
     repo, patches = project
@@ -144,7 +140,6 @@ def test_merge_conflict_exits_1(env: dict[str, str], project: tuple[Path, Path])
     assert _tags(env, repo) == []
 
 
-@XFAIL
 def test_failed_tag_signing_exits_1(env: dict[str, str], project: tuple[Path, Path]) -> None:
     repo, patches = project
     env["GPG_FAIL"] = "1"
