@@ -13,6 +13,9 @@ a 301, and 307 and 308, which keep the method and body.
 ``responses`` answers every request, so no test reaches a server.
 """
 
+import re
+from urllib.parse import urlsplit
+
 import pytest
 import requests
 import responses
@@ -107,7 +110,9 @@ def test_refusal_keeps_url_secrets_out_of_message(origin: str, location: str, se
 
     message = str(raised.value)
     assert not [secret for secret in secrets if secret in message]
-    assert "https://api.example.org/" in message
+    named = [urlsplit(url) for url in re.findall(r"https?://\S+", message)]
+    assert [(url.netloc, url.username, url.password) for url in named] == [("api.example.org", None, None)] * 2
+    assert [url.path for url in named] == [urlsplit(origin).path, urlsplit(location).path]
 
 
 @responses.activate
