@@ -28,8 +28,6 @@ from typer.testing import Result as TyperResult
 from lftools_uv.cli.sign import sign
 from lftools_uv.typer_apps.sign import sign_app
 
-XFAIL = pytest.mark.xfail(strict=True, reason="#831: sign git-tag and container exit 0 when sigul fails")
-
 SCRIPT = Path(__file__).resolve().parent.parent / "shell" / "sign"
 BASH = shutil.which("bash") or "/bin/bash"
 
@@ -106,7 +104,6 @@ def test_signs_with_sigul(sandbox: dict[str, str], command: str) -> None:
     assert _calls(sandbox) == [{"args": _sigul_args(sandbox, command), "stdin": "secret\0"}]
 
 
-@XFAIL
 @COMMANDS
 def test_failed_sigul_exits_1(sandbox: dict[str, str], command: str) -> None:
     sandbox["SIGUL_EXIT"] = "3"
@@ -117,7 +114,6 @@ def test_failed_sigul_exits_1(sandbox: dict[str, str], command: str) -> None:
     assert "ERROR" in result.stderr
 
 
-@XFAIL
 @COMMANDS
 def test_missing_password_file_exits_1(sandbox: dict[str, str], command: str) -> None:
     """sigul never runs when its password file cannot be read."""
@@ -154,7 +150,6 @@ def test_front_end_signs(sandbox: dict[str, str], run: Run, command: str) -> Non
     assert [call["args"] for call in _calls(sandbox)] == [_sigul_args(sandbox, command)]
 
 
-@XFAIL
 @FRONT_ENDS
 def test_front_end_reports_failed_signing(sandbox: dict[str, str], run: Run, command: str) -> None:
     """Neither front-end reports a failed signature as a success."""
