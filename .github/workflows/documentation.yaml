@@ -89,7 +89,7 @@ jobs:
       - name: 'Verify pushed tag'
         id: 'tag-validate'
         # yamllint disable-line rule:line-length
-        uses: lfreleng-actions/tag-validate-action@63470621b8ebc5c4fc86ebb616727dd0a7285dd9  # v1.1.7
+        uses: lfreleng-actions/tag-validate-action@eab7d92e02c8b447a4de04e68bd5ee7eae3450eb  # v1.1.8
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           require_type: 'semver'
@@ -192,7 +192,7 @@ jobs:
 
       - name: 'Install uv'
         # yamllint disable-line rule:line-length
-        uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa  # v10.3.1
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3
         with:
           # Caching is intentionally disabled on this publish path. The
           # workflow deploys to GitHub Pages and only runs on tag pushes
