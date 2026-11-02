@@ -23,12 +23,15 @@ import urllib.request
 from datetime import UTC, datetime
 from typing import Any
 
-# aislop-ignore-file hallucinated-import -- the declared openstacksdk dependency provides the `openstack` import package
+# aislop-ignore-file hallucinated-import -- the declared openstacksdk and python-jenkins dependencies provide the `openstack` and `jenkins` import packages
 import openstack
 import openstack.connection
+import requests
+from jenkins import JenkinsException
 from openstack.cloud.exc import OpenStackCloudHTTPError
 
 from lftools_uv.jenkins import Jenkins
+from lftools_uv.jenkins.builds import BuildsError, running_builds
 from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
@@ -37,11 +40,10 @@ log = logging.getLogger(__name__)
 # Format arguments are the flavour name and the elapsed run time in seconds.
 _PRICING_API_URL = "https://pricing.vexxhost.net/v1/pricing/%s/cost?seconds=%d"
 
-# python-jenkins' get_running_builds() silently treats a node as idle when the
-# node query returns HTTP 500 or when the node disappears mid-query. Both are
-# routine with ephemeral cloud agents, so the build list can come back short
-# without raising. Stacks younger than the longest build-timeout are therefore
-# never safe to reap on the strength of that list alone.
+# Jenkins lists a running build only to a client allowed to read its job, so
+# the build list can come back short without raising. Stacks younger than the
+# longest build-timeout are therefore never safe to reap on the strength of
+# that list alone.
 STALE_MIN_AGE_HOURS = 24
 
 
@@ -262,9 +264,13 @@ def delete_stale(os_cloud: str, jenkins_servers: list[str], min_age_hours: int =
             sys.exit(1)
 
         log.debug(f"Fetching running builds from {jenkins_url}")
-        running_builds = jenkins.server.get_running_builds()
-        for build in running_builds:
-            build_name = "{}-{}-{}".format(silo, build.get("name"), build.get("number"))
+        try:
+            running = running_builds(jenkins.server, strict=True)
+        except (BuildsError, JenkinsException, requests.RequestException) as exc:
+            log.error("Could not list the builds running on %s: %s; no stack was deleted.", jenkins_url, exc)
+            sys.exit(1)
+        for build in running:
+            build_name = f"{silo}-{build.job}-{build.number}"
             log.debug(f"    {build_name}")
             builds.append(build_name)
 

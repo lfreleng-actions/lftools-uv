@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 # Every executor of every node, in one request. A Pipeline build runs on a
 # node's one-off executors, so those are read as well as the regular ones.
 _EXECUTORS = ("executors", "oneOffExecutors")
-_TREE = "computer[displayName,{}]".format(",".join(f"{key}[currentExecutable[url]]" for key in _EXECUTORS))
+_TREE = "computer[displayName,{}]".format(",".join(f"{key}[currentExecutable[number,url]]" for key in _EXECUTORS))
 
 
 class BuildsError(Exception):
@@ -26,10 +26,14 @@ class BuildsError(Exception):
 
 @dataclass(frozen=True)
 class RunningBuild:
-    """A build occupying an executor of a node."""
+    """A build occupying an executor of a node.
+
+    *number* is the build's number, or None if Jenkins gives none.
+    """
 
     job: str
     node: str
+    number: int | None
 
 
 def _job_name(url: str) -> str:
@@ -53,15 +57,43 @@ def _listed(value: Any, what: str) -> list[Any]:
     return value
 
 
-def running_builds(server: jenkins.Jenkins) -> list[RunningBuild]:
+def _is_build_number(value: Any) -> bool:
+    """Whether *value* is an integer; JSON's true and false, which Python counts as integers, are not."""
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _names_build(executable: Any) -> bool:
+    """Whether *executable* names its build by a URL and a number."""
+    if not isinstance(executable, dict):
+        return False
+    url, number = executable.get("url"), executable.get("number")
+    return isinstance(url, str) and bool(url) and _is_build_number(number)
+
+
+def _check_executor(executor: Any, node: str) -> None:
+    """Raise ``BuildsError`` unless *executor*, one of *node*'s, is idle or runs a build named by URL and number."""
+    if isinstance(executor, dict) and "currentExecutable" in executor:
+        executable = executor["currentExecutable"]
+        if executable is None or _names_build(executable):
+            return
+    msg = f"Jenkins listed an executor of node {node} as {executor!r}, neither idle nor running a numbered build"
+    raise BuildsError(msg)
+
+
+def running_builds(server: jenkins.Jenkins, *, strict: bool = False) -> list[RunningBuild]:
     """Return every build running on any of *server*'s nodes.
 
     One request reads the regular and one-off executors of every node, so
     no node is skipped and Pipeline builds are included. An executor busy
     with something that has no URL is logged and left out.
 
+    Pass *strict* when acting on the builds missing from the list: an
+    executor that is neither idle nor running a build with a URL and a
+    number then raises, instead of being left out.
+
     Raises:
-        BuildsError: If the answer does not list the nodes and their executors.
+        BuildsError: If the answer does not list the nodes and their
+            executors, or, with *strict*, describes an executor otherwise.
     """
     info = server.get_info(item="computer", query=f"?tree={_TREE}")
     if not isinstance(info, dict):
@@ -76,6 +108,8 @@ def running_builds(server: jenkins.Jenkins) -> list[RunningBuild]:
         node = str(computer.get("displayName"))
         for key in _EXECUTORS:
             for executor in _listed(computer.get(key), f"the {key} of node {node}"):
+                if strict:
+                    _check_executor(executor, node)
                 current = executor.get("currentExecutable") if isinstance(executor, dict) else None
                 if not current:
                     continue
@@ -83,5 +117,6 @@ def running_builds(server: jenkins.Jenkins) -> list[RunningBuild]:
                 if not isinstance(url, str) or not url:
                     log.warning("Node %s is running %r, which has no URL; it is not listed", node, current)
                     continue
-                builds.append(RunningBuild(_job_name(url), node))
+                number = current.get("number")
+                builds.append(RunningBuild(_job_name(url), node, number if _is_build_number(number) else None))
     return builds
