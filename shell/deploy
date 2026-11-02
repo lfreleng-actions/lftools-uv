@@ -177,11 +177,11 @@ deploy_archives() {
         gzip --force "$workspace/archives.log"
 
         echo "Pushing archives.log.gz"
-        curl --netrc --upload-file "$workspace/archives.log.gz" \
+        upload_file "$workspace/archives.log.gz" \
             "${nexus_url}/content/repositories/logs/${nexus_path}/archives.log.gz"
 
         echo "Pushing archives.zip"
-        curl --netrc --upload-file "$workspace/archives.zip" \
+        upload_file "$workspace/archives.zip" \
             "${nexus_url}/service/local/repositories/logs/content-compressed/${nexus_path}"
     else
         echo "Nothing to archive."
@@ -261,19 +261,44 @@ deploy_logs() {
     MAGIC_STRING="-----END_OF_BUILD-----"
     echo "$MAGIC_STRING"
 
-    wget --no-verbose -O "console.log" "${build_url}consoleText"
-    wget --no-verbose -O "console-timestamp.log" "${build_url}/timestamps?time=HH:mm:ss&appendLog"
+    fetch_console_log "${build_url}consoleText" "console.log"
+    fetch_console_log "${build_url}/timestamps?time=HH:mm:ss&appendLog" "console-timestamp.log"
     sed -i "/^$MAGIC_STRING$/q" "console.log"
     sed -i "/^.*$MAGIC_STRING$/q" "console-timestamp.log"
 
     gzip -- *.log
     zip -r console-logs.zip -- *.log.gz
 
-    curl --netrc --upload-file console-logs.zip \
+    upload_file console-logs.zip \
         "${nexus_url}/service/local/repositories/logs/content-compressed/${nexus_path}"
 
     popd || exit
     rm -rf "$tmpdir"
+}
+
+fetch_console_log() {
+    # Save a Jenkins console log with wget.
+    #
+    # An HTTP error from Jenkins leaves a one-line placeholder: a Jenkins
+    # without the Timestamper plugin answers 404 for timestamps. Exits 1 if
+    # the log cannot be fetched at all.
+    #
+    # Parameters:
+    #     url:   The URL of the console log.
+    #     file:  The file to save it to.
+    local url="$1"
+    local file="$2"
+
+    local rc=0
+    wget --no-verbose -O "$file" "$url" || rc=$?
+    if [ "$rc" -eq 8 ]; then
+        # wget exits 8 when the server answers with an error status.
+        echo "WARNING: Jenkins answered $url with an error; $file holds a placeholder" >&2
+        echo "Console log unavailable: $url returned an HTTP error" > "$file"
+    elif [ "$rc" -ne 0 ]; then
+        echo "ERROR: Could not fetch $url: wget exited $rc" >&2
+        exit 1
+    fi
 }
 
 deploy_maven_file_usage () {
@@ -598,7 +623,7 @@ deploy_nexus() {
     if hash parallel 2>/dev/null; then
         export -f upload_to_nexus
         parallel --no-notice --jobs 200% --halt now,fail=1 \
-            "upload_to_nexus $nexus_repo_url {}" ::: "${file_list[@]}"
+            "upload_to_nexus $nexus_repo_url {}" ::: "${file_list[@]}" || exit 1
     else
         for file in "${file_list[@]}"; do
             upload_to_nexus "$nexus_repo_url" "$file"
@@ -627,7 +652,7 @@ deploy_nexus_stage() {
     fi
 
     local staging_repo_id
-    staging_repo_id=$(nexus_stage_repo_create "${nexus_url}" "${staging_profile_id}")
+    staging_repo_id=$(nexus_stage_repo_create "${nexus_url}" "${staging_profile_id}") || exit 1
     echo "Staging repository $staging_repo_id created."
 
     deploy_nexus "${nexus_url}/service/local/staging/deployByRepositoryId/${staging_repo_id}" "${deploy_dir}"
@@ -660,20 +685,24 @@ EOF
 
     local resp
     local status
-    resp=$(curl -s -w " %{http_code}" --netrc -X POST -d "@$FILE_XML" \
+    local rc=0
+    resp=$(curl -sS -w " %{http_code}" --netrc -X POST -d "@$FILE_XML" \
         -H "Content-Type:application/xml" \
-        "${nexus_url}/service/local/staging/profiles/${staging_profile_id}/finish")
+        "${nexus_url}/service/local/staging/profiles/${staging_profile_id}/finish") || rc=$?
     status=$(echo "$resp" | awk 'END {print $NF}')
     rm -f "$FILE_XML"  # Cleanup
 
-    if echo "$resp" | grep -q nexus-error; then
+    if [ "$rc" -ne 0 ]; then
+        echo "ERROR: curl failed with exit status $rc (status code $status)" >&2
+        exit 1
+    elif echo "$resp" | grep -q nexus-error; then
         local msg
         msg=$(sed -n -e 's/.*<msg>\(.*\)<\/msg>.*/\1/p' <<< "$resp")
-        echo "ERROR: $msg"
-        exit "$status"
+        echo "ERROR: $msg (status code $status)" >&2
+        exit 1
     elif [ "$status" != "201" ]; then
-        echo "ERROR: Failed with status code $status"
-        exit "$status"
+        echo "ERROR: Failed with status code $status" >&2
+        exit 1
     fi
 }
 
@@ -685,7 +714,7 @@ nexus_stage_repo_create() {
     #     staging_profile_id:  The staging profile id as defined in Nexus for the
     #                          staging repo.
     #
-    # Returns: staging_repo_id
+    # Prints the staging_repo_id, and errors to stderr: a caller captures stdout.
     local nexus_url="${1%/}"
     local staging_profile_id="$2"
 
@@ -700,23 +729,33 @@ EOF
 
     local resp
     local status
-    resp=$(curl -s -w " %{http_code}" --netrc -X POST -d "@$FILE_XML" \
+    local rc=0
+    resp=$(curl -sS -w " %{http_code}" --netrc -X POST -d "@$FILE_XML" \
         -H "Content-Type:application/xml" \
-        "${nexus_url}/service/local/staging/profiles/${staging_profile_id}/start")
+        "${nexus_url}/service/local/staging/profiles/${staging_profile_id}/start") || rc=$?
     status=$(echo "$resp" | awk 'END {print $NF}')
     rm -f "$FILE_XML"  # Cleanup
 
-    if echo "$resp" | grep -q nexus-error; then
+    if [ "$rc" -ne 0 ]; then
+        echo "ERROR: curl failed with exit status $rc (status code $status)" >&2
+        exit 1
+    elif echo "$resp" | grep -q nexus-error; then
         local msg
         msg=$(sed -n -e 's/.*<msg>\(.*\)<\/msg>.*/\1/p' <<< "$resp")
-        echo "ERROR: $msg"
-        exit "$status"
+        echo "ERROR: $msg (status code $status)" >&2
+        exit 1
     elif [ "$status" != "201" ]; then
-        echo "ERROR: Failed with status code $status"
-        exit "$status"
+        echo "ERROR: Failed with status code $status" >&2
+        exit 1
     fi
 
-    sed -n -e 's/.*<stagedRepositoryId>\(.*\)<\/stagedRepositoryId>.*/\1/p' <<< "$resp"
+    local staging_repo_id
+    staging_repo_id=$(sed -n -e 's/.*<stagedRepositoryId>\(.*\)<\/stagedRepositoryId>.*/\1/p' <<< "$resp")
+    if [ -z "$staging_repo_id" ]; then
+        echo "ERROR: Nexus created no staging repository: $resp" >&2
+        exit 1
+    fi
+    echo "$staging_repo_id"
 }
 
 deploy_nexus_zip() {
@@ -749,15 +788,39 @@ deploy_nexus_zip() {
     fi
 
     echo "Pushing $deploy_zip to $nexus_repo on $nexus_url to path $nexus_path"
-    resp=$(curl -s -w "\\n\\n%{http_code}" --netrc --upload-file "$deploy_zip" \
-        "${nexus_url}/service/local/repositories/${nexus_repo}/content-compressed/${nexus_path}")
+    local rc=0
+    resp=$(curl -sS -w "\\n\\n%{http_code}" --netrc --upload-file "$deploy_zip" \
+        "${nexus_url}/service/local/repositories/${nexus_repo}/content-compressed/${nexus_path}") || rc=$?
     status=$(echo "$resp" | awk 'END {print $NF}')
 
     echo "HTTP status: $status"
-    if [[ "$status" != "20"* ]]; then
-        echo "Failed with: $resp"
-        echo "Zip contains: $(unzip -l "$deploy_zip")"
-        exit "$status"
+    if [ "$rc" -ne 0 ] || [[ "$status" != "20"* ]]; then
+        echo "ERROR: Failed with curl exit status $rc: $resp" >&2
+        echo "Zip contains: $(unzip -l "$deploy_zip")" >&2
+        exit 1
+    fi
+}
+
+upload_file() {
+    # Upload a file with cURL, exiting 1 unless curl succeeds and the server
+    # answers 2xx.
+    #
+    # Parameters:
+    #     file:  The file to upload.
+    #     url:   The URL to upload it to.
+    local file="$1"
+    local url="$2"
+
+    local resp
+    local status
+    local rc=0
+    resp=$(curl -sS -w "\\n\\n%{http_code}" --netrc --upload-file "$file" "$url") || rc=$?
+    status=$(echo "$resp" | awk 'END {print $NF}')
+
+    if [ "$rc" -ne 0 ] || [[ "$status" != 2* ]]; then
+        echo "ERROR: Failed to upload $file to $url with status code $status (curl exit status $rc)" >&2
+        echo "HTTP Response: $(echo "$resp" | head -n1)" >&2
+        exit 1
     fi
 }
 
@@ -788,33 +851,38 @@ upload_maven_file_to_nexus() {
     local file="$7"
     local classifier="${8:-}"
 
+    # Each option and its value is an element of its own. --form-string sends
+    # a value as given; -F would read a file named by a value starting with @
+    # or <, and treat ;type= in it as a content type.
     declare -a params
-    params+=("-F r=$nexus_repo_id")
-    params+=("-F g=$group_id")
-    params+=("-F a=$artifact_id")
-    params+=("-F v=$version")
-    params+=("-F p=$packaging")
+    params+=(--form-string "r=$nexus_repo_id")
+    params+=(--form-string "g=$group_id")
+    params+=(--form-string "a=$artifact_id")
+    params+=(--form-string "v=$version")
+    params+=(--form-string "p=$packaging")
     if [ -n "$classifier" ]; then
-        params+=("-F c=$classifier")
+        params+=(--form-string "c=$classifier")
     fi
-    params+=("-F file=@$file")
+    params+=(-F "file=@$file")
 
     local resp
     local status
-    # We need word splitting here to parse the params
-    # shellcheck disable=SC2086
-    resp=$(curl -s -w " %{http_code}" --netrc -X POST "${params[@]}" \
-        "${nexus_url}/service/local/artifact/maven/content")
+    local rc=0
+    resp=$(curl -sS -w " %{http_code}" --netrc -X POST "${params[@]}" \
+        "${nexus_url}/service/local/artifact/maven/content") || rc=$?
     status=$(echo "$resp" | awk 'END {print $NF}')
 
-    if echo "$resp" | grep -q nexus-error; then
+    if [ "$rc" -ne 0 ]; then
+        echo "ERROR: curl failed with exit status $rc (status code $status)" >&2
+        exit 1
+    elif echo "$resp" | grep -q nexus-error; then
         local msg
         msg=$(sed -n -e 's/.*<msg>\(.*\)<\/msg>.*/\1/p' <<< "$resp")
-        echo "ERROR: $msg"
-        exit "$status"
+        echo "ERROR: $msg (status code $status)" >&2
+        exit 1
     elif [ "$status" != "201" ]; then
-        echo "ERROR: Failed with status code $status"
-        exit "$status"
+        echo "ERROR: Failed with status code $status" >&2
+        exit 1
     fi
 }
 
@@ -832,13 +900,14 @@ upload_to_nexus() {
     echo "Uploading ${file}"
 
     local resp
-    resp=$(curl -s -w "\\n\\n%{http_code}" --netrc --upload-file "$file" "$nexus_repo_url/$file")
+    local rc=0
+    resp=$(curl -sS -w "\\n\\n%{http_code}" --netrc --upload-file "$file" "$nexus_repo_url/$file") || rc=$?
     data=$(echo "$resp" | head -n1)
     status=$(echo "$resp" | awk 'END {print $NF}')
 
-    if [ "$status" != "201" ]; then
-        echo "ERROR: Failed to upload to Nexus with status code $status. Aborting..."
-        echo "HTTP Response: $data"
+    if [ "$rc" -ne 0 ] || [ "$status" != "201" ]; then
+        echo "ERROR: Failed to upload to Nexus with status code $status (curl exit status $rc). Aborting..." >&2
+        echo "HTTP Response: $data" >&2
         exit 1
     fi
 }
@@ -846,5 +915,11 @@ upload_to_nexus() {
 # Only run the script if it is being called directly and not sourced.
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]
 then
+    # A failed transfer exits before deploy archives or deploy logs removes
+    # its working directory, tmpdir. An EXIT trap keeps the exit status, and
+    # is set only when the script itself runs, never in a shell sourcing it.
+    # tmpdir starts empty, so a value from the environment is never removed.
+    tmpdir=""
+    trap '[ -z "$tmpdir" ] || rm -rf "$tmpdir"' EXIT
     deploy "$@"
 fi
