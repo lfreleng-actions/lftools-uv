@@ -851,22 +851,23 @@ upload_maven_file_to_nexus() {
     local file="$7"
     local classifier="${8:-}"
 
+    # Each option and its value is an element of its own. --form-string sends
+    # a value as given; -F would read a file named by a value starting with @
+    # or <, and treat ;type= in it as a content type.
     declare -a params
-    params+=("-F r=$nexus_repo_id")
-    params+=("-F g=$group_id")
-    params+=("-F a=$artifact_id")
-    params+=("-F v=$version")
-    params+=("-F p=$packaging")
+    params+=(--form-string "r=$nexus_repo_id")
+    params+=(--form-string "g=$group_id")
+    params+=(--form-string "a=$artifact_id")
+    params+=(--form-string "v=$version")
+    params+=(--form-string "p=$packaging")
     if [ -n "$classifier" ]; then
-        params+=("-F c=$classifier")
+        params+=(--form-string "c=$classifier")
     fi
-    params+=("-F file=@$file")
+    params+=(-F "file=@$file")
 
     local resp
     local status
     local rc=0
-    # We need word splitting here to parse the params
-    # shellcheck disable=SC2086
     resp=$(curl -sS -w " %{http_code}" --netrc -X POST "${params[@]}" \
         "${nexus_url}/service/local/artifact/maven/content") || rc=$?
     status=$(echo "$resp" | awk 'END {print $NF}')

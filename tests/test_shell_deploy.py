@@ -25,8 +25,6 @@ from typing import Any
 
 import pytest
 
-XFAIL_833 = pytest.mark.xfail(strict=True, reason="#833: deploy file sends each form field with a leading space")
-
 SCRIPT = Path(__file__).resolve().parent.parent / "shell" / "deploy"
 BASH = shutil.which("bash") or "/bin/bash"
 NEXUS = "http://nexus.invalid"
@@ -491,7 +489,6 @@ def _form(args: list[str]) -> list[tuple[str, str]]:
     return [(flag, value) for flag, value in pairwise(args) if flag in ("-F", "--form", "--form-string")]
 
 
-@XFAIL_833
 @pytest.mark.parametrize(("extra", "fields"), [([], []), (["sources"], ["c=sources"])], ids=["plain", "classifier"])
 def test_file_sends_each_form_field(
     sandbox: dict[str, str], tmp_path: Path, extra: list[str], fields: list[str]
