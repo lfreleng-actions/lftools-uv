@@ -660,20 +660,24 @@ EOF
 
     local resp
     local status
-    resp=$(curl -s -w " %{http_code}" --netrc -X POST -d "@$FILE_XML" \
+    local rc=0
+    resp=$(curl -sS -w " %{http_code}" --netrc -X POST -d "@$FILE_XML" \
         -H "Content-Type:application/xml" \
-        "${nexus_url}/service/local/staging/profiles/${staging_profile_id}/finish")
+        "${nexus_url}/service/local/staging/profiles/${staging_profile_id}/finish") || rc=$?
     status=$(echo "$resp" | awk 'END {print $NF}')
     rm -f "$FILE_XML"  # Cleanup
 
-    if echo "$resp" | grep -q nexus-error; then
+    if [ "$rc" -ne 0 ]; then
+        echo "ERROR: curl failed with exit status $rc (status code $status)" >&2
+        exit 1
+    elif echo "$resp" | grep -q nexus-error; then
         local msg
         msg=$(sed -n -e 's/.*<msg>\(.*\)<\/msg>.*/\1/p' <<< "$resp")
-        echo "ERROR: $msg"
-        exit "$status"
+        echo "ERROR: $msg (status code $status)" >&2
+        exit 1
     elif [ "$status" != "201" ]; then
-        echo "ERROR: Failed with status code $status"
-        exit "$status"
+        echo "ERROR: Failed with status code $status" >&2
+        exit 1
     fi
 }
 
@@ -700,20 +704,24 @@ EOF
 
     local resp
     local status
-    resp=$(curl -s -w " %{http_code}" --netrc -X POST -d "@$FILE_XML" \
+    local rc=0
+    resp=$(curl -sS -w " %{http_code}" --netrc -X POST -d "@$FILE_XML" \
         -H "Content-Type:application/xml" \
-        "${nexus_url}/service/local/staging/profiles/${staging_profile_id}/start")
+        "${nexus_url}/service/local/staging/profiles/${staging_profile_id}/start") || rc=$?
     status=$(echo "$resp" | awk 'END {print $NF}')
     rm -f "$FILE_XML"  # Cleanup
 
-    if echo "$resp" | grep -q nexus-error; then
+    if [ "$rc" -ne 0 ]; then
+        echo "ERROR: curl failed with exit status $rc (status code $status)" >&2
+        exit 1
+    elif echo "$resp" | grep -q nexus-error; then
         local msg
         msg=$(sed -n -e 's/.*<msg>\(.*\)<\/msg>.*/\1/p' <<< "$resp")
-        echo "ERROR: $msg" >&2
-        exit "$status"
+        echo "ERROR: $msg (status code $status)" >&2
+        exit 1
     elif [ "$status" != "201" ]; then
         echo "ERROR: Failed with status code $status" >&2
-        exit "$status"
+        exit 1
     fi
 
     local staging_repo_id
@@ -755,15 +763,16 @@ deploy_nexus_zip() {
     fi
 
     echo "Pushing $deploy_zip to $nexus_repo on $nexus_url to path $nexus_path"
-    resp=$(curl -s -w "\\n\\n%{http_code}" --netrc --upload-file "$deploy_zip" \
-        "${nexus_url}/service/local/repositories/${nexus_repo}/content-compressed/${nexus_path}")
+    local rc=0
+    resp=$(curl -sS -w "\\n\\n%{http_code}" --netrc --upload-file "$deploy_zip" \
+        "${nexus_url}/service/local/repositories/${nexus_repo}/content-compressed/${nexus_path}") || rc=$?
     status=$(echo "$resp" | awk 'END {print $NF}')
 
     echo "HTTP status: $status"
-    if [[ "$status" != "20"* ]]; then
-        echo "Failed with: $resp"
-        echo "Zip contains: $(unzip -l "$deploy_zip")"
-        exit "$status"
+    if [ "$rc" -ne 0 ] || [[ "$status" != "20"* ]]; then
+        echo "ERROR: Failed with curl exit status $rc: $resp" >&2
+        echo "Zip contains: $(unzip -l "$deploy_zip")" >&2
+        exit 1
     fi
 }
 
@@ -807,20 +816,24 @@ upload_maven_file_to_nexus() {
 
     local resp
     local status
+    local rc=0
     # We need word splitting here to parse the params
     # shellcheck disable=SC2086
-    resp=$(curl -s -w " %{http_code}" --netrc -X POST "${params[@]}" \
-        "${nexus_url}/service/local/artifact/maven/content")
+    resp=$(curl -sS -w " %{http_code}" --netrc -X POST "${params[@]}" \
+        "${nexus_url}/service/local/artifact/maven/content") || rc=$?
     status=$(echo "$resp" | awk 'END {print $NF}')
 
-    if echo "$resp" | grep -q nexus-error; then
+    if [ "$rc" -ne 0 ]; then
+        echo "ERROR: curl failed with exit status $rc (status code $status)" >&2
+        exit 1
+    elif echo "$resp" | grep -q nexus-error; then
         local msg
         msg=$(sed -n -e 's/.*<msg>\(.*\)<\/msg>.*/\1/p' <<< "$resp")
-        echo "ERROR: $msg"
-        exit "$status"
+        echo "ERROR: $msg (status code $status)" >&2
+        exit 1
     elif [ "$status" != "201" ]; then
-        echo "ERROR: Failed with status code $status"
-        exit "$status"
+        echo "ERROR: Failed with status code $status" >&2
+        exit 1
     fi
 }
 
@@ -838,13 +851,14 @@ upload_to_nexus() {
     echo "Uploading ${file}"
 
     local resp
-    resp=$(curl -s -w "\\n\\n%{http_code}" --netrc --upload-file "$file" "$nexus_repo_url/$file")
+    local rc=0
+    resp=$(curl -sS -w "\\n\\n%{http_code}" --netrc --upload-file "$file" "$nexus_repo_url/$file") || rc=$?
     data=$(echo "$resp" | head -n1)
     status=$(echo "$resp" | awk 'END {print $NF}')
 
-    if [ "$status" != "201" ]; then
-        echo "ERROR: Failed to upload to Nexus with status code $status. Aborting..."
-        echo "HTTP Response: $data"
+    if [ "$rc" -ne 0 ] || [ "$status" != "201" ]; then
+        echo "ERROR: Failed to upload to Nexus with status code $status (curl exit status $rc). Aborting..." >&2
+        echo "HTTP Response: $data" >&2
         exit 1
     fi
 }

@@ -25,7 +25,6 @@ from typing import Any
 
 import pytest
 
-XFAIL_830 = pytest.mark.xfail(strict=True, reason="#830: a failed Nexus request exits with its HTTP code, 0 for 000")
 XFAIL_832 = pytest.mark.xfail(strict=True, reason="#832: logs and archives exit 0 when downloads or uploads fail")
 XFAIL_833 = pytest.mark.xfail(strict=True, reason="#833: deploy file sends each form field with a leading space")
 
@@ -273,7 +272,6 @@ def test_nexus_failed_upload_exits_1(sandbox: dict[str, str], m2repo: Path, para
     assert result.returncode == 1
 
 
-@XFAIL_830
 @pytest.mark.parametrize(
     "failure", [{"code": 500, "body": "Server Error"}, {"code": 201, "exit": 18}], ids=["server-error", "cut-short"]
 )
@@ -364,7 +362,6 @@ def test_successful_request_exits_0(sandbox: dict[str, str], tmp_path: Path, com
     assert result.returncode == 0, result.stderr
 
 
-@XFAIL_830
 @REQUESTS
 @pytest.mark.parametrize(
     "failure",
