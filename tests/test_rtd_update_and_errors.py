@@ -104,7 +104,9 @@ def test_project_update_refuses_privacy_fields_on_community_service(field: str, 
         _rtd(endpoint).project_update("foo", {field: "private"})
 
     assert repr(field) in str(raised.value)
-    assert "readthedocs.org" in str(raised.value)
+    assert str(raised.value) == (
+        f"readthedocs.org ignores {field!r} on project 'foo': privacy settings need Read the Docs for Business"
+    )
     assert len(responses.calls) == 0
 
 
