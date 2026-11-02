@@ -68,7 +68,7 @@ sign() {
 
 
 sign_git_tag() {
-    # Signs the specified git tag.
+    # Signs the specified git tag. Exits 1 if sigul fails.
     #
     # Parameters:
     #
@@ -76,13 +76,16 @@ sign_git_tag() {
     local tag="$1"
 
     echo "Signing $tag"
-    sigul --batch -c "$SIGUL_CONFIG" sign-git-tag \
-        "$SIGUL_KEY" "$tag" < "$SIGUL_PASSWORD"
+    if ! sigul --batch -c "$SIGUL_CONFIG" sign-git-tag \
+        "$SIGUL_KEY" "$tag" < "$SIGUL_PASSWORD"; then
+        echo "ERROR: sigul failed to sign git tag $tag" >&2
+        exit 1
+    fi
 }
 
 
 sign_container() {
-    # Signs the specified Docker container.
+    # Signs the specified Docker container. Exits 1 if sigul fails.
     #
     # Parameters:
     #
@@ -92,8 +95,11 @@ sign_container() {
     local tag="$2"
 
     echo "Signing $manifest:$tag"
-    sigul --batch -c "$SIGUL_CONFIG" sign-container -o "$manifest-$tag.asc" \
-        "$SIGUL_KEY" "$manifest" "$tag" < "$SIGUL_PASSWORD"
+    if ! sigul --batch -c "$SIGUL_CONFIG" sign-container -o "$manifest-$tag.asc" \
+        "$SIGUL_KEY" "$manifest" "$tag" < "$SIGUL_PASSWORD"; then
+        echo "ERROR: sigul failed to sign container $manifest:$tag" >&2
+        exit 1
+    fi
 }
 
 

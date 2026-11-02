@@ -559,10 +559,32 @@ deploy_maven_file () {
 }
 
 deploy_nexus_usage() {
-    echo "Usage: deploy nexus <nexus_repo_url> <deploy_dir>"
+    echo "Usage: deploy nexus [-s] [-a] <nexus_repo_url> <deploy_dir>"
     echo
     echo "Options:"
     echo "    -s  # Enable snapshot mode for pushing snapshot artifacts to Nexus."
+    echo "    -a  # Succeed when there is nothing to deploy."
+}
+
+deploy_nexus_files() {
+    # Print each file deploy nexus uploads from the current directory, one
+    # per line, relative to it.
+    #
+    # Parameters:
+    #     snapshot:  "true" to include the maven-metadata files a snapshot
+    #                repository needs.
+    if [ "$1" == "true" ]; then
+        find . -type f \
+            ! -name _remote.repositories \
+            ! -name resolver-status.properties \
+            | cut -c 3-
+    else
+        find . -type f \
+            ! -name "maven-metadata*" \
+            ! -name _remote.repositories \
+            ! -name resolver-status.properties \
+            | cut -c 3-
+    fi
 }
 
 deploy_nexus() {
@@ -577,10 +599,19 @@ deploy_nexus() {
     # One purpose of this is so that we can get around the problematic
     # deploy-at-end configuration with upstream Maven.
     # https://issues.apache.org/jira/browse/MDEPLOY-193
+    #
+    # Exits 1 when there is nothing to deploy, unless -a is given.
     local snapshot="false"
+    local allow_empty="false"
 
-    while getopts hs o; do
+    # deploy nexus-stage parses its own options before calling this.
+    local OPTIND=1
+    while getopts ahs o; do
       case "$o" in
+        a)
+            allow_empty="true"
+            ;;
+
         h)
             deploy_nexus_usage
             exit 0
@@ -608,17 +639,10 @@ deploy_nexus() {
     fi
 
     pushd "$deploy_dir" || exit
-    if [ "$snapshot" == "true" ]; then
-        mapfile -t file_list < <(find . -type f \
-            ! -name _remote.repositories \
-            ! -name resolver-status.properties \
-            | cut -c 3-)
-    else
-        mapfile -t file_list < <(find . -type f \
-            ! -name "maven-metadata*" \
-            ! -name _remote.repositories \
-            ! -name resolver-status.properties \
-            | cut -c 3-)
+    mapfile -t file_list < <(deploy_nexus_files "$snapshot")
+    if [ "${#file_list[@]}" -eq 0 ] && [ "$allow_empty" != "true" ]; then
+        echo "ERROR: Nothing to deploy in $deploy_dir; pass -a to deploy nothing" >&2
+        exit 1
     fi
     if hash parallel 2>/dev/null; then
         export -f upload_to_nexus
@@ -632,6 +656,13 @@ deploy_nexus() {
     popd || exit
 }
 
+deploy_nexus_stage_usage() {
+    echo "Usage: deploy nexus-stage [-a] <nexus_url> <staging_profile_id> <deploy_dir>"
+    echo
+    echo "Options:"
+    echo "    -a  # Stage an empty repository when there is nothing to deploy."
+}
+
 deploy_nexus_stage() {
     # Deploy Maven artifacts to Nexus staging repo using curl
     #
@@ -640,6 +671,30 @@ deploy_nexus_stage() {
     #     staging_profile_id:  The staging profile id as defined in Nexus for the
     #                          staging repo.
     #     deploy_dir:   The directory to deploy. (Ex: /tmp/m2repo)
+    #
+    # Exits 1 when there is nothing to deploy, before creating a staging
+    # repository, unless -a is given.
+    local allow_empty="false"
+
+    local OPTIND=1
+    while getopts ah o; do
+      case "$o" in
+        a)
+            allow_empty="true"
+            ;;
+
+        h)
+            deploy_nexus_stage_usage
+            exit 0
+            ;;
+
+        [?])
+            deploy_nexus_stage_usage
+            exit 1
+            ;;
+      esac
+    done
+    shift $((OPTIND-1))
 
     local nexus_url="${1%/}"
     local staging_profile_id="$2"
@@ -647,7 +702,16 @@ deploy_nexus_stage() {
 
     if [ -z "$3" ]; then
         echo "Missing required arguments."
-        echo "Usage: deploy nexus-stage <nexus_url> <staging_profile_id> <deploy_dir>"
+        deploy_nexus_stage_usage
+        exit 1
+    fi
+
+    # A staging repository is created only for something to deploy.
+    local deploy_options=()
+    if [ "$allow_empty" == "true" ]; then
+        deploy_options+=(-a)
+    elif [ -z "$(cd "$deploy_dir" && deploy_nexus_files false)" ]; then
+        echo "ERROR: Nothing to deploy in $deploy_dir; pass -a to stage an empty repository" >&2
         exit 1
     fi
 
@@ -655,7 +719,8 @@ deploy_nexus_stage() {
     staging_repo_id=$(nexus_stage_repo_create "${nexus_url}" "${staging_profile_id}") || exit 1
     echo "Staging repository $staging_repo_id created."
 
-    deploy_nexus "${nexus_url}/service/local/staging/deployByRepositoryId/${staging_repo_id}" "${deploy_dir}"
+    deploy_nexus "${deploy_options[@]}" \
+        "${nexus_url}/service/local/staging/deployByRepositoryId/${staging_repo_id}" "${deploy_dir}"
 
     nexus_stage_repo_close "${nexus_url}" "${staging_profile_id}" "${staging_repo_id}"
     echo "Completed uploading files to ${staging_repo_id}."

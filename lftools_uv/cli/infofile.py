@@ -155,19 +155,17 @@ tsc:
       id: ''
 """
     tsc_string = inspect.cleandoc(tsc_string)
+    # Look the committers up before printing anything, so that a failed
+    # lookup leaves no partial INFO file behind.
+    committers = empty_committer if empty else helper_yaml4info(ldap_group)
     echo(long_string)
     echo("repositories:")
     echo(f"    - {gerrit_project}")
     echo("committers:")
     echo(f"    - <<: *{umbrella}_{project_underscored}_ptl")
-    if not empty:
-        this = helper_yaml4info(ldap_group)
-        # This already contains formatted YAML; echo without additional formatting
-        for line in this.splitlines():
-            echo(line)
-    else:
-        for line in empty_committer.splitlines():
-            echo(line)
+    # The committers are formatted YAML already; echo each line as it is.
+    for line in committers.splitlines():
+        echo(line)
     for line in tsc_string.splitlines():
         echo(line)
 

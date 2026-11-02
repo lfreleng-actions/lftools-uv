@@ -179,9 +179,21 @@ version_patch() {
     #######################
     # Start apply patches #
     #######################
-    git fetch "${PATCH_DIR}/${subproject/\//-}.bundle"
-    git merge FETCH_HEAD
-    git tag -asm "$PROJECT $RELEASE_TAG release" "release/${RELEASE_TAG,,}"
+    # Stop at the first failure: a release job must not go on without its
+    # patch or its tag.
+    local bundle="${PATCH_DIR}/${subproject/\//-}.bundle"
+    if ! git fetch "$bundle"; then
+        echo "ERROR: Could not fetch $bundle" >&2
+        exit 1
+    fi
+    if ! git merge FETCH_HEAD; then
+        echo "ERROR: Could not merge $bundle" >&2
+        exit 1
+    fi
+    if ! git tag -asm "$PROJECT $RELEASE_TAG release" "release/${RELEASE_TAG,,}"; then
+        echo "ERROR: Could not create tag release/${RELEASE_TAG,,}" >&2
+        exit 1
+    fi
     find . -name pom.xml -print0 | xargs -0 grep SNAPSHOT
 
     echo "Tagging complete"

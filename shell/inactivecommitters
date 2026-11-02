@@ -9,6 +9,32 @@
 # http://www.eclipse.org/legal/epl-v10.html
 ##############################################################################
 
+last_update() {
+  # Print when the newest change matching the Gerrit query URL $1 was last
+  # updated, or nothing if none matches. Gerrit answers a query for an
+  # account it does not know with HTTP 400 "Account ... not found", which
+  # counts as no match. Any other failure exits 1: a Gerrit that cannot be
+  # reached, or answers with another error, would make every committer
+  # look inactive.
+  local response status changes
+  if ! response=$(curl --silent --show-error -G -w '\n%{http_code}' "$1"); then
+    echo "ERROR: Could not query $gerriturl" >&2
+    exit 1
+  fi
+  status="${response##*$'\n'}"
+  changes="${response%$'\n'*}"
+  if [ "$status" == "400" ] && grep -qi "not found" <<< "$changes"; then
+    return 0
+  fi
+  if [ "$status" != "200" ]; then
+    echo "ERROR: Gerrit at $gerriturl answered with status code $status: $changes" >&2
+    exit 1
+  fi
+  # Read the date of the updated field, whether or not Gerrit pretty-prints
+  # its JSON; by default it sends each change on one line.
+  sed -n 's/.*"updated": *"\([^ "]*\).*/\1/p' <<< "$changes"
+}
+
 datediff() {
   d1=$(date -d "$1" +%s)
   d2=$(date -d "$2" +%s)
@@ -20,9 +46,18 @@ main() {
   echo "checking $gerriturl participation for group $group"
   echo
 
+  # Read the whole group first: a lookup that fails must fail the script,
+  # not report on an empty or partial list of committers.
+  local committers
+  if ! committers=$(LEGACY_CLI=1 lftools-uv ldap csv "$group"); then
+    echo "ERROR: LDAP lookup of $group failed" >&2
+    exit 1
+  fi
+
   currentdate=$(date +%Y-%m-%d)
   while read -r line; do
 
+    [ -n "$line" ] || continue
     currenetgroup="$group"
     group="$(echo "$line" | awk -F"," '{print $1}')"
     id="$(echo "$line" | awk -F"," '{print $2}')"
@@ -36,21 +71,13 @@ main() {
 
     time_ago=$(date -d "-12 month" +%Y-%m-%d)
 
-    updated=$(curl --silent -G \
-      "https://$gerriturl/changes/?q=reviewedby:$id+after:$time_ago%20OR%20owner:$id+after:$time_ago&n=1" \
-      | grep "updated" \
-      | awk '{print $2}' \
-      | sed s,\",,g
-      )
+    updated=$(last_update \
+      "https://$gerriturl/changes/?q=reviewedby:$id+after:$time_ago%20OR%20owner:$id+after:$time_ago&n=1") \
+      || exit 1
 
     if  [[ -z $updated ]]; then
 
-     updated=$(curl --silent -G \
-       "https://$gerriturl/changes/?q=reviewedby:$id%20OR%20owner:$id&n=1" \
-       | grep "updated" \
-       | awk '{print $2}' \
-       | sed s,\",,g
-       )
+     updated=$(last_update "https://$gerriturl/changes/?q=reviewedby:$id%20OR%20owner:$id&n=1") || exit 1
 
       if  [[ -z $updated ]]; then
        echo -n "  ERROR $id, $fullname, $email has no activity "
@@ -72,7 +99,7 @@ main() {
      echo "  OK $id, $fullname, $email last submission or review $updated"
     fi
 
-  done < <(LEGACY_CLI=1 lftools-uv ldap csv "$group")
+  done <<< "$committers"
 
 }
 
