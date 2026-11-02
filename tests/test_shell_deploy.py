@@ -25,8 +25,6 @@ from typing import Any
 
 import pytest
 
-XFAIL_836 = pytest.mark.xfail(strict=True, reason="#836: deploy nexus and nexus-stage succeed with nothing to deploy")
-
 SCRIPT = Path(__file__).resolve().parent.parent / "shell" / "deploy"
 BASH = shutil.which("bash") or "/bin/bash"
 NEXUS = "http://nexus.invalid"
@@ -333,7 +331,6 @@ def unpublished(tmp_path):
     return root
 
 
-@XFAIL_836
 def test_nexus_nothing_to_deploy_exits_1(sandbox: dict[str, str], unpublished: Path) -> None:
     result = _run(sandbox, "nexus", f"{NEXUS}/content/repositories/releases", str(unpublished))
 
@@ -342,7 +339,6 @@ def test_nexus_nothing_to_deploy_exits_1(sandbox: dict[str, str], unpublished: P
     assert "Nothing to deploy" in result.stderr
 
 
-@XFAIL_836
 def test_nexus_allow_empty_deploys_nothing(sandbox: dict[str, str], unpublished: Path) -> None:
     result = _run(sandbox, "nexus", "-a", f"{NEXUS}/content/repositories/releases", str(unpublished))
 
@@ -350,7 +346,6 @@ def test_nexus_allow_empty_deploys_nothing(sandbox: dict[str, str], unpublished:
     assert _urls(sandbox, "curl") == []
 
 
-@XFAIL_836
 @pytest.mark.parametrize("missing", [False, True], ids=["empty", "missing"])
 def test_nexus_stage_nothing_to_deploy_creates_no_repository(
     sandbox: dict[str, str], unpublished: Path, missing: bool
@@ -364,7 +359,6 @@ def test_nexus_stage_nothing_to_deploy_creates_no_repository(
     assert "Nothing to deploy" in result.stderr
 
 
-@XFAIL_836
 @pytest.mark.parametrize("files", [False, True], ids=["empty", "with-files"])
 def test_nexus_stage_allow_empty(sandbox: dict[str, str], unpublished: Path, m2repo: Path, files: bool) -> None:
     """-a stages an empty repository, and still uploads every file of a full one."""
