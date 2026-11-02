@@ -28,8 +28,6 @@ from click.testing import CliRunner, Result
 from lftools_uv import ldap_cli
 from lftools_uv.cli.infofile import infofile
 
-XFAIL = pytest.mark.xfail(strict=True, reason="#858: the LDAP helpers exit 0 when a lookup fails")
-
 SHELL_DIR = Path(__file__).resolve().parent.parent / "shell"
 BASH = shutil.which("bash") or "/bin/bash"
 
@@ -140,7 +138,6 @@ def test_yaml4info_prints_each_committer(sandbox: dict[str, str]) -> None:
     assert "      id: 'bob'" in result.stdout
 
 
-@XFAIL
 def test_yaml4info_failed_lookup_exits_1(sandbox: dict[str, str]) -> None:
     sandbox["FAIL"] = "ldap csv"
 
@@ -160,7 +157,6 @@ def test_inactivecommitters_reports_each_committer(sandbox: dict[str, str]) -> N
     assert "  ERROR bob, Bob Example, bob@example.org has no activity" in result.stdout
 
 
-@XFAIL
 def test_inactivecommitters_reads_date_from_compact_json(sandbox: dict[str, str]) -> None:
     """Gerrit sends each change's JSON on one line; the date is still found."""
     result = _run("inactivecommitters", sandbox, "gerrit.example.org/gerrit", "grp")
@@ -169,7 +165,6 @@ def test_inactivecommitters_reads_date_from_compact_json(sandbox: dict[str, str]
     assert "alice@example.org last submission or review 2026-11-01\n" in result.stdout
 
 
-@XFAIL
 def test_inactivecommitters_failed_lookup_exits_1(sandbox: dict[str, str]) -> None:
     sandbox["FAIL"] = "ldap csv"
 
@@ -179,7 +174,6 @@ def test_inactivecommitters_failed_lookup_exits_1(sandbox: dict[str, str]) -> No
     assert "ERROR" in result.stderr
 
 
-@XFAIL
 def test_inactivecommitters_unreachable_gerrit_exits_1(sandbox: dict[str, str]) -> None:
     """An unreachable Gerrit must not make every committer look inactive."""
     sandbox["CURL_EXIT"] = "6"
@@ -190,7 +184,6 @@ def test_inactivecommitters_unreachable_gerrit_exits_1(sandbox: dict[str, str]) 
     assert "has no activity" not in result.stdout
 
 
-@XFAIL
 def test_inactivecommitters_gerrit_error_exits_1(sandbox: dict[str, str]) -> None:
     """A Gerrit that answers with an error must not make every committer look inactive."""
     sandbox["GERRIT_STATUS"] = "503"
@@ -213,7 +206,6 @@ def info_dir(tmp_path, sandbox):
     return {**sandbox, "DIR": str(work)}, work
 
 
-@XFAIL
 def test_autocorrectinfofile_compares_ldap_with_info(info_dir: tuple[dict[str, str], Path]) -> None:
     """The LDAP dump is one get-committers can read, so only real differences are reported."""
     env, work = info_dir
@@ -240,7 +232,6 @@ def test_autocorrectinfofile_empty_ldap_group_syncs_nobody(info_dir: tuple[dict[
     assert "sync-committers" not in result.stdout
 
 
-@XFAIL
 @pytest.mark.parametrize("failing", ["ldap yaml4info", "infofile get-committers"])
 def test_autocorrectinfofile_failed_lookup_exits_1(info_dir: tuple[dict[str, str], Path], failing: str) -> None:
     env, _ = info_dir
@@ -252,7 +243,6 @@ def test_autocorrectinfofile_failed_lookup_exits_1(info_dir: tuple[dict[str, str
     assert "ERROR" in result.stderr
 
 
-@XFAIL
 @pytest.mark.skipif(os.geteuid() == 0, reason="root can overwrite a read-only file")
 def test_autocorrectinfofile_unwritable_ldap_dump_exits_1(info_dir: tuple[dict[str, str], Path]) -> None:
     """An earlier run's LDAP.yaml that cannot be overwritten is never compared."""
@@ -286,7 +276,6 @@ def test_create_info_file_lists_ldap_committers(sandbox: dict[str, str]) -> None
     assert "repositories:" in result.output
 
 
-@XFAIL
 def test_create_info_file_failed_lookup_prints_nothing(sandbox: dict[str, str]) -> None:
     """A failed lookup prints no INFO file, and its error never becomes committers."""
     result = _create_info_file({"PATH": sandbox["PATH"] + ":" + str(SHELL_DIR), "FAIL": "ldap csv"})
@@ -296,7 +285,6 @@ def test_create_info_file_failed_lookup_prints_nothing(sandbox: dict[str, str]) 
     assert "ERROR: ldap csv failed" not in result.stdout
 
 
-@XFAIL
 def test_helper_yaml4info_keeps_errors_out_of_its_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Only the script's standard output is YAML; a warning it prints is not."""
     script = tmp_path / "yaml4info"

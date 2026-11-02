@@ -93,12 +93,18 @@ main() {
   fi
   echo "    tmpdir = $DIR"
 
-  if LEGACY_CLI=1 lftools-uv ldap yaml4info "$ldapgroup" 2>&- > "$DIR"/LDAP.yaml
-    then
-      echo "    LDAP lookup sucssesfull"
-    else
-      echo "    LDAP lookup failed"
-      exit 1
+  local ldap_committers
+  if ! ldap_committers=$(LEGACY_CLI=1 lftools-uv ldap yaml4info "$ldapgroup"); then
+    echo "    LDAP lookup failed" >&2
+    exit 1
+  fi
+  echo "    LDAP lookup successful"
+  # get-committers and sync-committers read an INFO file's committers key,
+  # and yaml4info prints only the entries under it. A write that fails would
+  # leave an earlier run's LDAP.yaml in place, so it must stop the script.
+  if ! printf 'committers:\n%s\n' "${ldap_committers:-    []}" > "$DIR"/LDAP.yaml; then
+    echo "    ERROR: Could not write $DIR/LDAP.yaml" >&2
+    exit 1
   fi
 
   if ! [[ -d "$DIR"/"$repo" ]]; then
@@ -106,7 +112,20 @@ main() {
     git clone -q "$gerritclonebase"/"$repo" "$DIR"/"$repo" || exit 1
   fi
 
-  diff="$(diff <(LEGACY_CLI=1 lftools-uv infofile get-committers "$DIR"/LDAP.yaml 2>&-| sort) <(LEGACY_CLI=1 lftools-uv infofile get-committers "$DIR"/"$repo"/INFO.yaml 2>&- | sort))"
+  # Read both lists before comparing them: a read that fails must fail the
+  # script, not count as a match or a difference.
+  local ldap_list info_list
+  if ! ldap_list=$(LEGACY_CLI=1 lftools-uv infofile get-committers "$DIR"/LDAP.yaml); then
+    echo "    ERROR: Could not read the committers in $DIR/LDAP.yaml" >&2
+    exit 1
+  fi
+  if ! info_list=$(LEGACY_CLI=1 lftools-uv infofile get-committers "$DIR"/"$repo"/INFO.yaml); then
+    echo "    ERROR: Could not read the committers in $DIR/$repo/INFO.yaml" >&2
+    exit 1
+  fi
+  # printf keeps an empty list empty, where a here-string would add a blank
+  # line for diff to report.
+  diff="$(diff <(printf '%s' "$ldap_list" | sort) <(printf '%s' "$info_list" | sort))"
   status="$?"
 
   diff_array=()
@@ -138,8 +157,12 @@ main() {
   if ! [ "${#onlyinLDAP[@]}" -eq 0 ]; then
     echo "    These users are listed as committers in LDAP and not in the INFO.yaml"
     for missing in "${onlyinLDAP[@]}"; do
-      echo "    LEGACY_CLI=1 lftools-uv infofile sync-committers $DIR/$repo/INFO.yaml $DIR/LDAP.yaml $missing --repo $repo 2>&-"
-      LEGACY_CLI=1 lftools-uv infofile sync-committers "$DIR"/"$repo"/INFO.yaml "$DIR"/LDAP.yaml "$missing" --repo "$repo" 2>&-
+      [ -n "$missing" ] || continue
+      echo "    LEGACY_CLI=1 lftools-uv infofile sync-committers $DIR/$repo/INFO.yaml $DIR/LDAP.yaml $missing --repo $repo"
+      if ! LEGACY_CLI=1 lftools-uv infofile sync-committers "$DIR"/"$repo"/INFO.yaml "$DIR"/LDAP.yaml "$missing" --repo "$repo"; then
+        echo "    ERROR: Could not add $missing to $DIR/$repo/INFO.yaml" >&2
+        status=1
+      fi
     done
 
   fi

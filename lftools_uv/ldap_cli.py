@@ -9,11 +9,16 @@
 ##############################################################################
 """Helper for INFO file generation."""
 
-from subprocess import STDOUT, check_output
+from subprocess import check_output
 
 
-def helper_yaml4info(group):
-    """Build yaml of committers for your INFO.yaml."""
+def helper_yaml4info(group: str) -> str:
+    """Build yaml of committers for your INFO.yaml.
+
+    The script's error output goes to stderr, never into the YAML.
+
+    Raises:
+        subprocess.CalledProcessError: If the LDAP lookup fails.
+    """
     command = ["yaml4info", group]
-    status = check_output(command, stderr=STDOUT).decode()
-    return status
+    return check_output(command, text=True)
