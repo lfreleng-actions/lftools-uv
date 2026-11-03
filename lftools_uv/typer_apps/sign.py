@@ -117,6 +117,23 @@ def nexus(
         raise typer.Exit(127) from None
 
 
+@sign_app.command("sigul")
+def sigul(
+    directory: str = typer.Argument(..., help="Directory containing files to sign"),
+    mode: str = typer.Option("parallel", "-m", "--mode", help="Signing mode: serial or parallel"),
+) -> None:
+    """Sigul signs all of the files in a directory.
+
+    Exits with the status of the sign script, as the legacy command does.
+
+    Examples:
+        lftools-uv sign sigul /path/to/files
+        lftools-uv sign sigul --mode serial /path/to/files
+    """
+    status = subprocess.call(["sign", "sigul", directory, mode])
+    raise typer.Exit(status)
+
+
 def get_sign_app() -> typer.Typer:
     """Get the sign Typer app instance.
 

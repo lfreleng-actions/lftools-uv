@@ -104,7 +104,7 @@ def test_nexus_release_keeps_release_exit_code(run: Run, release: MagicMock) -> 
 # sign sigul
 
 
-@_typer_lacks("sign sigul")
+@FRONT_ENDS
 @pytest.mark.parametrize("status", [0, 1, 3])
 @pytest.mark.parametrize(("mode_args", "mode"), [([], "parallel"), (["-m", "serial"], "serial")])
 def test_sign_sigul_runs_script_and_keeps_its_status(
@@ -118,7 +118,7 @@ def test_sign_sigul_runs_script_and_keeps_its_status(
     assert result.stdout == ""
 
 
-@_typer_lacks("sign sigul")
+@FRONT_ENDS
 def test_sign_sigul_fails_without_sign_script(run: Run, mocker: MockerFixture, tmp_path: Path) -> None:
     mocker.patch("subprocess.call", side_effect=FileNotFoundError("sign"))
     result = run(["sign", "sigul", str(tmp_path)])
