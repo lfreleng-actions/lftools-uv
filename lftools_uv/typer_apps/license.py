@@ -87,6 +87,29 @@ def check_command(
         raise typer.Exit(1) from None
 
 
+@license_app.command("check-dir")
+def check_directory(
+    directory: str = typer.Argument(..., help="Directory to search for files to check"),
+    license_file: str = typer.Option(
+        "license-header.txt", "-l", "--license", help="License header file to compare against"
+    ),
+    regex: str = typer.Option(r".+\.py$", "-r", "--regex", help="File regex pattern to match on when searching"),
+) -> None:
+    """Check directory for files missing license headers.
+
+    Uses a regex pattern to find files to check for approved license headers.
+    Exits 1 when a matching file lacks the header, when the directory does
+    not exist, or when no file matches, logging each finding to stderr.
+
+    Note: This code only supports '#' comments for license headers.
+
+    Examples:
+        lftools-uv license check-dir lftools_uv
+        lftools-uv license check-dir --license header.txt scripts
+    """
+    check_license_directory(license_file, directory, regex)
+
+
 def get_license_app() -> typer.Typer:
     """Get the license Typer app instance.
 

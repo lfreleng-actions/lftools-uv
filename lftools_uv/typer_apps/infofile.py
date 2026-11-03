@@ -13,6 +13,9 @@ import logging
 
 import typer
 
+from lftools_uv.cli.errors import error_handler
+from lftools_uv.cli.infofile import tally_votes
+
 _HELP_INFO_YAML_PATH = "Path to INFO.yaml file"
 _MSG_USE_LEGACY_CLI = "Note: This command is implemented only in the legacy Click CLI."
 _MSG_NOT_IMPLEMENTED = "Note: This command is not implemented yet."
@@ -177,6 +180,30 @@ def match_ldap(
         log.exception("LDAP matching failed")
         typer.echo(f"Error: LDAP matching failed: {e}", err=True)
         raise typer.Exit(1) from None
+
+
+@infofile_app.command("check-votes")
+@error_handler
+def check_votes(
+    info_file: str = typer.Argument(..., help=_HELP_INFO_YAML_PATH),
+    endpoint: str = typer.Argument(..., help="Gerrit URL, or the GitHub organization with --github_repo"),
+    change_number: int = typer.Argument(..., help="Gerrit change or GitHub pull request number"),
+    tsc: str | None = typer.Option(None, "--tsc", help="Path to TSC INFO file"),
+    github_repo: str | None = typer.Option(
+        None, "--github_repo", help="Provide github repo to Check against a Github Change"
+    ),
+) -> None:
+    """Check votes on an INFO.yaml change.
+
+    Check for a majority of committer votes on a Gerrit or GitHub change
+    to an INFO.yaml file. The vote count and outcome go to stdout; the
+    command exits 1 when no majority is reached.
+
+    Examples:
+        lftools-uv infofile check-votes INFO.yaml https://gerrit.example.org/r/ 67302
+        lftools-uv infofile check-votes INFO.yaml example-org 18 --github_repo test
+    """
+    tally_votes(info_file, endpoint, change_number, tsc, github_repo)
 
 
 def get_infofile_app() -> typer.Typer:

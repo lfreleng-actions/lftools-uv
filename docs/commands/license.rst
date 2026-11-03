@@ -17,3 +17,8 @@ check
 -----
 
 .. program-output:: lftools-uv license check --help
+
+check-dir
+---------
+
+.. program-output:: lftools-uv license check-dir --help
