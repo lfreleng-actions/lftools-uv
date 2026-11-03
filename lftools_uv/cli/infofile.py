@@ -267,6 +267,85 @@ def sync_committers(ctx, id, info_file, ldap_file, repo):
     readfile(info_data, ldap_data, id)
 
 
+# aislop-ignore-next-line too-many-params -- recursion state, not CLI options; see below
+def tally_votes(
+    info_file: str,
+    endpoint: str,
+    change_number: int,
+    tsc: str | None,
+    github_repo: str | None,
+    majority_of_committers: int = 0,
+) -> None:
+    """Print the vote on an INFO.yaml change and exit 1 without a majority.
+
+    Shared by the Click and Typer check-votes commands. Recurses once to
+    re-check the TSC INFO file after a committer majority is reached. The
+    command inputs are forwarded explicitly so the recursive call can vary
+    info_file and majority_of_committers, which is why the signature is long.
+    """
+    info_data: dict[str, Any] = {}
+    with open(info_file) as file:
+        try:
+            info_data = yaml.safe_load(file)
+        except yaml.YAMLError as exc:
+            log.exception(exc)
+            sys.exit(1)
+
+    committer_info = info_data["committers"]
+    info_committers = []
+
+    info_change = []
+
+    if github_repo:
+        id = "github_id"
+        githubvotes = prvotes(endpoint, github_repo, change_number)
+        for vote in githubvotes:
+            info_change.append(vote)
+
+    else:
+        id = "id"
+        rest = GerritRestAPI(url=endpoint)
+        changes: list[dict[str, Any]] = cast(list[dict[str, Any]], rest.get(f"changes/{change_number}/reviewers"))
+        for change in changes:
+            line = (change["username"], change["approvals"]["Code-Review"])
+            if "+1" in line[1] or "+2" in line[1]:
+                info_change.append(change["username"])
+
+    for count, _ in enumerate(committer_info):
+        committer = committer_info[count][id]
+        info_committers.append(committer)
+
+    have_not_voted = [item for item in info_committers if item not in info_change]
+    have_not_voted_length = len(have_not_voted)
+    have_voted = [item for item in info_committers if item in info_change]
+    have_voted_length = len(have_voted)
+    # The vote count and its outcome are the command's result: they go to
+    # stdout, which callers such as global-jjb's check-info-votes.sh keep.
+    echo(f"Number of Committers: {len(info_committers)}")
+    committer_length = len(info_committers)
+    echo(f"Committers that have voted: {have_voted} ({have_voted_length})")
+    echo(f"Committers that have not voted: {have_not_voted} ({have_not_voted_length})")
+
+    if have_voted_length == 0:
+        echo("No one has voted.")
+        sys.exit(1)
+
+    majority = have_voted_length / committer_length if committer_length else 0
+    if majority >= 0.5:
+        echo("Majority committer vote reached")
+        if tsc:
+            echo("Need majority of TSC")
+            info_file = tsc
+            majority_of_committers += 1
+            if majority_of_committers == 2:
+                echo("TSC majority reached - auto merging commit")
+            else:
+                tally_votes(info_file, endpoint, change_number, tsc, github_repo, majority_of_committers)
+    else:
+        echo("Majority not yet reached")
+        sys.exit(1)
+
+
 @click.command(name="check-votes")
 @click.argument("info_file")
 @click.argument("endpoint", type=str)
@@ -290,80 +369,7 @@ def check_votes(ctx, info_file, endpoint, change_number, tsc, github_repo):
     LEGACY_CLI=1 lftools-uv infofile check-votes ~/lf/allrepos/onosfw/INFO.yaml https://gerrit.opnfv.org/gerrit/ 67302
 
     """
-
-    # aislop-ignore-next-line too-many-params -- recursion state, not CLI options; see below
-    def main(ctx, info_file, endpoint, change_number, tsc, github_repo, majority_of_committers):
-        """Function so we can iterate into TSC members after committer vote has happened.
-
-        Recurses once to re-check the TSC INFO file after a committer
-        majority is reached. The command inputs are forwarded explicitly
-        rather than closed over so the recursive call can vary info_file
-        and majority_of_committers, which is why the signature is long.
-        """
-        info_data: dict[str, Any] = {}
-        with open(info_file) as file:
-            try:
-                info_data = yaml.safe_load(file)
-            except yaml.YAMLError as exc:
-                log.exception(exc)
-                sys.exit(1)
-
-        committer_info = info_data["committers"]
-        info_committers = []
-
-        info_change = []
-
-        if github_repo:
-            id = "github_id"
-            githubvotes = prvotes(endpoint, github_repo, change_number)
-            for vote in githubvotes:
-                info_change.append(vote)
-
-        else:
-            id = "id"
-            rest = GerritRestAPI(url=endpoint)
-            changes: list[dict[str, Any]] = cast(list[dict[str, Any]], rest.get(f"changes/{change_number}/reviewers"))
-            for change in changes:
-                line = (change["username"], change["approvals"]["Code-Review"])
-                if "+1" in line[1] or "+2" in line[1]:
-                    info_change.append(change["username"])
-
-        for count, _ in enumerate(committer_info):
-            committer = committer_info[count][id]
-            info_committers.append(committer)
-
-        have_not_voted = [item for item in info_committers if item not in info_change]
-        have_not_voted_length = len(have_not_voted)
-        have_voted = [item for item in info_committers if item in info_change]
-        have_voted_length = len(have_voted)
-        # The vote count and its outcome are the command's result: they go to
-        # stdout, which callers such as global-jjb's check-info-votes.sh keep.
-        echo(f"Number of Committers: {len(info_committers)}")
-        committer_length = len(info_committers)
-        echo(f"Committers that have voted: {have_voted} ({have_voted_length})")
-        echo(f"Committers that have not voted: {have_not_voted} ({have_not_voted_length})")
-
-        if have_voted_length == 0:
-            echo("No one has voted.")
-            sys.exit(1)
-
-        majority = have_voted_length / committer_length if committer_length else 0
-        if majority >= 0.5:
-            echo("Majority committer vote reached")
-            if tsc:
-                echo("Need majority of TSC")
-                info_file = tsc
-                majority_of_committers += 1
-                if majority_of_committers == 2:
-                    echo("TSC majority reached - auto merging commit")
-                else:
-                    main(ctx, info_file, endpoint, change_number, tsc, github_repo, majority_of_committers)
-        else:
-            echo("Majority not yet reached")
-            sys.exit(1)
-
-    majority_of_committers = 0
-    main(ctx, info_file, endpoint, change_number, tsc, github_repo, majority_of_committers)
+    tally_votes(info_file, endpoint, change_number, tsc, github_repo)
 
 
 infofile.add_command(get_committers)

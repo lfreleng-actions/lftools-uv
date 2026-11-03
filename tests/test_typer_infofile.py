@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: 2026 The Linux Foundation
 """Tests for the guidance printed by the Typer ``infofile`` placeholders.
 
-The Typer ``infofile`` commands are placeholders that point the user at the
-Click implementation. The hints named ``lftools``, the legacy executable that
+Apart from ``check-votes``, the Typer ``infofile`` commands are placeholders
+that point the user at the Click implementation. The hints named ``lftools``, the legacy executable that
 lftools-uv does not install, and three of them name commands that exist in no
 front-end. A hint must name a command the user can run, or say plainly that
 none exists.
@@ -45,9 +45,13 @@ def test_placeholder_hint_names_a_runnable_command(command):
 
 
 def test_placeholders_cover_every_typer_command():
-    """Guard the parametrisation: a new placeholder must be checked too."""
+    """Guard the parametrisation: a new placeholder must be checked too.
+
+    ``check-votes`` is a full port, not a placeholder; tests for it live in
+    test_typer_legacy_ports.py.
+    """
     registered = {cmd.name for cmd in infofile_app.registered_commands}
-    assert registered == set(PLACEHOLDER_ARGS)
+    assert registered - {"check-votes"} == set(PLACEHOLDER_ARGS)
 
 
 @pytest.mark.parametrize("command", PLACEHOLDER_ARGS)

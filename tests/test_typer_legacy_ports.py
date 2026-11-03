@@ -174,7 +174,7 @@ def _gerrit_votes(mocker: MockerFixture, voters: list[str]) -> MagicMock:
     return gerrit
 
 
-@_typer_lacks("infofile check-votes")
+@FRONT_ENDS
 @VOTES
 def test_check_votes_gerrit(
     run: Run,
@@ -196,7 +196,7 @@ def test_check_votes_gerrit(
     assert outcome in lines
 
 
-@_typer_lacks("infofile check-votes")
+@FRONT_ENDS
 @VOTES
 def test_check_votes_github(
     run: Run, info_file: Path, mocker: MockerFixture, voters: list[str], exit_code: int, outcome: str
@@ -211,7 +211,7 @@ def test_check_votes_github(
     assert outcome in result.stdout.splitlines()
 
 
-@_typer_lacks("infofile check-votes")
+@FRONT_ENDS
 def test_check_votes_tsc_majority(run: Run, info_file: Path, mocker: MockerFixture) -> None:
     _gerrit_votes(mocker, ["alice", "bob"])
     result = run(["infofile", "check-votes", str(info_file), GERRIT, CHANGE, "--tsc", str(info_file)])
@@ -222,7 +222,7 @@ def test_check_votes_tsc_majority(run: Run, info_file: Path, mocker: MockerFixtu
     assert lines[-1] == "TSC majority reached - auto merging commit"
 
 
-@_typer_lacks("infofile check-votes")
+@FRONT_ENDS
 def test_check_votes_missing_info_file(run: Run, tmp_path: Path) -> None:
     """The shared error handler maps FileNotFoundError to exit code 7."""
     result = run(["infofile", "check-votes", str(tmp_path / "missing.yaml"), GERRIT, CHANGE])
