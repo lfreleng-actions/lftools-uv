@@ -10,7 +10,6 @@ SPDX-FileCopyrightText: 2025 The Linux Foundation
 [![License: EPL-1.0](https://img.shields.io/badge/License-EPL--1.0-blue.svg)](https://www.eclipse.org/legal/epl-v10.html)
 [![PyPI](https://img.shields.io/pypi/v/lftools-uv.svg?label=PyPi)](https://pypi.org/project/lftools-uv/)
 [![TestPyPI](https://img.shields.io/pypi/v/lftools-uv.svg?label=TestPyPi&pypiBaseUrl=https://test.pypi.org)](https://test.pypi.org/project/lftools-uv/)
-[![CodeQL](https://github.com/lfreleng-actions/lftools-uv/actions/workflows/codeql.yml/badge.svg)](https://github.com/lfreleng-actions/lftools-uv/actions/workflows/codeql.yml)
 
 This project's documentation is available on ReadTheDocs (RTD) and GitHub Pages:
 
