@@ -37,14 +37,6 @@ def _typer(args: list[str]) -> TyperResult:
 FRONT_ENDS = pytest.mark.parametrize("run", [_click, _typer], ids=["click", "typer"])
 
 
-def _typer_lacks(command: str) -> pytest.MarkDecorator:
-    """Run both front-ends, expecting Typer to fail until it gains *command*."""
-    missing = pytest.mark.xfail(strict=True, reason=f"Typer has no {command}")
-    return pytest.mark.parametrize(
-        "run", [pytest.param(_click, id="click"), pytest.param(_typer, id="typer", marks=missing)]
-    )
-
-
 # ---------------------------------------------------------------------------
 # nexus release
 
@@ -261,7 +253,7 @@ def source_dir(tmp_path: Path) -> Path:
     return path
 
 
-@_typer_lacks("license check-dir")
+@FRONT_ENDS
 def test_check_dir_passes_with_headers(run: Run, reference: Path, source_dir: Path) -> None:
     result = run(["license", "check-dir", str(source_dir), "-l", str(reference)])
 
@@ -269,7 +261,7 @@ def test_check_dir_passes_with_headers(run: Run, reference: Path, source_dir: Pa
     assert result.stdout == ""
 
 
-@_typer_lacks("license check-dir")
+@FRONT_ENDS
 def test_check_dir_fails_on_missing_header(
     run: Run, reference: Path, source_dir: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -281,7 +273,7 @@ def test_check_dir_fails_on_missing_header(
     assert result.stdout == ""
 
 
-@_typer_lacks("license check-dir")
+@FRONT_ENDS
 def test_check_dir_applies_regex(run: Run, reference: Path, source_dir: Path) -> None:
     (source_dir / "bad.sh").write_text("echo 'no header'\n")
     python_only = run(["license", "check-dir", str(source_dir), "-l", str(reference)])
@@ -291,7 +283,7 @@ def test_check_dir_applies_regex(run: Run, reference: Path, source_dir: Path) ->
     assert shell.exit_code == 1
 
 
-@_typer_lacks("license check-dir")
+@FRONT_ENDS
 def test_check_dir_fails_on_missing_directory(run: Run, reference: Path, tmp_path: Path) -> None:
     result = run(["license", "check-dir", str(tmp_path / "missing"), "-l", str(reference)])
 
