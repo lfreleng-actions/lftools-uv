@@ -26,7 +26,6 @@ from typer.testing import Result as TyperResult
 from lftools_uv import cli
 from lftools_uv.typer_apps.deploy import deploy_app
 
-XFAIL_STAGE = pytest.mark.xfail(strict=True, reason="#1018: deploy nexus-stage logs its staging repository to stderr")
 XFAIL_VOTES = pytest.mark.xfail(strict=True, reason="#1019: infofile check-votes logs the vote to stderr")
 
 NEXUS = "https://nexus.example.org"
@@ -81,7 +80,6 @@ def test_nexus_stage_stages_and_closes(run: Run, m2repo: Path, responses: respon
     ]
 
 
-@XFAIL_STAGE
 @FRONT_ENDS
 def test_nexus_stage_prints_staging_repository_on_stdout(run: Run, m2repo: Path) -> None:
     result = run([NEXUS, PROFILE, str(m2repo)])

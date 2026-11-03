@@ -23,6 +23,7 @@ from lftools_uv.deploy._common import _BANNER_HASHES, _CONTENT_TYPE_XML, log
 from lftools_uv.deploy._http import _request_post, _request_post_file, _request_put_file
 from lftools_uv.deploy._late import _fail
 from lftools_uv.deploy._util import _format_url, _get_filenames_in_zipfile, _get_node_from_xml
+from lftools_uv.output import echo
 
 
 def deploy_nexus_zip(nexus_url: str, nexus_repo: str, nexus_path: str, zip_file: str) -> None:
@@ -354,6 +355,10 @@ def deploy_nexus_stage(nexus_url: str, staging_profile_id: str, deploy_dir: str,
                         nothing to deploy, rather than raise
                         ``FileNotFoundError`` before creating one.
 
+    The two lines naming the staging repository are the command's result and
+    go to stdout, where callers such as global-jjb's maven-stage.sh read the
+    repository ID from "Staging repository <id> created.".
+
     # Sample:
         lftools-uv deploy nexus-stage http://192.168.1.26:8081/nexus 4e6f95cd2344 /tmp/slask
             Deploying Maven artifacts to staging repo...
@@ -367,7 +372,7 @@ def deploy_nexus_stage(nexus_url: str, staging_profile_id: str, deploy_dir: str,
     _require_files(_deploy_file_list(deploy_dir, snapshot=False), deploy_dir, allow_empty)
 
     staging_repo_id: str = nexus_stage_repo_create(nexus_url, staging_profile_id)
-    log.info("Staging repository %s created.", staging_repo_id)
+    echo(f"Staging repository {staging_repo_id} created.")
 
     deploy_nexus_url: str = f"{_format_url(nexus_url)}/service/local/staging/deployByRepositoryId/{staging_repo_id}"
 
@@ -378,4 +383,4 @@ def deploy_nexus_stage(nexus_url: str, staging_profile_id: str, deploy_dir: str,
     deploy_nexus(deploy_nexus_url, deploy_dir, allow_empty=allow_empty)
 
     nexus_stage_repo_close(nexus_url, staging_profile_id, staging_repo_id)
-    log.info("Completed uploading files to %s.", staging_repo_id)
+    echo(f"Completed uploading files to {staging_repo_id}.")
