@@ -336,28 +336,30 @@ def check_votes(ctx, info_file, endpoint, change_number, tsc, github_repo):
         have_not_voted_length = len(have_not_voted)
         have_voted = [item for item in info_committers if item in info_change]
         have_voted_length = len(have_voted)
-        log.info("Number of Committers: %d", len(info_committers))
+        # The vote count and its outcome are the command's result: they go to
+        # stdout, which callers such as global-jjb's check-info-votes.sh keep.
+        echo(f"Number of Committers: {len(info_committers)}")
         committer_length = len(info_committers)
-        log.info("Committers that have voted: %s (%d)", have_voted, have_voted_length)
-        log.info("Committers that have not voted: %s (%d)", have_not_voted, have_not_voted_length)
+        echo(f"Committers that have voted: {have_voted} ({have_voted_length})")
+        echo(f"Committers that have not voted: {have_not_voted} ({have_not_voted_length})")
 
         if have_voted_length == 0:
-            log.warning("No one has voted.")
+            echo("No one has voted.")
             sys.exit(1)
 
         majority = have_voted_length / committer_length if committer_length else 0
         if majority >= 0.5:
-            log.info("Majority committer vote reached")
+            echo("Majority committer vote reached")
             if tsc:
-                log.info("Need majority of TSC")
+                echo("Need majority of TSC")
                 info_file = tsc
                 majority_of_committers += 1
                 if majority_of_committers == 2:
-                    log.info("TSC majority reached - auto merging commit")
+                    echo("TSC majority reached - auto merging commit")
                 else:
                     main(ctx, info_file, endpoint, change_number, tsc, github_repo, majority_of_committers)
         else:
-            log.info("Majority not yet reached")
+            echo("Majority not yet reached")
             sys.exit(1)
 
     majority_of_committers = 0
