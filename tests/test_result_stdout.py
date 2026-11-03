@@ -26,8 +26,6 @@ from typer.testing import Result as TyperResult
 from lftools_uv import cli
 from lftools_uv.typer_apps.deploy import deploy_app
 
-XFAIL_VOTES = pytest.mark.xfail(strict=True, reason="#1019: infofile check-votes logs the vote to stderr")
-
 NEXUS = "https://nexus.example.org"
 STAGING = f"{NEXUS}/service/local/staging"
 PROFILE = "93fb68073c18"
@@ -138,7 +136,6 @@ def test_check_votes_exit_code(
     assert result.exit_code == exit_code, result.output
 
 
-@XFAIL_VOTES
 @VOTES
 def test_check_votes_prints_vote_on_stdout(
     tmp_path: Path, responses: responses_lib.RequestsMock, voters: list[str], exit_code: int, outcome: str
