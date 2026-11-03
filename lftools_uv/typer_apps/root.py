@@ -30,6 +30,7 @@ from lftools_uv.typer_apps.infofile import get_infofile_app
 from lftools_uv.typer_apps.jenkins import jenkins_app
 from lftools_uv.typer_apps.lfidapi import get_lfidapi_app
 from lftools_uv.typer_apps.license import get_license_app
+from lftools_uv.typer_apps.nexus import nexus_app
 from lftools_uv.typer_apps.nexus2 import nexus2_app
 from lftools_uv.typer_apps.nexus3 import nexus3_app
 from lftools_uv.typer_apps.openstack import get_openstack_app
@@ -135,6 +136,7 @@ app.add_typer(deploy_app, name="deploy")
 app.add_typer(github_app, name="github")
 app.add_typer(gerrit_app, name="gerrit")
 app.add_typer(jenkins_app, name="jenkins")
+app.add_typer(nexus_app, name="nexus")
 app.add_typer(nexus2_app, name="nexus2")
 app.add_typer(nexus3_app, name="nexus3")
 app.add_typer(get_openstack_app(), name="openstack")

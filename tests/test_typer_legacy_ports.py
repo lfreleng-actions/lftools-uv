@@ -58,7 +58,7 @@ def release(mocker: MockerFixture) -> MagicMock:
     return mock
 
 
-@_typer_lacks("nexus release")
+@FRONT_ENDS
 @pytest.mark.parametrize("verify", [False, True], ids=["release", "verify-only"])
 def test_nexus_release_passes_repos_and_server(run: Run, release: MagicMock, verify: bool) -> None:
     flag = ["-v"] if verify else []
@@ -68,7 +68,7 @@ def test_nexus_release_passes_repos_and_server(run: Run, release: MagicMock, ver
     release.assert_called_once_with(("repo-1", "repo-2"), verify, NEXUS, max_wait=60)
 
 
-@_typer_lacks("nexus release")
+@FRONT_ENDS
 def test_nexus_release_reads_server_from_environment(
     run: Run, release: MagicMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -92,7 +92,7 @@ def test_nexus_release_rejects_bad_usage(run: Run, release: MagicMock, args: lis
     release.assert_not_called()
 
 
-@_typer_lacks("nexus release")
+@FRONT_ENDS
 def test_nexus_release_keeps_release_exit_code(run: Run, release: MagicMock) -> None:
     release.side_effect = SystemExit(1)
     result = run(["nexus", "release", "-s", NEXUS, "repo-1"])
