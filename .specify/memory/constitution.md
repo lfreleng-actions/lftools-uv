@@ -86,7 +86,7 @@ ranks below the lfreleng-actions organisation guidelines
   see `.pre-commit-config.yaml` and `.github/workflows/` for details.
 - **Testability**: Code MUST be designed for testability — avoid tight
   coupling, support dependency injection where appropriate.
-- **Python Version**: Code MUST support Python >=3.11 and <3.15 as
+- **Python Version**: Code MUST support Python >=3.11 and <3.16 as
   declared in `pyproject.toml`.
 
 **Rationale**: lftools-uv is a collection of CI/CD and release
