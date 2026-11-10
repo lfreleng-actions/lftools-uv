@@ -386,7 +386,7 @@ def test_folder_help_output_has_no_spec_ids(monkeypatch: pytest.MonkeyPatch) -> 
         ["channel", "create", "--help"],
         ["channel", "update", "--help"],
     ):
-        result = runner.invoke(zulip_app, args, env={"COLUMNS": "200", "NO_COLOR": "1", "TERM": "dumb"})
+        result = runner.invoke(zulip_app, args, env={"COLUMNS": "200", "NO_COLOR": "1"})
         assert result.exit_code == 0, result.output
         cleaned = clean_cli_output(result.output)
         assert "--folder" in cleaned or args[0] == "folder"
