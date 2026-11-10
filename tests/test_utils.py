@@ -15,6 +15,12 @@ sequence stripping to handle Rich-formatted output in tests.
 
 import re
 
+# Environment for CliRunner.invoke() calls that render --help at a fixed
+# width. CliRunner inherits every variable it does not name, and Rich
+# pins a forced terminal with TERM=dumb at 80 columns, ignoring COLUMNS,
+# so TERM is removed (a None value unsets it).
+HELP_ENV: dict[str, str | None] = {"COLUMNS": "200", "NO_COLOR": "1", "TERM": None}
+
 
 def strip_ansi_codes(text: str) -> str:
     """Strip ANSI escape sequences from text.

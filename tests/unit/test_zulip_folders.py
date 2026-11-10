@@ -36,7 +36,7 @@ from lftools_uv.api.endpoints.zulip import (
     update_channel_folder,
 )
 from lftools_uv.typer_apps.zulip import zulip_app
-from tests.test_utils import clean_cli_output
+from tests.test_utils import HELP_ENV, clean_cli_output
 
 FOLDERS = [
     {
@@ -386,7 +386,7 @@ def test_folder_help_output_has_no_spec_ids(monkeypatch: pytest.MonkeyPatch) -> 
         ["channel", "create", "--help"],
         ["channel", "update", "--help"],
     ):
-        result = runner.invoke(zulip_app, args, env={"COLUMNS": "200", "NO_COLOR": "1"})
+        result = runner.invoke(zulip_app, args, env=HELP_ENV)
         assert result.exit_code == 0, result.output
         cleaned = clean_cli_output(result.output)
         assert "--folder" in cleaned or args[0] == "folder"
