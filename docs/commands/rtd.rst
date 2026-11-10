@@ -49,6 +49,48 @@ which performs the conversion:
 
 Omit the flag when you already hold a slug.
 
+Exit status
+===========
+
+Shell callers can branch on the exit status instead of matching the
+error message:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Status
+     - Meaning
+   * - ``0``
+     - Success.
+   * - ``1``
+     - Any failure other than a missing resource: a rejected token, a
+       server error, an unreachable endpoint, or an argument the
+       command itself rejects.
+   * - ``2``
+     - Usage error, such as a missing argument or an unknown option.
+   * - ``3``
+     - A read command found no such resource: Read the Docs answered
+       HTTP 404 for the project, version, build or subproject.
+
+The read commands are ``project-details``, ``project-version-list``,
+``project-version-details``, ``project-build-list``,
+``project-build-details``, ``subproject-list`` and
+``subproject-details``. The commands that create, update, delete or
+trigger exit ``1`` on every failure, a missing resource included.
+
+This status does not alter the error message on stderr, so callers that
+still match it keep working.
+
+.. code-block:: bash
+
+   status=0
+   lftools-uv rtd project-details onap-cps --json >/dev/null || status=$?
+   case $status in
+       0) echo "project exists" ;;
+       3) echo "project not found" ;;
+       *) exit "$status" ;;
+   esac
+
 Commands
 ========
 

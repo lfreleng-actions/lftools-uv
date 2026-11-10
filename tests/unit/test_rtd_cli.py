@@ -199,7 +199,7 @@ def test_from_branch_slugifies_version_details() -> None:
 
 
 def test_not_found_exits_non_zero_with_stderr_message() -> None:
-    """A missing project exits 1 and reports the failure as a diagnostic.
+    """A missing project exits 3 and reports the failure as a diagnostic.
 
     Click and Typer split stderr on some versions and mix it into stdout
     on others, so combine both streams before matching, matching the
@@ -209,7 +209,7 @@ def test_not_found_exits_non_zero_with_stderr_message() -> None:
         api.return_value.project_details.side_effect = ReadTheDocsNotFoundError("Project 'nope' not found")
         result = runner.invoke(rtd_app, ["project-details", "nope", "--json"])
 
-    assert result.exit_code == 1
+    assert result.exit_code == 3
     combined = result.output + (getattr(result, "stderr", "") or "")
     assert "not found" in clean_cli_output(combined).lower()
 
@@ -225,7 +225,7 @@ def test_error_keeps_stdout_free_of_diagnostics() -> None:
         api.return_value.project_details.side_effect = ReadTheDocsNotFoundError("Project 'nope' not found")
         result = split_runner.invoke(rtd_app, ["project-details", "nope", "--json"])
 
-    assert result.exit_code == 1
+    assert result.exit_code == 3
     stderr = getattr(result, "stderr", "") or ""
     if stderr:
         # Streams are separated on this Click/Typer version.
@@ -254,7 +254,6 @@ READ_COMMANDS = [
 ]
 
 
-@pytest.mark.xfail(strict=True, reason="not-found exit status not yet implemented")
 @pytest.mark.parametrize(("command", "method", "args"), READ_COMMANDS)
 def test_read_command_not_found_exits_3(command: str, method: str, args: list[str]) -> None:
     """A read command exits 3 on HTTP 404, keeping the message unchanged.
