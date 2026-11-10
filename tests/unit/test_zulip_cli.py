@@ -41,7 +41,7 @@ from lftools_uv.typer_apps.zulip import (
     mutation_result,
     zulip_app,
 )
-from tests.test_utils import clean_cli_output
+from tests.test_utils import HELP_ENV, clean_cli_output
 
 _SPEC_IDENTIFIER_RE = re.compile(r"\b(?:US\d+|FR-\d+|SC-\d+|T\d{3})\b")
 
@@ -961,7 +961,7 @@ def test_group_list_help_renders(monkeypatch: pytest.MonkeyPatch) -> None:
     result = runner.invoke(
         zulip_app,
         ["group", "list", "--help"],
-        env={"COLUMNS": "200", "NO_COLOR": "1"},
+        env=HELP_ENV,
     )
     assert result.exit_code == 0
     cleaned = clean_cli_output(result.stdout)
@@ -1643,7 +1643,7 @@ def test_channel_create_help_renders(monkeypatch: pytest.MonkeyPatch) -> None:
     result = runner.invoke(
         zulip_app,
         ["channel", "create", "--help"],
-        env={"COLUMNS": "200", "NO_COLOR": "1"},
+        env=HELP_ENV,
     )
     assert result.exit_code == 0, result.output
     cleaned = clean_cli_output(result.output)
@@ -1656,6 +1656,27 @@ def test_channel_create_help_renders(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "id:NUM" in cleaned
     assert "--announce" in cleaned
     assert "--topic-policy" in cleaned
+
+
+def test_channel_create_help_ignores_parent_term(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Help renders at ``COLUMNS`` width even when the parent sets ``TERM=dumb``.
+
+    With a forced terminal, Rich pins a dumb terminal at 80 columns and
+    ignores ``COLUMNS``, which truncates long option names.
+    """
+    monkeypatch.setattr(zulip_mod, "zulip_available", lambda: True)
+    monkeypatch.setenv("TERM", "dumb")
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    runner = CliRunner()
+    result = runner.invoke(
+        zulip_app,
+        ["channel", "create", "--help"],
+        env=HELP_ENV,
+    )
+    assert result.exit_code == 0, result.output
+    cleaned = clean_cli_output(result.output)
+    assert "--can-administer-channel-group" in cleaned
+    assert max(len(line) for line in cleaned.splitlines()) > 80
 
 
 # ---------------------------------------------------------------------------
@@ -2819,7 +2840,7 @@ def test_channel_update_help_lists_can_add_subscribers_group(monkeypatch: pytest
     result = runner.invoke(
         zulip_app,
         ["channel", "update", "--help"],
-        env={"COLUMNS": "200", "NO_COLOR": "1"},
+        env=HELP_ENV,
     )
     assert result.exit_code == 0, result.output
     cleaned = clean_cli_output(result.output)
