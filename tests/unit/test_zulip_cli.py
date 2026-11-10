@@ -961,7 +961,7 @@ def test_group_list_help_renders(monkeypatch: pytest.MonkeyPatch) -> None:
     result = runner.invoke(
         zulip_app,
         ["group", "list", "--help"],
-        env={"COLUMNS": "200", "NO_COLOR": "1", "TERM": "dumb"},
+        env={"COLUMNS": "200", "NO_COLOR": "1"},
     )
     assert result.exit_code == 0
     cleaned = clean_cli_output(result.stdout)
@@ -1643,7 +1643,7 @@ def test_channel_create_help_renders(monkeypatch: pytest.MonkeyPatch) -> None:
     result = runner.invoke(
         zulip_app,
         ["channel", "create", "--help"],
-        env={"COLUMNS": "200", "NO_COLOR": "1", "TERM": "dumb"},
+        env={"COLUMNS": "200", "NO_COLOR": "1"},
     )
     assert result.exit_code == 0, result.output
     cleaned = clean_cli_output(result.output)
@@ -2819,7 +2819,7 @@ def test_channel_update_help_lists_can_add_subscribers_group(monkeypatch: pytest
     result = runner.invoke(
         zulip_app,
         ["channel", "update", "--help"],
-        env={"COLUMNS": "200", "NO_COLOR": "1", "TERM": "dumb"},
+        env={"COLUMNS": "200", "NO_COLOR": "1"},
     )
     assert result.exit_code == 0, result.output
     cleaned = clean_cli_output(result.output)
