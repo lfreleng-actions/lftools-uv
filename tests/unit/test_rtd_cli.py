@@ -199,7 +199,7 @@ def test_from_branch_slugifies_version_details() -> None:
 
 
 def test_not_found_exits_non_zero_with_stderr_message() -> None:
-    """A missing project exits 1 and reports the failure as a diagnostic.
+    """A missing project exits 3 and reports the failure as a diagnostic.
 
     Click and Typer split stderr on some versions and mix it into stdout
     on others, so combine both streams before matching, matching the
@@ -209,7 +209,7 @@ def test_not_found_exits_non_zero_with_stderr_message() -> None:
         api.return_value.project_details.side_effect = ReadTheDocsNotFoundError("Project 'nope' not found")
         result = runner.invoke(rtd_app, ["project-details", "nope", "--json"])
 
-    assert result.exit_code == 1
+    assert result.exit_code == 3
     combined = result.output + (getattr(result, "stderr", "") or "")
     assert "not found" in clean_cli_output(combined).lower()
 
@@ -225,7 +225,7 @@ def test_error_keeps_stdout_free_of_diagnostics() -> None:
         api.return_value.project_details.side_effect = ReadTheDocsNotFoundError("Project 'nope' not found")
         result = split_runner.invoke(rtd_app, ["project-details", "nope", "--json"])
 
-    assert result.exit_code == 1
+    assert result.exit_code == 3
     stderr = getattr(result, "stderr", "") or ""
     if stderr:
         # Streams are separated on this Click/Typer version.
@@ -238,6 +238,54 @@ def test_api_error_exits_non_zero() -> None:
     with mock.patch("lftools_uv.typer_apps.rtd.ReadTheDocs") as api:
         api.return_value.project_details.side_effect = ReadTheDocsAPIError("boom", 500)
         result = runner.invoke(rtd_app, ["project-details", "boom"])
+
+    assert result.exit_code == 1
+
+
+#: Read commands, the client method each calls, and its arguments.
+READ_COMMANDS = [
+    ("project-details", "project_details", ["nope"]),
+    ("project-version-list", "project_version_list", ["nope"]),
+    ("project-version-details", "project_version_details", ["nope", "latest"]),
+    ("project-build-list", "project_build_list", ["nope"]),
+    ("project-build-details", "project_build_details", ["nope", "1"]),
+    ("subproject-list", "subproject_list", ["nope"]),
+    ("subproject-details", "subproject_details", ["nope", "child"]),
+]
+
+
+@pytest.mark.parametrize(("command", "method", "args"), READ_COMMANDS)
+def test_read_command_not_found_exits_3(command: str, method: str, args: list[str]) -> None:
+    """A read command exits 3 on HTTP 404, keeping the message unchanged.
+
+    Shell callers test the status instead of matching the message, so
+    it must differ from 1 (other API errors) and 2 (usage).
+    """
+    message = "Project 'nope' not found"
+    with mock.patch("lftools_uv.typer_apps.rtd.ReadTheDocs") as api:
+        getattr(api.return_value, method).side_effect = ReadTheDocsNotFoundError(message)
+        result = runner.invoke(rtd_app, [command, *args])
+
+    assert result.exit_code == 3
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert f"Error: {message}" in clean_cli_output(combined)
+
+
+@pytest.mark.parametrize(("command", "method", "args"), READ_COMMANDS)
+def test_read_command_other_api_error_exits_1(command: str, method: str, args: list[str]) -> None:
+    """Any API error other than 404 still exits 1 on a read command."""
+    with mock.patch("lftools_uv.typer_apps.rtd.ReadTheDocs") as api:
+        getattr(api.return_value, method).side_effect = ReadTheDocsAPIError("denied", 403)
+        result = runner.invoke(rtd_app, [command, *args])
+
+    assert result.exit_code == 1
+
+
+def test_write_command_not_found_still_exits_1() -> None:
+    """Write commands keep exit 1 on HTTP 404; the contract covers reads."""
+    with mock.patch("lftools_uv.typer_apps.rtd.ReadTheDocs") as api:
+        api.return_value.project_version_update.side_effect = ReadTheDocsNotFoundError("Version 'x' not found")
+        result = runner.invoke(rtd_app, ["project-version-update", "nope", "x", "true"])
 
     assert result.exit_code == 1
 

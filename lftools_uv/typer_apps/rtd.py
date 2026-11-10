@@ -13,6 +13,10 @@ Every command accepts ``--json`` and emits a machine-readable payload on
 stdout when asked. Human-oriented output renders as a table. Errors and
 warnings go to stderr so that a caller parsing stdout never has its
 stream corrupted by a diagnostic.
+
+Read commands exit :data:`EXIT_NOT_FOUND` when the project, version,
+build or subproject does not exist, and :data:`EXIT_ERROR` on any other
+failure, so a shell caller can test for absence by status alone.
 """
 
 from __future__ import annotations
@@ -28,6 +32,7 @@ from tabulate import tabulate
 from lftools_uv.api.endpoints.readthedocs import (
     ReadTheDocs,
     ReadTheDocsError,
+    ReadTheDocsNotFoundError,
     version_slug,
 )
 
@@ -35,6 +40,13 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 log = logging.getLogger(__name__)
+
+#: Exit status for any failure other than a missing resource.
+EXIT_ERROR = 1
+
+#: Exit status of a read command when Read the Docs answers HTTP 404.
+#: Kept apart from 1 (other errors) and 2 (usage errors from Click).
+EXIT_NOT_FOUND = 3
 
 rtd_app = typer.Typer(
     name="rtd",
@@ -60,7 +72,20 @@ def handle_rtd_error(exc: ReadTheDocsError) -> typer.Exit:
     Callers should ``raise`` the returned ``typer.Exit`` to abort.
     """
     emit_error(str(exc))
-    return typer.Exit(code=1)
+    return typer.Exit(code=EXIT_ERROR)
+
+
+def handle_rtd_read_error(exc: ReadTheDocsError) -> typer.Exit:
+    """Format an error from a read command and return ``typer.Exit``.
+
+    Exits :data:`EXIT_NOT_FOUND` when the resource does not exist, so a
+    shell caller can test for absence without matching the message, and
+    :data:`EXIT_ERROR` on any other failure.
+    """
+    if isinstance(exc, ReadTheDocsNotFoundError):
+        emit_error(str(exc))
+        return typer.Exit(code=EXIT_NOT_FOUND)
+    return handle_rtd_error(exc)
 
 
 def emit_table(rows: Sequence[Sequence[Any]], headers: Sequence[str]) -> None:
@@ -179,7 +204,7 @@ def project_details(
     try:
         details = _client().project_details(project_slug)
     except ReadTheDocsError as exc:
-        raise handle_rtd_error(exc) from exc
+        raise handle_rtd_read_error(exc) from exc
 
     if _wants_json(ctx, json_output):
         emit_json(details)
@@ -284,7 +309,7 @@ def project_version_list(
     try:
         versions = _client().project_version_list(project_slug)
     except ReadTheDocsError as exc:
-        raise handle_rtd_error(exc) from exc
+        raise handle_rtd_read_error(exc) from exc
 
     if _wants_json(ctx, json_output):
         emit_json({"project": project_slug, "versions": versions})
@@ -322,7 +347,7 @@ def project_version_details(
         target = version_slug(version_slug_arg) if from_branch else version_slug_arg
         details = _client().project_version_details(project_slug, target)
     except ReadTheDocsError as exc:
-        raise handle_rtd_error(exc) from exc
+        raise handle_rtd_read_error(exc) from exc
 
     if _wants_json(ctx, json_output):
         emit_json(details)
@@ -391,7 +416,7 @@ def project_build_list(
     try:
         builds = _client().project_build_list(project_slug)
     except ReadTheDocsError as exc:
-        raise handle_rtd_error(exc) from exc
+        raise handle_rtd_read_error(exc) from exc
 
     if _wants_json(ctx, json_output):
         emit_json({"project": project_slug, "count": len(builds), "builds": builds})
@@ -427,7 +452,7 @@ def project_build_details(
     try:
         details = _client().project_build_details(project_slug, build_id)
     except ReadTheDocsError as exc:
-        raise handle_rtd_error(exc) from exc
+        raise handle_rtd_read_error(exc) from exc
 
     if _wants_json(ctx, json_output):
         emit_json(details)
@@ -490,7 +515,7 @@ def subproject_list(
     try:
         subprojects = _client().subproject_list(project_slug)
     except ReadTheDocsError as exc:
-        raise handle_rtd_error(exc) from exc
+        raise handle_rtd_read_error(exc) from exc
 
     if _wants_json(ctx, json_output):
         emit_json({"project": project_slug, "subprojects": subprojects})
@@ -517,7 +542,7 @@ def subproject_details(
     try:
         details = _client().subproject_details(project_slug, subproject_slug)
     except ReadTheDocsError as exc:
-        raise handle_rtd_error(exc) from exc
+        raise handle_rtd_read_error(exc) from exc
 
     if _wants_json(ctx, json_output):
         emit_json(details)
