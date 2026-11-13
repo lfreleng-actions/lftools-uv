@@ -83,6 +83,23 @@ def cluster_list() -> None:
     os_cluster.list_clusters(state.os_cloud)
 
 
+@cluster_app.command("remove")
+def cluster_remove(
+    cluster_name: str = typer.Argument(..., help="Name or UUID of cluster to remove."),
+    minutes: int = typer.Option(0, "--minutes", help="Only remove clusters older than this many minutes."),
+) -> None:
+    """Remove a COE cluster."""
+    os_cluster.remove(state.os_cloud, cluster_name, minutes=minutes)
+
+
+@cluster_app.command("show")
+def cluster_show(
+    cluster_name: str = typer.Argument(..., help="Name or UUID of cluster to show."),
+) -> None:
+    """Show details of a COE cluster."""
+    os_cluster.show(state.os_cloud, cluster_name)
+
+
 # Image commands
 @image_app.command("cleanup")
 def image_cleanup(

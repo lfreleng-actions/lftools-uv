@@ -632,7 +632,6 @@ def test_cluster_list_calls_library(run):
     mock_list.assert_called_once_with("test-cloud")
 
 
-@pytest.mark.xfail(strict=True, reason="Cluster remove is not yet implemented")
 @pytest.mark.parametrize("created_at", ["2020-01-01T00:00:00Z", "2020-01-01T00:00:00.123456"])
 @pytest.mark.parametrize("minutes", [0, 15])
 @patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
@@ -656,7 +655,6 @@ def test_cluster_remove(mock_from_config: MagicMock, created_at: str, minutes: i
     cloud.delete_coe_cluster.assert_called_once_with("cluster-uuid")
 
 
-@pytest.mark.xfail(strict=True, reason="Cluster remove is not yet implemented")
 @pytest.mark.parametrize("age", [5, 15, 16])
 @patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
 def test_cluster_remove_age_limit(mock_from_config: MagicMock, age: int) -> None:
@@ -676,7 +674,6 @@ def test_cluster_remove_age_limit(mock_from_config: MagicMock, age: int) -> None
         cloud.delete_coe_cluster.assert_called_once_with(cloud.get_coe_cluster.return_value.uuid)
 
 
-@pytest.mark.xfail(strict=True, reason="Cluster commands are not yet implemented")
 @pytest.mark.parametrize("command", ["remove", "show"])
 @patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
 def test_cluster_missing(mock_from_config: MagicMock, command: str, caplog: pytest.LogCaptureFixture) -> None:
@@ -692,7 +689,6 @@ def test_cluster_missing(mock_from_config: MagicMock, command: str, caplog: pyte
     cloud.pprint.assert_not_called()
 
 
-@pytest.mark.xfail(strict=True, reason="Cluster remove is not yet implemented")
 @pytest.mark.parametrize("raises", [False, True])
 @patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
 def test_cluster_remove_failure(mock_from_config: MagicMock, raises: bool, caplog: pytest.LogCaptureFixture) -> None:
@@ -712,7 +708,6 @@ def test_cluster_remove_failure(mock_from_config: MagicMock, raises: bool, caplo
     cloud.delete_coe_cluster.assert_called_once_with(cloud.get_coe_cluster.return_value.uuid)
 
 
-@pytest.mark.xfail(strict=True, reason="Cluster remove is not yet implemented")
 @patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
 def test_cluster_remove_invalid_timestamp(mock_from_config: MagicMock, caplog: pytest.LogCaptureFixture) -> None:
     """An invalid creation timestamp fails safely without deletion."""
@@ -726,7 +721,6 @@ def test_cluster_remove_invalid_timestamp(mock_from_config: MagicMock, caplog: p
     cloud.delete_coe_cluster.assert_not_called()
 
 
-@pytest.mark.xfail(strict=True, reason="Cluster show is not yet implemented")
 @patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
 def test_cluster_show(mock_from_config: MagicMock) -> None:
     """Show uses the SDK pretty printer for the requested name or UUID."""
