@@ -671,6 +671,7 @@ def test_cluster_remove_without_age_limit_ignores_invalid_timestamp(
     result = _run_typer(["cluster", "remove", "test-cluster"])
 
     assert result.exit_code == 0, result.output
+    cloud.get_coe_cluster.assert_called_once_with("test-cluster")
     cloud.delete_coe_cluster.assert_called_once_with("cluster-uuid")
 
 
