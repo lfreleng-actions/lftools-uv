@@ -17,6 +17,7 @@ import json
 import logging
 import sys
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 # aislop-ignore-file hallucinated-import -- the declared openstacksdk dependency provides the `openstack` import package
@@ -151,6 +152,59 @@ def list_clusters(os_cloud: str) -> None:
     except AttributeError:
         # Fallback if list_coe_clusters is not available
         log.error("COE cluster operations not supported by this OpenStack SDK version")
+        log.error("Please ensure openstacksdk >= 4.0.0 is installed")
+        sys.exit(1)
+
+
+def remove(os_cloud: str, cluster_name: str, minutes: int = 0) -> None:
+    """Remove a COE cluster by name or UUID, only if older than ``minutes``."""
+    cloud = openstack.connection.from_config(cloud=os_cloud)
+    try:
+        cluster = cloud.get_coe_cluster(cluster_name)
+        if not cluster:
+            log.error("Cluster not found.")
+            sys.exit(1)
+
+        if minutes > 0:
+            try:
+                created_time = datetime.fromisoformat(cluster.created_at)
+            except (ValueError, TypeError) as e:
+                log.error("Unable to parse cluster creation time: %s", e)
+                sys.exit(1)
+            if created_time.tzinfo is None:
+                created_time = created_time.replace(tzinfo=UTC)
+
+            if created_time >= datetime.now(UTC) - timedelta(minutes=minutes):
+                log.warning('Cluster "%s" is not older than %d minutes.', cluster.name, minutes)
+                return
+
+        if not cloud.delete_coe_cluster(cluster.uuid):
+            log.error("Failed to delete cluster %s.", cluster_name)
+            sys.exit(1)
+        log.info('Deleted cluster "%s".', cluster.name)
+    except OpenStackCloudException as e:
+        log.error("Failed to delete cluster %s: %s", cluster_name, e)
+        sys.exit(1)
+    except AttributeError as e:
+        log.error("COE cluster operations not supported by this OpenStack SDK version: %s", e)
+        log.error("Please ensure openstacksdk >= 4.0.0 is installed")
+        sys.exit(1)
+
+
+def show(os_cloud: str, cluster_name: str) -> None:
+    """Show details of a COE cluster by name or UUID."""
+    cloud = openstack.connection.from_config(cloud=os_cloud)
+    try:
+        cluster = cloud.get_coe_cluster(cluster_name)
+        if not cluster:
+            log.error("Cluster not found.")
+            sys.exit(1)
+        cloud.pprint(cluster)
+    except OpenStackCloudException as e:
+        log.error("Failed to show cluster %s: %s", cluster_name, e)
+        sys.exit(1)
+    except AttributeError as e:
+        log.error("COE cluster operations not supported by this OpenStack SDK version: %s", e)
         log.error("Please ensure openstacksdk >= 4.0.0 is installed")
         sys.exit(1)
 

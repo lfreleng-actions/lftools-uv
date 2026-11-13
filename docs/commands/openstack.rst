@@ -73,6 +73,24 @@ List all COE clusters on the specified cloud with their current status.
 
 .. program-output:: lftools-uv openstack --os-cloud docs cluster list --help
 
+remove
+^^^^^^
+
+Remove a single COE cluster by name or UUID. The optional ``--minutes``
+filter skips clusters that are not older than the specified number of
+minutes; the default of 0 removes the cluster without an age limit.
+Missing clusters and failed deletions exit non-zero.
+
+.. program-output:: lftools-uv openstack --os-cloud docs cluster remove --help
+
+show
+^^^^
+
+Show details of a single COE cluster by name or UUID. Missing clusters
+exit non-zero.
+
+.. program-output:: lftools-uv openstack --os-cloud docs cluster show --help
+
 object
 ------
 

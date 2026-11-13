@@ -10,6 +10,7 @@
 """Test OpenStack cluster operations."""
 
 import logging
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -629,3 +630,128 @@ def test_cluster_list_calls_library(run):
 
     assert result.exit_code == 0, result.output
     mock_list.assert_called_once_with("test-cloud")
+
+
+@pytest.mark.parametrize("created_at", ["2020-01-01T00:00:00Z", "2020-01-01T00:00:00.123456"])
+@pytest.mark.parametrize("minutes", [0, 15])
+@patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
+def test_cluster_remove(mock_from_config: MagicMock, created_at: str, minutes: int) -> None:
+    """Remove a named cluster by UUID, with or without an age limit."""
+    cloud = mock_from_config.return_value
+    cluster = cloud.get_coe_cluster.return_value
+    cluster.name = "test-cluster"
+    cluster.uuid = "cluster-uuid"
+    cluster.created_at = created_at
+    cloud.delete_coe_cluster.return_value = True
+    args = ["cluster", "remove", "test-cluster"]
+    if minutes:
+        args.extend(["--minutes", str(minutes)])
+
+    result = _run_typer(args)
+
+    assert result.exit_code == 0, result.output
+    mock_from_config.assert_called_once_with(cloud="test-cloud")
+    cloud.get_coe_cluster.assert_called_once_with("test-cluster")
+    cloud.delete_coe_cluster.assert_called_once_with("cluster-uuid")
+
+
+@pytest.mark.parametrize("created_at", [None, "invalid"])
+@patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
+def test_cluster_remove_without_age_limit_ignores_invalid_timestamp(
+    mock_from_config: MagicMock, created_at: str | None
+) -> None:
+    """Remove a cluster without requiring valid creation-time metadata."""
+    cloud = mock_from_config.return_value
+    cluster = cloud.get_coe_cluster.return_value
+    cluster.name = "test-cluster"
+    cluster.uuid = "cluster-uuid"
+    cluster.created_at = created_at
+    cloud.delete_coe_cluster.return_value = True
+
+    result = _run_typer(["cluster", "remove", "test-cluster"])
+
+    assert result.exit_code == 0, result.output
+    cloud.get_coe_cluster.assert_called_once_with("test-cluster")
+    cloud.delete_coe_cluster.assert_called_once_with("cluster-uuid")
+
+
+@pytest.mark.parametrize("age", [5, 15, 16])
+@patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
+def test_cluster_remove_age_limit(mock_from_config: MagicMock, age: int) -> None:
+    """Only clusters strictly older than the UTC cutoff are deleted."""
+    cloud = mock_from_config.return_value
+    now = datetime(2026, 11, 13, tzinfo=UTC)
+    cloud.get_coe_cluster.return_value.created_at = (now - timedelta(minutes=age)).isoformat()
+    cloud.delete_coe_cluster.return_value = True
+    with patch("lftools_uv.openstack.cluster.datetime", wraps=datetime) as mock_datetime:
+        mock_datetime.now.return_value = now
+        result = _run_typer(["cluster", "remove", "--minutes", "15", "test-cluster"])
+
+    assert result.exit_code == 0, result.output
+    if age <= 15:
+        cloud.delete_coe_cluster.assert_not_called()
+    else:
+        cloud.delete_coe_cluster.assert_called_once_with(cloud.get_coe_cluster.return_value.uuid)
+
+
+@pytest.mark.parametrize("command", ["remove", "show"])
+@patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
+def test_cluster_missing(mock_from_config: MagicMock, command: str, caplog: pytest.LogCaptureFixture) -> None:
+    """A missing cluster fails without deleting or printing anything."""
+    cloud = mock_from_config.return_value
+    cloud.get_coe_cluster.return_value = None
+
+    result = _run_typer(["cluster", command, "missing-cluster"])
+
+    assert result.exit_code == 1
+    assert "Cluster not found" in caplog.text
+    cloud.delete_coe_cluster.assert_not_called()
+    cloud.pprint.assert_not_called()
+
+
+@pytest.mark.parametrize("raises", [False, True])
+@patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
+def test_cluster_remove_failure(mock_from_config: MagicMock, raises: bool, caplog: pytest.LogCaptureFixture) -> None:
+    """Both a false deletion result and an SDK exception exit non-zero."""
+    from openstack.cloud.exc import OpenStackCloudException
+
+    cloud = mock_from_config.return_value
+    cloud.get_coe_cluster.return_value.created_at = "2020-01-01T00:00:00Z"
+    cloud.delete_coe_cluster.return_value = False
+    if raises:
+        cloud.delete_coe_cluster.side_effect = OpenStackCloudException("Delete failed")
+
+    result = _run_typer(["cluster", "remove", "test-cluster"])
+
+    assert result.exit_code == 1
+    assert "Failed to delete cluster" in caplog.text
+    cloud.delete_coe_cluster.assert_called_once_with(cloud.get_coe_cluster.return_value.uuid)
+
+
+@patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
+def test_cluster_remove_invalid_timestamp(mock_from_config: MagicMock, caplog: pytest.LogCaptureFixture) -> None:
+    """An invalid creation timestamp fails safely without deletion."""
+    cloud = mock_from_config.return_value
+    cloud.get_coe_cluster.return_value.created_at = "invalid"
+
+    result = _run_typer(["cluster", "remove", "--minutes", "15", "test-cluster"])
+
+    assert result.exit_code == 1
+    assert "Unable to parse cluster creation time" in caplog.text
+    cloud.delete_coe_cluster.assert_not_called()
+
+
+@patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
+def test_cluster_show(mock_from_config: MagicMock) -> None:
+    """Show uses the SDK pretty printer for the requested name or UUID."""
+    cloud = mock_from_config.return_value
+    cloud.pprint.side_effect = lambda cluster: print(f"Cluster: {cluster.name}")
+    cloud.get_coe_cluster.return_value.name = "test-cluster"
+
+    result = _run_typer(["cluster", "show", "cluster-uuid"])
+
+    assert result.exit_code == 0, result.output
+    assert "Cluster: test-cluster" in result.output
+    mock_from_config.assert_called_once_with(cloud="test-cloud")
+    cloud.get_coe_cluster.assert_called_once_with("cluster-uuid")
+    cloud.pprint.assert_called_once_with(cloud.get_coe_cluster.return_value)
