@@ -165,17 +165,18 @@ def remove(os_cloud: str, cluster_name: str, minutes: int = 0) -> None:
             log.error("Cluster not found.")
             sys.exit(1)
 
-        try:
-            created_time = datetime.fromisoformat(cluster.created_at)
-        except (ValueError, TypeError) as e:
-            log.error("Unable to parse cluster creation time: %s", e)
-            sys.exit(1)
-        if created_time.tzinfo is None:
-            created_time = created_time.replace(tzinfo=UTC)
+        if minutes > 0:
+            try:
+                created_time = datetime.fromisoformat(cluster.created_at)
+            except (ValueError, TypeError) as e:
+                log.error("Unable to parse cluster creation time: %s", e)
+                sys.exit(1)
+            if created_time.tzinfo is None:
+                created_time = created_time.replace(tzinfo=UTC)
 
-        if minutes > 0 and created_time >= datetime.now(UTC) - timedelta(minutes=minutes):
-            log.warning('Cluster "%s" is not older than %d minutes.', cluster.name, minutes)
-            return
+            if created_time >= datetime.now(UTC) - timedelta(minutes=minutes):
+                log.warning('Cluster "%s" is not older than %d minutes.', cluster.name, minutes)
+                return
 
         if not cloud.delete_coe_cluster(cluster.uuid):
             log.error("Failed to delete cluster %s.", cluster_name)

@@ -655,6 +655,25 @@ def test_cluster_remove(mock_from_config: MagicMock, created_at: str, minutes: i
     cloud.delete_coe_cluster.assert_called_once_with("cluster-uuid")
 
 
+@pytest.mark.parametrize("created_at", [None, "invalid"])
+@patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
+def test_cluster_remove_without_age_limit_ignores_invalid_timestamp(
+    mock_from_config: MagicMock, created_at: str | None
+) -> None:
+    """Remove a cluster without requiring valid creation-time metadata."""
+    cloud = mock_from_config.return_value
+    cluster = cloud.get_coe_cluster.return_value
+    cluster.name = "test-cluster"
+    cluster.uuid = "cluster-uuid"
+    cluster.created_at = created_at
+    cloud.delete_coe_cluster.return_value = True
+
+    result = _run_typer(["cluster", "remove", "test-cluster"])
+
+    assert result.exit_code == 0, result.output
+    cloud.delete_coe_cluster.assert_called_once_with("cluster-uuid")
+
+
 @pytest.mark.parametrize("age", [5, 15, 16])
 @patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
 def test_cluster_remove_age_limit(mock_from_config: MagicMock, age: int) -> None:
