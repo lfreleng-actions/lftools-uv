@@ -5,15 +5,21 @@
 ---
 # vim: sw=2 ts=2 sts=2 et :
 base_groupId: 'org.example'
+# email domain that the generated deployment user emails use
+email_domain: 'example.org'
+# Each repository gets a deployment user of the same name with the password
+# given here. Fill every password in a private copy of this file readable
+# only by you (chmod 600); lftools-uv checks the whole tree and refuses to
+# provision anything while one is empty or a placeholder.
 repositories:
   foo:
-    password: 'foo user pass'
+    password: ''
     repositories:
       bar:
-        password: 'foo-bar user pass'
+        password: ''
         repositories:
           baz:
-            password: 'foo-bar-baz user pass'
+            password: ''
             extra_privs:
               # extra roles that should be assigned to the user
               # These need to be the full display name and not the roleId

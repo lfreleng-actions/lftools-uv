@@ -32,6 +32,90 @@ log = logging.getLogger(__name__)
 
 _RELEASE_REQUEST_TIMEOUT = 60  # seconds
 
+# Template markers a user may leave in a copied example: ${VAR}, $VAR (upper
+# case, as environment variables are named) and <text>.
+# Nothing here expands them, so sending one to Nexus would set it as a password.
+# A ${...} anywhere in a value, as in deploy-${VAR}, is a template; $VAR and
+# <text> count only as the whole value, since a generated password may hold
+# a dollar or angle bracket followed by other characters.
+_EMBEDDED_PLACEHOLDER = re.compile(r"\$\{[^}]*\}")
+_WHOLE_PLACEHOLDER = re.compile(r"\$[A-Z_][A-Z0-9_]*|<[^>]*>")
+
+
+def _credential_problem(value: object) -> str | None:
+    """Describe why a credential value is unusable, without quoting it."""
+    if value is None:
+        return "is empty"
+    # YAML reads unquoted false, 123, [] or {} as non-strings; Nexus would
+    # receive them as given, so refuse anything that is not text.
+    if not isinstance(value, str):
+        return "is not a string; quote it in the YAML file"
+    if not value.strip():
+        return "is empty"
+    if _EMBEDDED_PLACEHOLDER.search(value) or _WHOLE_PLACEHOLDER.fullmatch(value.strip()):
+        return "is an unresolved placeholder"
+    return None
+
+
+def _require_admin_settings(settings: object, settings_file: str) -> dict[str, Any]:
+    """Exit unless the settings file holds a Nexus URL and usable admin credentials."""
+    if not isinstance(settings, dict):
+        log.error(f"{settings_file} must contain a mapping of settings")
+        sys.exit(1)
+    for setting in ["nexus", "user", "password"]:
+        if setting not in settings:
+            log.error(f"{setting} needs to be defined in {settings_file}")
+            sys.exit(1)
+    for setting in ["user", "password"]:
+        problem = _credential_problem(settings[setting])
+        if problem:
+            log.error(f"{setting} in {settings_file} {problem}; set it in a private copy of the file")
+            sys.exit(1)
+    return cast(dict[str, Any], settings)
+
+
+def _repo_password_problems(repositories: object, parent: str = "") -> list[str]:
+    """List every repository in the tree whose password cannot be used."""
+    if not isinstance(repositories, dict):
+        return [f"repositories under {parent or 'the top level'} must be a mapping"]
+    problems: list[str] = []
+    for name, repo in repositories.items():
+        path = f"{parent}/{name}" if parent else str(name)
+        if not isinstance(repo, dict):
+            problems.append(f"repository {path} must be a mapping")
+            continue
+        problem = _credential_problem(repo.get("password"))
+        if problem:
+            problems.append(f"password for repository {path} {problem}")
+        if "repositories" in repo:
+            problems.extend(_repo_password_problems(repo["repositories"], path))
+    return problems
+
+
+def _require_repo_passwords(repositories: object, config_file: str) -> None:
+    """Exit, naming each offending repository, unless every password is usable.
+
+    The whole tree is checked before anything is provisioned, so a bad password
+    on a later repository cannot leave the ones before it half created.
+    """
+    problems = _repo_password_problems(repositories)
+    for problem in problems:
+        log.error(f"{problem} in {config_file}")
+    if problems:
+        sys.exit(1)
+
+
+def _ini_admin_credentials(url: str) -> tuple[str, str]:
+    """Return the lftools.ini username and password for a Nexus URL, or exit."""
+    section = url.replace("https://", "")
+    credentials = (config.get_setting(section, "username"), config.get_setting(section, "password"))
+    for setting, value in zip(("username", "password"), credentials, strict=True):
+        problem = _credential_problem(value)
+        if problem:
+            log.error(f"{setting} for {section} in lftools.ini {problem}")
+            sys.exit(1)
+    return credentials
+
 
 def get_credentials(settings_file: str | None, url: str | None = None) -> dict[str, str]:
     """Return credentials for Nexus instantiation."""
@@ -86,12 +170,7 @@ def reorder_staged_repos(settings_file: str) -> None:
     Nexus where it is not doing this like it should be.
     """
     with open(settings_file) as f:
-        settings = yaml.safe_load(f)
-
-    for setting in ["nexus", "user", "password"]:
-        if setting not in settings:
-            log.error(f"{setting} needs to be defined")
-            sys.exit(1)
+        settings = _require_admin_settings(yaml.safe_load(f), settings_file)
 
     _nexus = Nexus(settings["nexus"], settings["user"], settings["password"])
 
@@ -127,21 +206,8 @@ def create_repos(config_file: str, settings_file: str | None, url: str) -> None:
     :arg str url: url in the format https:// user nad password will be taken from lftools-uv
     if url is provided.
     """
-    username: str = ""
-    password: str = ""
-    if not settings_file:
-        from lftools_uv import config
-
-        settings_url = url.replace("https://", "")
-        password = config.get_setting(settings_url, "password")
-        username = config.get_setting(settings_url, "username")
-
     with open(config_file) as f:
         repo_config = yaml.safe_load(f)
-    settings: dict[str, Any] = {}
-    if settings_file:
-        with open(settings_file) as f:
-            settings = yaml.safe_load(f)
 
     for setting in ["email_domain", "base_groupId", "repositories"]:
         if setting not in repo_config:
@@ -149,15 +215,16 @@ def create_repos(config_file: str, settings_file: str | None, url: str) -> None:
             sys.exit(1)
 
     if settings_file:
-        for setting in ["nexus", "user", "password"]:
-            if setting not in settings:
-                log.error(f"{setting} needs to be defined in {settings_file}")
-                sys.exit(1)
-
-    if settings_file:
-        _nexus = Nexus(settings["nexus"], settings["user"], settings["password"])
+        with open(settings_file) as f:
+            settings = _require_admin_settings(yaml.safe_load(f), settings_file)
+        nexus_url, username, password = settings["nexus"], settings["user"], settings["password"]
     else:
-        _nexus = Nexus(url, username, password)
+        nexus_url = url
+        username, password = _ini_admin_credentials(url)
+
+    _require_repo_passwords(repo_config["repositories"], config_file)
+
+    _nexus = Nexus(nexus_url, username, password)
 
     def create_nexus_perms(
         name: str, targets: list[str], email: str, password: str, extra_privs: list[str] | None = None
@@ -262,12 +329,7 @@ def create_roles(config_file: str, settings_file: str) -> None:
         role_config = yaml.safe_load(f)
 
     with open(settings_file) as f:
-        settings = yaml.safe_load(f)
-
-    for setting in ["nexus", "user", "password"]:
-        if setting not in settings:
-            log.error(f"{setting} needs to be defined in {settings_file}")
-            sys.exit(1)
+        settings = _require_admin_settings(yaml.safe_load(f), settings_file)
 
     _nexus = Nexus(settings["nexus"], settings["user"], settings["password"])
 

@@ -93,7 +93,6 @@ def _assert_no_secret_logged(caplog: pytest.LogCaptureFixture, value: Any) -> No
         assert value not in caplog.text
 
 
-@pytest.mark.xfail(strict=True, reason="Nexus credential validation not yet implemented")
 def test_create_repos_rejects_shipped_examples(tmp_path, nexus_client, caplog):
     """The shipped examples must not provision anything as they stand."""
     shutil.copy(EXAMPLE_DIR / "settings.example.yaml", tmp_path / "settings.yaml")
@@ -109,7 +108,6 @@ def test_create_repos_rejects_shipped_examples(tmp_path, nexus_client, caplog):
     assert "password" in caplog.text
 
 
-@pytest.mark.xfail(strict=True, reason="Nexus credential validation not yet implemented")
 @pytest.mark.parametrize("password", UNUSABLE_PASSWORDS)
 def test_create_repos_rejects_unusable_admin_password(tmp_path, nexus_client, caplog, password):
     """An unusable administrator password fails before the client exists."""
@@ -124,7 +122,6 @@ def test_create_repos_rejects_unusable_admin_password(tmp_path, nexus_client, ca
     _assert_no_secret_logged(caplog, password)
 
 
-@pytest.mark.xfail(strict=True, reason="Nexus credential validation not yet implemented")
 @pytest.mark.parametrize("password", UNUSABLE_PASSWORDS)
 def test_create_repos_rejects_unusable_nested_password(tmp_path, nexus_client, caplog, password):
     """An unusable password on a grandchild stops the whole tree up front."""
@@ -141,7 +138,6 @@ def test_create_repos_rejects_unusable_nested_password(tmp_path, nexus_client, c
     _assert_no_secret_logged(caplog, password)
 
 
-@pytest.mark.xfail(strict=True, reason="Nexus credential validation not yet implemented")
 def test_create_repos_rejects_missing_nested_password(tmp_path, nexus_client, caplog):
     """A repository without any password key is reported by its path."""
     config = yaml.safe_load(Path(_repo_config(tmp_path)).read_text())
@@ -156,7 +152,6 @@ def test_create_repos_rejects_missing_nested_password(tmp_path, nexus_client, ca
     assert "foo/bar" in caplog.text
 
 
-@pytest.mark.xfail(strict=True, reason="Nexus credential validation not yet implemented")
 def test_create_repos_rejects_unusable_ini_password(tmp_path, nexus_client, mocker):
     """Credentials read from lftools.ini get the same check as settings.yaml."""
     mocker.patch(
@@ -170,7 +165,6 @@ def test_create_repos_rejects_unusable_ini_password(tmp_path, nexus_client, mock
     nexus_client.assert_not_called()
 
 
-@pytest.mark.xfail(strict=True, reason="Nexus credential validation not yet implemented")
 @pytest.mark.parametrize("password", UNUSABLE_PASSWORDS)
 def test_create_roles_rejects_unusable_admin_password(tmp_path, nexus_client, password):
     """Role creation needs a usable administrator password too."""
@@ -183,7 +177,6 @@ def test_create_roles_rejects_unusable_admin_password(tmp_path, nexus_client, pa
     nexus_client.assert_not_called()
 
 
-@pytest.mark.xfail(strict=True, reason="Nexus credential validation not yet implemented")
 @pytest.mark.parametrize("password", UNUSABLE_PASSWORDS)
 def test_reorder_staged_repos_rejects_unusable_admin_password(tmp_path, nexus_client, password):
     """Reordering the staging group needs a usable administrator password."""
@@ -225,7 +218,6 @@ def test_search_stays_anonymous(tmp_path, nexus_client):
     nexus_client.assert_called_once_with("https://nexus.example.org")
 
 
-@pytest.mark.xfail(strict=True, reason="Example passwords not yet removed")
 def test_example_files_carry_no_password_values():
     """The examples document the shape, never a copyable password."""
 

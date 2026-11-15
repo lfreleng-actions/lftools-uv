@@ -33,6 +33,23 @@ repo
 
 For details and examples, please see the nexus2 documentation.
 
+``etc/nexus/settings.example.yaml`` and ``etc/nexus/repo-config.example.yaml``
+show the shape of the two files. They ship with empty passwords: copy them
+somewhere private, restrict the copies to your own account
+(``chmod 600 settings.yaml repo-config.yaml``) and fill in the administrator
+password and one password per repository there. Do not commit the copies.
+
+Before contacting Nexus, the command checks the administrator credentials and
+every repository password in the tree, nested ones included. If any is
+missing, empty, still a placeholder such as ``${NEXUS_PASSWORD}`` or
+``<password>``, holds a ``${...}`` placeholder anywhere, as in
+``deploy-${NEXUS_PASSWORD}``, or is not a string (YAML reads an unquoted ``false`` or ``12345``
+as another type, so quote such values), it names the setting or repository
+path, provisions nothing and exits non-zero. The command does not expand
+placeholders, so fill in real values. ``nexus create role`` and
+``nexus reorder-staged-repos`` apply the same check to the administrator
+credentials in their settings file.
+
 .. _nexus-role:
 
 role
