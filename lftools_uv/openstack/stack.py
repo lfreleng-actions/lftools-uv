@@ -16,9 +16,12 @@ __author__ = "Thanh Ha"
 
 import json
 import logging
+import os
+import re
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import UTC, datetime
 from typing import Any
@@ -36,15 +39,57 @@ from lftools_uv.output import echo
 
 log = logging.getLogger(__name__)
 
-# Vexxhost publishes per-flavour pricing used by the `stack cost` command.
-# Format arguments are the flavour name and the elapsed run time in seconds.
-_PRICING_API_URL = "https://pricing.vexxhost.net/v1/pricing/%s/cost?seconds=%d"
+# Environment variable that overrides the pricing endpoint `stack cost` uses.
+PRICING_URL_ENV = "LFTOOLS_STACK_PRICING_URL"
 
 # Jenkins lists a running build only to a client allowed to read its job, so
 # the build list can come back short without raising. Stacks younger than the
 # longest build-timeout are therefore never safe to reap on the strength of
 # that list alone.
 STALE_MIN_AGE_HOURS = 24
+
+
+def pricing_url_template() -> str:
+    """Return the per-flavour pricing URL template for `stack cost`.
+
+    Vexxhost's pricing API is the default; a non-empty PRICING_URL_ENV
+    overrides it. The template takes the flavour name (%s) and the elapsed
+    run time in seconds (%d), in that order, must use HTTPS, and must hold
+    only printable ASCII characters other than space. Any other percent sign
+    must be doubled, so a %20 escape is written %%20.
+
+    Raises:
+        ValueError: The override is not a usable template.
+    """
+    template = (
+        os.environ.get(PRICING_URL_ENV, "").strip() or "https://pricing.vexxhost.net/v1/pricing/%s/cost?seconds=%d"
+    )
+    # urllib refuses spaces, control and non-ASCII characters at request time,
+    # which the per-server fallback would report as a zero cost.
+    if not all("!" <= char <= "~" for char in template):
+        raise ValueError(
+            f"{PRICING_URL_ENV} must not contain spaces, control or non-ASCII characters; percent-encode them"
+        )
+    # Allow only %s, %d and %%, so that a lone percent escape such as %20 is
+    # reported here rather than read as a %-format conversion.
+    conversions = [token for token in re.findall(r"%(.?)", template) if token != "%"]
+    if conversions != ["s", "d"]:
+        raise ValueError(
+            f"{PRICING_URL_ENV} must contain a %s for the flavour followed by a %d for the seconds,"
+            " and write any other percent sign as %%, so %20 becomes %%20"
+        )
+    sample = template % ("flavor", 3600.5)
+    parts = urllib.parse.urlsplit(sample)
+    if parts.scheme != "https" or not parts.hostname:
+        raise ValueError(f"{PRICING_URL_ENV} must be an https:// URL with a host")
+    try:
+        # urlsplit parses the port lazily, so a malformed one surfaces only here.
+        port_ok = parts.port != 0
+    except ValueError:
+        port_ok = False
+    if not port_ok:
+        raise ValueError(f"{PRICING_URL_ENV} has an invalid port")
+    return template
 
 
 def create(
@@ -115,7 +160,7 @@ def cost(os_cloud: str, stack_name: str, timeout: int = 60) -> None:
     def get_server_cost(server_id: str) -> float:
         try:
             flavor, seconds = get_server_info(server_id)
-            with urllib.request.urlopen(_PRICING_API_URL % (flavor, seconds), timeout=timeout) as response:  # nosec
+            with urllib.request.urlopen(pricing_url % (flavor, seconds), timeout=timeout) as response:  # nosec
                 data = json.loads(response.read())
             return float(data["cost"])
         except (TimeoutError, urllib.error.URLError) as e:
@@ -159,6 +204,12 @@ def cost(os_cloud: str, stack_name: str, timeout: int = 60) -> None:
                 continue
             resources.append(r)
         return resources
+
+    try:
+        pricing_url = pricing_url_template()
+    except ValueError as e:
+        log.error("%s", e)
+        sys.exit(1)
 
     cloud = openstack.connect(os_cloud)
 

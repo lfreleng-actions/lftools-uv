@@ -9,9 +9,11 @@
 # interface including any URL context.
 nexus: 'https://nexus.example.org'
 
-# Administrative nexus user account credentials
+# Administrative nexus user account credentials. Fill the password in a
+# private copy of this file readable only by you (chmod 600), never here;
+# lftools-uv refuses to run with an empty or placeholder password.
 user: 'admin'
-password: 'admin123'
+password: ''
 
 # email domain that nexus user emails should be generated with
 email_domain: 'example.org'

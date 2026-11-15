@@ -303,3 +303,145 @@ def test_delete_stale_requires_jenkins_urls(run):
 
     assert result.exit_code == 2
     mock_delete_stale.assert_not_called()
+
+
+_DEFAULT_PRICING_PREFIX = "https://pricing.vexxhost.net/v1/pricing/v3-standard-2/cost?seconds="
+
+
+def _cloud_with_one_server(mock_connect: MagicMock) -> None:
+    """Make openstack.connect return a stack holding one running server."""
+    resource = MagicMock(resource_type="OS::Nova::Server", links=[], physical_resource_id="server-1")
+    launched = (datetime.now(UTC) - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S.%f")
+    mock_cloud = MagicMock()
+    mock_cloud.orchestration.resources.return_value = [resource]
+    mock_cloud.compute.find_server.return_value = MagicMock(
+        launched_at=launched, flavor={"original_name": "v3-standard-2"}
+    )
+    mock_connect.return_value = mock_cloud
+
+
+def _pricing_response(cost: float) -> MagicMock:
+    response = MagicMock()
+    response.__enter__.return_value.read.return_value = f'{{"cost": {cost}}}'.encode()
+    return response
+
+
+@pytest.mark.parametrize("env_value", [None, ""], ids=["unset", "empty"])
+@patch("lftools_uv.openstack.stack.urllib.request.urlopen")
+@patch("lftools_uv.openstack.stack.openstack.connect")
+def test_cost_uses_vexxhost_pricing_by_default(mock_connect, mock_urlopen, env_value, monkeypatch, capsys):
+    """Without an override, pricing comes from Vexxhost as it always has."""
+    if env_value is None:
+        monkeypatch.delenv("LFTOOLS_STACK_PRICING_URL", raising=False)
+    else:
+        monkeypatch.setenv("LFTOOLS_STACK_PRICING_URL", env_value)
+    _cloud_with_one_server(mock_connect)
+    mock_urlopen.return_value = _pricing_response(1.25)
+
+    os_stack.cost("test-cloud", "a-stack", timeout=15)
+
+    url = mock_urlopen.call_args.args[0]
+    assert url.startswith(_DEFAULT_PRICING_PREFIX)
+    assert url[len(_DEFAULT_PRICING_PREFIX) :].isdigit()
+    assert mock_urlopen.call_args.kwargs == {"timeout": 15}
+    assert capsys.readouterr().out.strip() == "total: 1.25"
+
+
+@patch("lftools_uv.openstack.stack.urllib.request.urlopen")
+@patch("lftools_uv.openstack.stack.openstack.connect")
+def test_cost_honours_pricing_url_override(mock_connect, mock_urlopen, monkeypatch, capsys):
+    """LFTOOLS_STACK_PRICING_URL redirects the lookup and keeps the output."""
+    monkeypatch.setenv("LFTOOLS_STACK_PRICING_URL", "https://pricing.mirror.test/flavors/%s/cost?seconds=%d")
+    _cloud_with_one_server(mock_connect)
+    mock_urlopen.return_value = _pricing_response(2.5)
+
+    os_stack.cost("test-cloud", "a-stack")
+
+    assert mock_urlopen.call_args.args[0].startswith("https://pricing.mirror.test/flavors/v3-standard-2/cost?seconds=")
+    assert mock_urlopen.call_args.kwargs == {"timeout": 60}
+    assert capsys.readouterr().out.strip() == "total: 2.5"
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        pytest.param("http://pricing.mirror.test/%s/cost?seconds=%d", id="plain-http"),
+        pytest.param("https:///%s/cost?seconds=%d", id="no-host"),
+        pytest.param("https://pricing.mirror.test/flat-rate", id="no-placeholders"),
+        pytest.param("https://pricing.mirror.test/%d/cost?seconds=%s", id="swapped-placeholders"),
+        pytest.param("https://pricing.mirror.test/%s/cost", id="missing-seconds"),
+        pytest.param("https://pricing.mirror.test/%s/cost?seconds=%x", id="integer-only-seconds"),
+        pytest.param("https://pricing.mirror.test:not-a-port/%s/cost?seconds=%d", id="malformed-port"),
+        pytest.param("https://pricing.mirror.test:99999/%s/cost?seconds=%d", id="port-out-of-range"),
+        pytest.param("https://pricing.mirror.test:0/%s/cost?seconds=%d", id="port-zero"),
+        pytest.param("https://pricing.mirror.test/v1/bad path/%s/cost?seconds=%d", id="unescaped-space"),
+        pytest.param("https://pricing.mirror.test/v1/\t/%s/cost?seconds=%d", id="control-character"),
+        pytest.param("https://pricing.mirror.test/v1/pr\u00efce/%s/cost?seconds=%d", id="non-ascii"),
+    ],
+)
+@patch("lftools_uv.openstack.stack.urllib.request.urlopen")
+@patch("lftools_uv.openstack.stack.openstack.connect")
+def test_cost_rejects_invalid_pricing_url(mock_connect, mock_urlopen, template, monkeypatch, capsys, caplog):
+    """A malformed override fails before contacting OpenStack or the pricing API."""
+    monkeypatch.setenv("LFTOOLS_STACK_PRICING_URL", template)
+
+    with pytest.raises(SystemExit) as exc_info:
+        os_stack.cost("test-cloud", "a-stack")
+
+    assert exc_info.value.code == 1
+    mock_connect.assert_not_called()
+    mock_urlopen.assert_not_called()
+    assert "total:" not in capsys.readouterr().out
+    assert "LFTOOLS_STACK_PRICING_URL" in caplog.text
+
+
+@patch("lftools_uv.openstack.stack.urllib.request.urlopen")
+@patch("lftools_uv.openstack.stack.openstack.connect")
+def test_cost_accepts_percent_encoded_pricing_url(mock_connect, mock_urlopen, monkeypatch, capsys):
+    """A doubled percent sign reaches the pricing API as one percent escape."""
+    monkeypatch.setenv("LFTOOLS_STACK_PRICING_URL", "https://pricing.mirror.test/v1/my%%20prices/%s/cost?seconds=%d")
+    _cloud_with_one_server(mock_connect)
+    mock_urlopen.return_value = _pricing_response(3.75)
+
+    os_stack.cost("test-cloud", "a-stack")
+
+    prefix = "https://pricing.mirror.test/v1/my%20prices/v3-standard-2/cost?seconds="
+    url = mock_urlopen.call_args.args[0]
+    assert url.startswith(prefix)
+    assert url[len(prefix) :].isdigit()
+    assert capsys.readouterr().out.strip() == "total: 3.75"
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        pytest.param("https://pricing.mirror.test/v1/bad%20path/%s/cost?seconds=%d", id="single-percent-escape"),
+        pytest.param("https://pricing.mirror.test/v1/%2Fx/%s/cost?seconds=%d", id="escape-read-as-conversion"),
+        pytest.param("https://pricing.mirror.test/%s/cost?seconds=%d%", id="trailing-percent"),
+    ],
+)
+@patch("lftools_uv.openstack.stack.urllib.request.urlopen")
+@patch("lftools_uv.openstack.stack.openstack.connect")
+def test_cost_explains_doubling_percent_signs(mock_connect, mock_urlopen, template, monkeypatch, caplog):
+    """A lone percent sign fails early with an error that says to double it."""
+    monkeypatch.setenv("LFTOOLS_STACK_PRICING_URL", template)
+
+    with pytest.raises(SystemExit) as exc_info:
+        os_stack.cost("test-cloud", "a-stack")
+
+    assert exc_info.value.code == 1
+    mock_connect.assert_not_called()
+    mock_urlopen.assert_not_called()
+    assert "%%" in caplog.text
+
+
+@patch("lftools_uv.openstack.stack.urllib.request.urlopen", side_effect=TimeoutError("timed out"))
+@patch("lftools_uv.openstack.stack.openstack.connect")
+def test_cost_counts_unreachable_pricing_as_zero(mock_connect, mock_urlopen, monkeypatch, capsys):
+    """A pricing API that times out still yields a total, as before."""
+    monkeypatch.delenv("LFTOOLS_STACK_PRICING_URL", raising=False)
+    _cloud_with_one_server(mock_connect)
+
+    os_stack.cost("test-cloud", "a-stack")
+
+    assert capsys.readouterr().out.strip() == "total: 0.0"

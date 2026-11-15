@@ -8,7 +8,7 @@ Installation
 
 .. note::
 
-    lftools-uv requires Python 3.11 or later. Install it into a virtual
+    lftools-uv requires Python 3.11.5 or later. Install it into a virtual
     environment, or with a tool that manages one for you such as ``uv``.
     Installing into the system Python can have serious negative side effects!
 

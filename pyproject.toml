@@ -10,7 +10,7 @@ name = "lftools-uv"
 dynamic = ["version"]
 description = "Linux Foundation Release Engineering Tools"
 readme = "README.md"
-requires-python = ">=3.11, <3.16"
+requires-python = ">=3.11.5, <3.16"
 license = {text = "EPL-1.0 OR Apache-2.0"}
 
 authors = [
@@ -70,7 +70,9 @@ dependencies = [
     "requests>=2.32.0",
     "ruamel.yaml",
     "ruamel.yaml.clib>=0.2.15",
-    "soupsieve",
+    # 4.0.0 is the first release fixing GHSA-mmhr-3c5m-f64f,
+    # GHSA-6655-6qjp-jx7x and GHSA-7g44-g9rc-x53w; it needs Python 3.11.5.
+    "soupsieve>=4.0.0",
     "tabulate",
     "tqdm",
     "typer>=0.27.2",
