@@ -37,29 +37,90 @@ FIXTURE_DIR = os.path.join(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    ("branch", "expected"),
-    [
-        ("master", "master"),
-        ("latest", "latest"),
-        ("maintenance/3.7.10", "maintenance-3.7.10"),
-        ("mr/879/126960/2", "mr-879-126960-2"),
-        ("Montreal", "montreal"),
-        ("feature/ABC-123_thing", "feature-abc-123_thing"),
-        ("release/1.0", "release-1.0"),
-        ("  spaced/branch  ", "spaced-branch"),
-    ],
-)
+#: Mappings Read the Docs itself produces. Expected values come from
+#: ``generate_version_slug()`` and ``_normalize()`` in
+#: readthedocs/builds/version_slug.py at readthedocs.org commit
+#: 516881b08da007391b560db8f2f64d79f8c3e00c, run with the
+#: ``unicode-slugify==0.1.5`` it pins, not from this client's code.
+RTD_SLUG_REFERENCE = [
+    ("master", "master"),
+    ("latest", "latest"),
+    ("stable", "stable"),
+    ("stable/scandium", "stable-scandium"),
+    ("Stable/Potassium", "stable-potassium"),
+    ("maintenance/3.7.10", "maintenance-3.7.10"),
+    ("mr/879/1", "mr-879-1"),
+    ("mr/879/126960/2", "mr-879-126960-2"),
+    ("Montreal", "montreal"),
+    ("feature/FOO_Bar", "feature-foo_bar"),
+    ("feature/ABC-123_thing", "feature-abc-123_thing"),
+    ("release/1.0", "release-1.0"),
+    ("release-1.0", "release-1.0"),
+    ("v2.0.0", "v2.0.0"),
+    ("  spaced/branch  ", "spaced-branch"),
+    ("a//b", "a-b"),
+    ("a b  c", "a-b-c"),
+    ("100%!?done", "100-done"),
+    ("a.-_b", "a.-_b"),
+    ("release_", "release_"),
+    ("release.", "release."),
+    # Trailing and repeated hyphens
+    ("release-", "release-"),
+    ("release--1", "release-1"),
+    ("feat/ -x", "feat-x"),
+    # Leading punctuation
+    ("_release", "release"),
+    ("..hidden", "hidden"),
+    ("-_.x", "x"),
+    # Dropped punctuation and control characters
+    ("feature/foo+bar", "feature-foobar"),
+    ("x#y@z:w~v", "xyzwv"),
+    ("a\tb", "ab"),
+    # Unicode
+    ("stable/été", "stable-ete"),
+    ("naïve/Ünïcode", "naive-unicode"),
+    ("release/été-2", "release-ete-2"),
+    ("Straße", "strasse"),
+    ("Æsir/Øresund", "aesir-oresund"),
+    ("Łódź/þing", "lodz-thing"),
+    ("\ufb01x", "fix"),
+]
+
+
+@pytest.mark.parametrize(("branch", "expected"), RTD_SLUG_REFERENCE)
 def test_version_slug(branch, expected):
     """Branch names convert to the slug Read the Docs stores."""
     assert version_slug(branch) == expected
 
 
-@pytest.mark.parametrize("branch", ["", "   ", "///", "!!!"])
+@pytest.mark.parametrize(
+    "branch",
+    [
+        "",
+        "   ",
+        "\t",
+        "///",
+        "!!!",
+        "+++",
+        "---",
+        "...",
+        "_",
+    ],
+)
 def test_version_slug_rejects_unusable(branch):
-    """Empty or punctuation-only branch names raise."""
+    """Empty input, and input that slugifies to nothing, raise."""
     with pytest.raises(ReadTheDocsValidationError):
         version_slug(branch)
+
+
+def test_version_slug_rejects_untransliterable():
+    """A character this client cannot transliterate as Read the Docs does raises.
+
+    Read the Docs gives ``日本`` the slug ``ri-ben``; guessing could
+    address another version, so the conversion refuses instead.
+    """
+    with pytest.raises(ReadTheDocsValidationError, match="cannot be converted"):
+        version_slug("release/日本")
 
 
 # ---------------------------------------------------------------------------
