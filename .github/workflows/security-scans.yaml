@@ -50,7 +50,7 @@ jobs:
       build_type: 'python'
       python_version: '3.11'
     secrets:
-      nexus_iq_password: "${{ secrets.NEXUS_IQ_PASSWORD }}"
+      nexus_iq_password: ${{ secrets.NEXUS_IQ_PASSWORD }}
 
   # Run pytest with coverage so the SonarCloud scan can ingest the report.
   # Mirrors the python-tests pattern from build-test.yaml; uploads

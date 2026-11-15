@@ -256,8 +256,8 @@ jobs:
         env:
           RTD_TOKEN: "${{ secrets.RTD_TOKEN }}"
           GITHUB_TOKEN: "${{ secrets.READ_GITHUB_TOKEN }}"
-          NEXUS2_PASSWORD: "${{ secrets.NEXUS2_PASSWORD }}"
-          NEXUS3_PASSWORD: "${{ secrets.NEXUS3_PASSWORD }}"
+          NEXUS2_PASSWORD: ${{ secrets.NEXUS2_PASSWORD }}
+          NEXUS3_PASSWORD: ${{ secrets.NEXUS3_PASSWORD }}
           CLOUDS_YAML: "${{ secrets.CLOUDS_YAML }}"
           JENKINS_JOBS_INI: "${{ secrets.JENKINS_JOBS_INI }}"
         run: |
@@ -643,8 +643,8 @@ jobs:
         env:
           RTD_TOKEN: "${{ secrets.RTD_TOKEN }}"
           GITHUB_TOKEN: "${{ secrets.READ_GITHUB_TOKEN }}"
-          NEXUS2_PASSWORD: "${{ secrets.NEXUS2_PASSWORD }}"
-          NEXUS3_PASSWORD: "${{ secrets.NEXUS3_PASSWORD }}"
+          NEXUS2_PASSWORD: ${{ secrets.NEXUS2_PASSWORD }}
+          NEXUS3_PASSWORD: ${{ secrets.NEXUS3_PASSWORD }}
           CLOUDS_YAML: "${{ secrets.CLOUDS_YAML }}"
         run: |
           set -euo pipefail
