@@ -34,10 +34,20 @@ such as ``No projects found`` instead.
 Branch names and version slugs
 ==============================
 
-Read the Docs addresses a version by its **slug**, which lowercases the
-branch name and replaces every character outside ``[a-z0-9._-]`` with a
-hyphen. Read the Docs holds a branch named ``maintenance/3.7.10`` under
-the slug ``maintenance-3.7.10``.
+Read the Docs addresses a version by its **slug**, which it derives from
+the branch name:
+
+- ``/``, ``%``, ``!``, ``?``, spaces and runs of hyphens become a
+  single hyphen;
+- it keeps letters and numbers, transliterating them to ASCII and
+  lowercasing them: ``été`` becomes ``ete``;
+- it keeps ``.`` and ``_``, but strips ``-``, ``.`` and ``_`` from the
+  start;
+- it drops every other character: ``foo+bar`` becomes ``foobar``.
+
+Read the Docs holds a branch named ``maintenance/3.7.10`` under the slug
+``maintenance-3.7.10``, and a branch named ``release-`` under
+``release-``.
 
 Passing a raw branch name to the API produces a request path that does
 not resolve. Commands that accept a version offer ``--from-branch``,
@@ -47,7 +57,11 @@ which performs the conversion:
 
    lftools-uv rtd project-build-trigger onap-cps maintenance/3.7.10 --from-branch
 
-Omit the flag when you already hold a slug.
+Omit the flag when you already hold a slug. The conversion rejects a
+branch name that yields no slug, or that holds a character it cannot
+transliterate as Read the Docs does, before sending any request. It
+cannot predict a custom slug set in Read the Docs, or the suffix Read the
+Docs adds to keep a slug unique; pass such a slug without the flag.
 
 Exit status
 ===========

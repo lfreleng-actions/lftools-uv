@@ -329,7 +329,7 @@ def project_version_details(
     from_branch: bool = typer.Option(
         False,
         "--from-branch",
-        help="Treat VERSION_SLUG as a git branch name and slugify it first.",
+        help="Treat VERSION_SLUG as a git branch name and convert it to the slug Read the Docs gives that branch.",
     ),
     json_output: bool = _json_option(),
 ) -> None:
@@ -376,7 +376,7 @@ def project_version_update(
     from_branch: bool = typer.Option(
         False,
         "--from-branch",
-        help="Treat VERSION_SLUG as a git branch name and slugify it first.",
+        help="Treat VERSION_SLUG as a git branch name and convert it to the slug Read the Docs gives that branch.",
     ),
     json_output: bool = _json_option(),
 ) -> None:
@@ -476,7 +476,7 @@ def project_build_trigger(
     from_branch: bool = typer.Option(
         False,
         "--from-branch",
-        help="Treat VERSION_SLUG as a git branch name and slugify it first.",
+        help="Treat VERSION_SLUG as a git branch name and convert it to the slug Read the Docs gives that branch.",
     ),
     json_output: bool = _json_option(),
 ) -> None:

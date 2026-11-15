@@ -42,8 +42,6 @@ FIXTURE_DIR = os.path.join(
 #: readthedocs/builds/version_slug.py at readthedocs.org commit
 #: 516881b08da007391b560db8f2f64d79f8c3e00c, run with the
 #: ``unicode-slugify==0.1.5`` it pins, not from this client's code.
-_RTD_PENDING = pytest.mark.xfail(strict=True, reason="slug differs from Read the Docs")
-
 RTD_SLUG_REFERENCE = [
     ("master", "master"),
     ("latest", "latest"),
@@ -67,25 +65,25 @@ RTD_SLUG_REFERENCE = [
     ("release_", "release_"),
     ("release.", "release."),
     # Trailing and repeated hyphens
-    pytest.param("release-", "release-", marks=_RTD_PENDING),
-    pytest.param("release--1", "release-1", marks=_RTD_PENDING),
-    pytest.param("feat/ -x", "feat-x", marks=_RTD_PENDING),
+    ("release-", "release-"),
+    ("release--1", "release-1"),
+    ("feat/ -x", "feat-x"),
     # Leading punctuation
-    pytest.param("_release", "release", marks=_RTD_PENDING),
-    pytest.param("..hidden", "hidden", marks=_RTD_PENDING),
-    pytest.param("-_.x", "x", marks=_RTD_PENDING),
+    ("_release", "release"),
+    ("..hidden", "hidden"),
+    ("-_.x", "x"),
     # Dropped punctuation and control characters
-    pytest.param("feature/foo+bar", "feature-foobar", marks=_RTD_PENDING),
-    pytest.param("x#y@z:w~v", "xyzwv", marks=_RTD_PENDING),
-    pytest.param("a\tb", "ab", marks=_RTD_PENDING),
+    ("feature/foo+bar", "feature-foobar"),
+    ("x#y@z:w~v", "xyzwv"),
+    ("a\tb", "ab"),
     # Unicode
-    pytest.param("stable/été", "stable-ete", marks=_RTD_PENDING),
-    pytest.param("naïve/Ünïcode", "naive-unicode", marks=_RTD_PENDING),
-    pytest.param("release/été-2", "release-ete-2", marks=_RTD_PENDING),
-    pytest.param("Straße", "strasse", marks=_RTD_PENDING),
-    pytest.param("Æsir/Øresund", "aesir-oresund", marks=_RTD_PENDING),
-    pytest.param("Łódź/þing", "lodz-thing", marks=_RTD_PENDING),
-    pytest.param("\ufb01x", "fix", marks=_RTD_PENDING),
+    ("stable/été", "stable-ete"),
+    ("naïve/Ünïcode", "naive-unicode"),
+    ("release/été-2", "release-ete-2"),
+    ("Straße", "strasse"),
+    ("Æsir/Øresund", "aesir-oresund"),
+    ("Łódź/þing", "lodz-thing"),
+    ("\ufb01x", "fix"),
 ]
 
 
@@ -105,8 +103,8 @@ def test_version_slug(branch, expected):
         "!!!",
         "+++",
         "---",
-        pytest.param("...", marks=_RTD_PENDING),
-        pytest.param("_", marks=_RTD_PENDING),
+        "...",
+        "_",
     ],
 )
 def test_version_slug_rejects_unusable(branch):
@@ -115,9 +113,8 @@ def test_version_slug_rejects_unusable(branch):
         version_slug(branch)
 
 
-@pytest.mark.xfail(strict=True, reason="slug differs from Read the Docs")
 def test_version_slug_rejects_untransliterable():
-    """A character Read the Docs would transliterate unknowably raises.
+    """A character this client cannot transliterate as Read the Docs does raises.
 
     Read the Docs gives ``日本`` the slug ``ri-ben``; guessing could
     address another version, so the conversion refuses instead.

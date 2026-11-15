@@ -22,7 +22,6 @@ from __future__ import annotations
 __author__ = "DW Talton"
 
 import json
-import re
 from typing import TYPE_CHECKING, cast
 from urllib.parse import urlsplit
 
@@ -31,6 +30,7 @@ import requests
 import lftools_uv.api.client as client
 from lftools_uv import config
 from lftools_uv.api.client import ApiResponse
+from lftools_uv.api.endpoints.readthedocs_slug import generate_version_slug
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -40,9 +40,6 @@ _DICT_STR_OBJECT_TYPE = dict[str, object]
 
 _HTTP_NOT_FOUND = 404
 _HTTP_BAD_REQUEST = 400
-
-#: Characters Read the Docs preserves verbatim in a version slug.
-_SLUG_KEEP = re.compile(r"[^a-z0-9._-]+")
 
 #: The fields Read the Docs accepts when a project is updated, those of its
 #: v3 API's ``ProjectUpdateSerializer``. It silently ignores any other key
@@ -115,15 +112,17 @@ class ReadTheDocsRequestError(ReadTheDocsError):
 def version_slug(branch: str) -> str:
     """Convert a branch name into a Read the Docs version slug.
 
-    Read the Docs stores a version under a slugified form of the branch
-    name: it lowercases the value and replaces every character outside
-    ``[a-z0-9._-]`` with a hyphen. A branch named ``maintenance/3.7.10``
-    is therefore addressable as ``maintenance-3.7.10``, and ``mr/879/1``
-    as ``mr-879-1``.
+    Read the Docs derives a version's slug from its branch name, so a
+    branch named ``maintenance/3.7.10`` is addressable as
+    ``maintenance-3.7.10``, and ``release-`` keeps its trailing hyphen.
+    :func:`~lftools_uv.api.endpoints.readthedocs_slug.generate_version_slug`
+    describes the rules.
 
     Passing an unslugified branch name to the API produces a request
     path that does not resolve, so always route branch names through
-    this function before building a request.
+    this function before building a request. A version given a custom
+    slug in Read the Docs, or one suffixed to keep it unique, cannot be
+    derived from its branch name.
 
     Args:
         branch: A git branch name, for example ``maintenance/3.7.10``.
@@ -132,20 +131,14 @@ def version_slug(branch: str) -> str:
         The corresponding Read the Docs version slug.
 
     Raises:
-        ReadTheDocsValidationError: If ``branch`` is empty, or slugifies
-            to an empty string.
+        ReadTheDocsValidationError: If ``branch`` is empty, slugifies to
+            an empty string, or holds a character that cannot be
+            transliterated as Read the Docs does.
     """
-    if not branch or not branch.strip():
-        msg = "Branch name cannot be empty"
-        raise ReadTheDocsValidationError(msg)
-
-    slug = _SLUG_KEEP.sub("-", branch.strip().lower()).strip("-")
-
-    if not slug:
-        msg = f"Branch name {branch!r} does not yield a usable version slug"
-        raise ReadTheDocsValidationError(msg)
-
-    return slug
+    try:
+        return generate_version_slug(branch)
+    except ValueError as exc:
+        raise ReadTheDocsValidationError(str(exc)) from exc
 
 
 class ReadTheDocs(client.RestApi):

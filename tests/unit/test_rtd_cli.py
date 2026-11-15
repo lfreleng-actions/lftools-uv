@@ -206,7 +206,6 @@ def test_from_branch_slugifies_version_details() -> None:
 
 _RTD_API = "https://readthedocs.org/api/v3/"
 _VERSIONS = f"{_RTD_API}projects/fixture/versions/"
-_SLUG_PENDING = pytest.mark.xfail(strict=True, reason="slug differs from Read the Docs")
 
 
 @pytest.fixture
@@ -224,7 +223,6 @@ def _requested(mocked: responses.RequestsMock) -> list[tuple[str | None, str | N
     return [(call.request.method, call.request.url) for call in mocked.calls]
 
 
-@_SLUG_PENDING
 def test_from_branch_version_details_keeps_trailing_hyphen(rtd_http: responses.RequestsMock) -> None:
     """Lookup of ``release-`` reads ``release-``, never ``release``."""
     rtd_http.get(f"{_VERSIONS}release/", json={"slug": "release"})
@@ -237,7 +235,6 @@ def test_from_branch_version_details_keeps_trailing_hyphen(rtd_http: responses.R
     assert _requested(rtd_http) == [("GET", f"{_VERSIONS}release-/")]
 
 
-@_SLUG_PENDING
 def test_from_branch_build_trigger_keeps_trailing_hyphen(rtd_http: responses.RequestsMock) -> None:
     """A build of ``release-`` is triggered on ``release-``."""
     rtd_http.post(f"{_VERSIONS}release/builds/", json={"build": {"id": 1}}, status=202)
@@ -250,7 +247,6 @@ def test_from_branch_build_trigger_keeps_trailing_hyphen(rtd_http: responses.Req
     assert _requested(rtd_http) == [("POST", f"{_VERSIONS}release-/builds/")]
 
 
-@_SLUG_PENDING
 @pytest.mark.parametrize(("active", "expected"), [("true", True), ("false", False)])
 def test_from_branch_version_update_keeps_trailing_hyphen(
     rtd_http: responses.RequestsMock, active: str, expected: bool
@@ -272,7 +268,6 @@ def test_from_branch_version_update_keeps_trailing_hyphen(
     assert json.loads(body) == {"active": expected}
 
 
-@_SLUG_PENDING
 def test_from_branch_missing_version_does_not_fall_back(rtd_http: responses.RequestsMock) -> None:
     """A missing ``release-`` exits 3 even when ``release`` exists."""
     rtd_http.get(f"{_VERSIONS}release/", json={"slug": "release"})
@@ -303,7 +298,7 @@ def test_literal_version_is_not_slugified(rtd_http: responses.RequestsMock, vers
         ("project-version-update", ["true"]),
     ],
 )
-@pytest.mark.parametrize("branch", ["", "   ", "///", pytest.param("...", marks=_SLUG_PENDING)])
+@pytest.mark.parametrize("branch", ["", "   ", "///", "..."])
 def test_from_branch_rejects_unusable_without_request(
     rtd_http: responses.RequestsMock, command: str, extra: list[str], branch: str
 ) -> None:
