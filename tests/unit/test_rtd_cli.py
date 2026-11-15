@@ -17,12 +17,15 @@ callback and individual commands, branch-to-slug conversion via
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from unittest import mock
 
 import pytest
+import responses
 from typer.testing import CliRunner
 
 from lftools_uv.api.endpoints.readthedocs import (
+    ReadTheDocs,
     ReadTheDocsAPIError,
     ReadTheDocsNotFoundError,
 )
@@ -191,6 +194,124 @@ def test_from_branch_slugifies_version_details() -> None:
 
     assert result.exit_code == 0
     api.return_value.project_version_details.assert_called_once_with("onap-cps", "maintenance-3.7.10")
+
+
+# ---------------------------------------------------------------------------
+# Branch to slug conversion over HTTP
+#
+# Read the Docs gives the branch ``release-`` the slug ``release-``. These
+# tests register both ``release`` and ``release-`` so that addressing the
+# wrong one shows up as a request to the wrong path, not as a failure.
+# ---------------------------------------------------------------------------
+
+_RTD_API = "https://readthedocs.org/api/v3/"
+_VERSIONS = f"{_RTD_API}projects/fixture/versions/"
+_SLUG_PENDING = pytest.mark.xfail(strict=True, reason="slug differs from Read the Docs")
+
+
+@pytest.fixture
+def rtd_http() -> Iterator[responses.RequestsMock]:
+    """Route the CLI through a real client against mocked HTTP only."""
+    api = ReadTheDocs(creds={"authtype": "token", "endpoint": _RTD_API, "token": "xyz"})
+    with (
+        mock.patch("lftools_uv.typer_apps.rtd._client", return_value=api),
+        responses.RequestsMock(assert_all_requests_are_fired=False) as mocked,
+    ):
+        yield mocked
+
+
+def _requested(mocked: responses.RequestsMock) -> list[tuple[str | None, str | None]]:
+    return [(call.request.method, call.request.url) for call in mocked.calls]
+
+
+@_SLUG_PENDING
+def test_from_branch_version_details_keeps_trailing_hyphen(rtd_http: responses.RequestsMock) -> None:
+    """Lookup of ``release-`` reads ``release-``, never ``release``."""
+    rtd_http.get(f"{_VERSIONS}release/", json={"slug": "release"})
+    rtd_http.get(f"{_VERSIONS}release-/", json={"slug": "release-"})
+
+    result = runner.invoke(rtd_app, ["project-version-details", "fixture", "release-", "--from-branch", "--json"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["slug"] == "release-"
+    assert _requested(rtd_http) == [("GET", f"{_VERSIONS}release-/")]
+
+
+@_SLUG_PENDING
+def test_from_branch_build_trigger_keeps_trailing_hyphen(rtd_http: responses.RequestsMock) -> None:
+    """A build of ``release-`` is triggered on ``release-``."""
+    rtd_http.post(f"{_VERSIONS}release/builds/", json={"build": {"id": 1}}, status=202)
+    rtd_http.post(f"{_VERSIONS}release-/builds/", json={"build": {"id": 2}}, status=202)
+
+    result = runner.invoke(rtd_app, ["project-build-trigger", "fixture", "release-", "--from-branch", "--json"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["build"]["id"] == 2
+    assert _requested(rtd_http) == [("POST", f"{_VERSIONS}release-/builds/")]
+
+
+@_SLUG_PENDING
+@pytest.mark.parametrize(("active", "expected"), [("true", True), ("false", False)])
+def test_from_branch_version_update_keeps_trailing_hyphen(
+    rtd_http: responses.RequestsMock, active: str, expected: bool
+) -> None:
+    """Activation of ``release-`` patches ``release-`` with the same payload."""
+    rtd_http.patch(f"{_VERSIONS}release/", status=204)
+    rtd_http.patch(f"{_VERSIONS}release-/", status=204)
+
+    result = runner.invoke(
+        rtd_app,
+        ["project-version-update", "fixture", "release-", active, "--from-branch", "--json"],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["version"] == "release-"
+    assert _requested(rtd_http) == [("PATCH", f"{_VERSIONS}release-/")]
+    body = rtd_http.calls[0].request.body
+    assert isinstance(body, (str, bytes))
+    assert json.loads(body) == {"active": expected}
+
+
+@_SLUG_PENDING
+def test_from_branch_missing_version_does_not_fall_back(rtd_http: responses.RequestsMock) -> None:
+    """A missing ``release-`` exits 3 even when ``release`` exists."""
+    rtd_http.get(f"{_VERSIONS}release/", json={"slug": "release"})
+    rtd_http.get(f"{_VERSIONS}release-/", json={"detail": "Not found."}, status=404)
+
+    result = runner.invoke(rtd_app, ["project-version-details", "fixture", "release-", "--from-branch", "--json"])
+
+    assert result.exit_code == 3
+    assert _requested(rtd_http) == [("GET", f"{_VERSIONS}release-/")]
+
+
+@pytest.mark.parametrize("version", ["release-", "Feature/Foo+Bar", "_release"])
+def test_literal_version_is_not_slugified(rtd_http: responses.RequestsMock, version: str) -> None:
+    """Without ``--from-branch`` the version reaches the request as given."""
+    rtd_http.get(f"{_VERSIONS}{version}/", json={"slug": version})
+
+    result = runner.invoke(rtd_app, ["project-version-details", "fixture", version, "--json"])
+
+    assert result.exit_code == 0
+    assert _requested(rtd_http) == [("GET", f"{_VERSIONS}{version}/")]
+
+
+@pytest.mark.parametrize(
+    ("command", "extra"),
+    [
+        ("project-version-details", []),
+        ("project-build-trigger", []),
+        ("project-version-update", ["true"]),
+    ],
+)
+@pytest.mark.parametrize("branch", ["", "   ", "///", pytest.param("...", marks=_SLUG_PENDING)])
+def test_from_branch_rejects_unusable_without_request(
+    rtd_http: responses.RequestsMock, command: str, extra: list[str], branch: str
+) -> None:
+    """Unusable branch names fail before any request is made."""
+    result = runner.invoke(rtd_app, [command, "fixture", branch, *extra, "--from-branch", "--json"])
+
+    assert result.exit_code == 1
+    assert _requested(rtd_http) == []
 
 
 # ---------------------------------------------------------------------------
