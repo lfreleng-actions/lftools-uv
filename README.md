@@ -339,7 +339,7 @@ pipeline {
 
 ### Prerequisites
 
-- Python 3.8+
+- Python 3.11.5 or later
 - uv (recommended) or pip
 
 ### Quick Start with uv
