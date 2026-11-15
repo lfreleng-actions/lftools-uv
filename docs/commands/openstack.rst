@@ -132,3 +132,20 @@ Get total cost of existing stack.
 .. program-output:: lftools-uv openstack --os-cloud docs stack cost --help
 
 Return sum of costs for each member of the running stack.
+
+Prices come from the Vexxhost pricing API by default. To use another
+endpoint, for example a mirror, set ``LFTOOLS_STACK_PRICING_URL`` to an
+``https://`` URL template holding a ``%s`` for the flavour name followed by a
+``%d`` for the elapsed seconds:
+
+.. code-block:: bash
+
+   export LFTOOLS_STACK_PRICING_URL='https://pricing.example.org/v1/pricing/%s/cost?seconds=%d'
+
+The endpoint must answer with a JSON object carrying a ``cost`` field, as the
+Vexxhost API does. Percent-encode any space, control or non-ASCII character in
+the URL, and double every percent sign other than those of ``%s`` and ``%d``,
+since the template is a Python ``%`` format string: write a ``%20`` escape as
+``%%20``. An unset or empty variable keeps the default. Any other value that is
+not such a template stops the command before it contacts OpenStack. As with the
+default, a server whose price lookup fails counts as zero.

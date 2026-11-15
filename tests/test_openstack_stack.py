@@ -347,7 +347,6 @@ def test_cost_uses_vexxhost_pricing_by_default(mock_connect, mock_urlopen, env_v
     assert capsys.readouterr().out.strip() == "total: 1.25"
 
 
-@pytest.mark.xfail(strict=True, reason="Pricing endpoint override not yet implemented")
 @patch("lftools_uv.openstack.stack.urllib.request.urlopen")
 @patch("lftools_uv.openstack.stack.openstack.connect")
 def test_cost_honours_pricing_url_override(mock_connect, mock_urlopen, monkeypatch, capsys):
@@ -363,7 +362,6 @@ def test_cost_honours_pricing_url_override(mock_connect, mock_urlopen, monkeypat
     assert capsys.readouterr().out.strip() == "total: 2.5"
 
 
-@pytest.mark.xfail(strict=True, reason="Pricing endpoint override not yet implemented")
 @pytest.mark.parametrize(
     "template",
     [
@@ -397,7 +395,6 @@ def test_cost_rejects_invalid_pricing_url(mock_connect, mock_urlopen, template, 
     assert "LFTOOLS_STACK_PRICING_URL" in caplog.text
 
 
-@pytest.mark.xfail(strict=True, reason="Pricing endpoint override not yet implemented")
 @patch("lftools_uv.openstack.stack.urllib.request.urlopen")
 @patch("lftools_uv.openstack.stack.openstack.connect")
 def test_cost_accepts_percent_encoded_pricing_url(mock_connect, mock_urlopen, monkeypatch, capsys):
@@ -415,7 +412,6 @@ def test_cost_accepts_percent_encoded_pricing_url(mock_connect, mock_urlopen, mo
     assert capsys.readouterr().out.strip() == "total: 3.75"
 
 
-@pytest.mark.xfail(strict=True, reason="Pricing endpoint override not yet implemented")
 @pytest.mark.parametrize(
     "template",
     [
