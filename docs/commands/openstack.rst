@@ -73,6 +73,30 @@ List all COE clusters on the specified cloud with their current status.
 
 .. program-output:: lftools-uv openstack --os-cloud docs cluster list --help
 
+remove
+^^^^^^
+
+Remove a single named COE cluster. With ``--minutes``, the command
+skips a cluster created within that window and logs a warning instead
+of deleting it. The command exits non-zero
+when it cannot find or delete the cluster.
+
+.. program-output:: lftools-uv openstack --os-cloud docs cluster remove --help
+
+Example usage:
+
+.. code-block:: bash
+
+   # Remove the cluster unless created in the last 15 minutes
+   lftools-uv openstack --os-cloud mycloud cluster remove --minutes 15 mycluster
+
+show
+^^^^
+
+Show the details of a single named COE cluster as JSON.
+
+.. program-output:: lftools-uv openstack --os-cloud docs cluster show --help
+
 object
 ------
 

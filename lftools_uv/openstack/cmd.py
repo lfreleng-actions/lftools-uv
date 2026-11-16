@@ -302,5 +302,24 @@ def cluster_list(ctx):
     os_cluster.list_clusters(ctx.obj["os_cloud"])
 
 
+@click.command()
+@click.argument("cluster")
+@click.option("--minutes", type=int, default=0, help="Delete cluster if older than x minutes.")
+@click.pass_context
+def cluster_remove(ctx, cluster, minutes):
+    """Remove a COE cluster."""
+    os_cluster.remove(ctx.obj["os_cloud"], cluster_name=cluster, minutes=minutes)
+
+
+@click.command()
+@click.argument("cluster")
+@click.pass_context
+def cluster_show(ctx, cluster):
+    """Show COE cluster details."""
+    os_cluster.show(ctx.obj["os_cloud"], cluster_name=cluster)
+
+
 cluster.add_command(cluster_cleanup, "cleanup")
 cluster.add_command(cluster_list, "list")
+cluster.add_command(cluster_remove, "remove")
+cluster.add_command(cluster_show, "show")
