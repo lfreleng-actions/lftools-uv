@@ -9,7 +9,9 @@
 ##############################################################################
 """Test OpenStack cluster operations."""
 
+import json
 import logging
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -629,3 +631,207 @@ def test_cluster_list_calls_library(run):
 
     assert result.exit_code == 0, result.output
     mock_list.assert_called_once_with("test-cloud")
+
+
+CLUSTER_DETAIL = {
+    "id": "c0ffee",
+    "name": "csit-job-12",
+    "status": "CREATE_COMPLETE",
+    "api_address": "https://192.0.2.10:6443",
+    "node_addresses": ["192.0.2.11"],
+}
+
+
+def _cluster_cloud(mock_from_config, created_at="2020-01-01T00:00:00+00:00"):
+    """Return a mocked cloud whose cluster lookup finds one cluster.
+
+    Like Magnum, the name lookup returns a list summary that lacks
+    created_at and the address details; only the fetch by ID has them.
+    """
+    mock_cloud = MagicMock()
+    mock_from_config.return_value = mock_cloud
+    summary = MagicMock()
+    summary.name = "csit-job-12"
+    summary.id = "c0ffee"
+    summary.created_at = None
+    summary.to_dict.return_value = {"id": "c0ffee", "name": "csit-job-12", "api_address": None}
+    mock_cloud.get_coe_cluster.return_value = summary
+    detail = MagicMock()
+    detail.name = "csit-job-12"
+    detail.id = "c0ffee"
+    detail.created_at = created_at
+    detail.to_dict.return_value = dict(CLUSTER_DETAIL)
+    mock_cloud.container_infrastructure_management.get_cluster.return_value = detail
+    mock_cloud.delete_coe_cluster.return_value = True
+    return mock_cloud
+
+
+@patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
+def test_remove_deletes_named_cluster(mock_from_config):
+    """remove deletes the named cluster by ID."""
+    mock_cloud = _cluster_cloud(mock_from_config)
+
+    os_cluster.remove("test-cloud", "csit-job-12")
+
+    mock_from_config.assert_called_once_with(cloud="test-cloud")
+    mock_cloud.get_coe_cluster.assert_called_once_with("csit-job-12")
+    mock_cloud.container_infrastructure_management.get_cluster.assert_called_once_with("c0ffee")
+    mock_cloud.delete_coe_cluster.assert_called_once_with("c0ffee")
+
+
+@patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
+def test_remove_without_minutes_ignores_age(mock_from_config):
+    """remove without --minutes deletes even a cluster stamped in the future."""
+    created_at = (datetime.now(UTC) + timedelta(minutes=5)).isoformat()
+    mock_cloud = _cluster_cloud(mock_from_config, created_at=created_at)
+
+    os_cluster.remove("test-cloud", "csit-job-12")
+
+    mock_cloud.delete_coe_cluster.assert_called_once_with("c0ffee")
+
+
+@pytest.mark.parametrize(
+    "created_at",
+    ["2020-01-01T00:00:00+00:00", "2020-01-01T00:00:00Z", "2020-01-01T00:00:00"],
+    ids=["offset", "zulu", "naive"],
+)
+@patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
+def test_remove_deletes_cluster_older_than_minutes(mock_from_config, created_at):
+    """remove deletes a cluster created before the --minutes cutoff."""
+    mock_cloud = _cluster_cloud(mock_from_config, created_at=created_at)
+
+    os_cluster.remove("test-cloud", "csit-job-12", minutes=15)
+
+    mock_cloud.delete_coe_cluster.assert_called_once_with("c0ffee")
+
+
+@patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
+def test_remove_keeps_cluster_younger_than_minutes(mock_from_config, caplog):
+    """remove leaves a cluster created within the --minutes window."""
+    created_at = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
+    mock_cloud = _cluster_cloud(mock_from_config, created_at=created_at)
+
+    os_cluster.remove("test-cloud", "csit-job-12", minutes=15)
+
+    mock_cloud.delete_coe_cluster.assert_not_called()
+    assert 'Cluster "csit-job-12" (c0ffee) is not older than 15 minutes' in caplog.text
+
+
+@patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
+def test_remove_exits_1_when_cluster_missing(mock_from_config, caplog):
+    """remove exits 1 when no cluster has the given name."""
+    mock_cloud = MagicMock()
+    mock_from_config.return_value = mock_cloud
+    mock_cloud.get_coe_cluster.return_value = None
+
+    with pytest.raises(SystemExit) as exc_info:
+        os_cluster.remove("test-cloud", "missing")
+
+    assert exc_info.value.code == 1
+    mock_cloud.container_infrastructure_management.get_cluster.assert_not_called()
+    mock_cloud.delete_coe_cluster.assert_not_called()
+    assert "Cluster missing not found" in caplog.text
+
+
+@patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
+def test_remove_exits_1_when_detail_fetch_fails(mock_from_config, caplog):
+    """remove exits 1 when the cluster's full record cannot be fetched."""
+    from openstack.exceptions import NotFoundException
+
+    mock_cloud = _cluster_cloud(mock_from_config)
+    mock_cloud.container_infrastructure_management.get_cluster.side_effect = NotFoundException("gone")
+
+    with pytest.raises(SystemExit) as exc_info:
+        os_cluster.remove("test-cloud", "csit-job-12")
+
+    assert exc_info.value.code == 1
+    mock_cloud.delete_coe_cluster.assert_not_called()
+    assert "Failed to look up cluster csit-job-12" in caplog.text
+
+
+@patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
+def test_remove_exits_1_when_delete_fails(mock_from_config, caplog):
+    """remove exits 1 when the cloud refuses the delete."""
+    from openstack.cloud.exc import OpenStackCloudException
+
+    mock_cloud = _cluster_cloud(mock_from_config)
+    mock_cloud.delete_coe_cluster.side_effect = OpenStackCloudException("Test error")
+
+    with pytest.raises(SystemExit) as exc_info:
+        os_cluster.remove("test-cloud", "csit-job-12")
+
+    assert exc_info.value.code == 1
+    assert "Failed to delete cluster csit-job-12" in caplog.text
+
+
+@patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
+def test_remove_exits_1_when_delete_finds_nothing(mock_from_config, caplog):
+    """remove exits 1 when the cluster vanishes before delete_coe_cluster finds it."""
+    mock_cloud = _cluster_cloud(mock_from_config)
+    mock_cloud.delete_coe_cluster.return_value = False
+
+    with pytest.raises(SystemExit) as exc_info:
+        os_cluster.remove("test-cloud", "csit-job-12")
+
+    assert exc_info.value.code == 1
+    mock_cloud.delete_coe_cluster.assert_called_once_with("c0ffee")
+    assert "Failed to delete cluster csit-job-12: not found." in caplog.text
+    assert "Deleted cluster" not in caplog.text
+
+
+@patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
+def test_show_prints_cluster_as_json(mock_from_config, capsys):
+    """show prints the named cluster's full attributes as JSON."""
+    mock_cloud = _cluster_cloud(mock_from_config)
+
+    os_cluster.show("test-cloud", "csit-job-12")
+
+    mock_cloud.get_coe_cluster.assert_called_once_with("csit-job-12")
+    mock_cloud.container_infrastructure_management.get_cluster.assert_called_once_with("c0ffee")
+    assert json.loads(capsys.readouterr().out) == CLUSTER_DETAIL
+
+
+@patch("lftools_uv.openstack.cluster.openstack.connection.from_config")
+def test_show_exits_1_when_lookup_fails(mock_from_config, caplog):
+    """show exits 1 when the cloud cannot look the cluster up."""
+    from openstack.cloud.exc import OpenStackCloudException
+
+    mock_cloud = MagicMock()
+    mock_from_config.return_value = mock_cloud
+    mock_cloud.get_coe_cluster.side_effect = OpenStackCloudException("Test error")
+
+    with pytest.raises(SystemExit) as exc_info:
+        os_cluster.show("test-cloud", "csit-job-12")
+
+    assert exc_info.value.code == 1
+    assert "Failed to look up cluster csit-job-12" in caplog.text
+
+
+@pytest.mark.parametrize("run", FRONT_ENDS)
+def test_cluster_help_lists_remove_and_show(run):
+    """The cluster group names its remove and show commands."""
+    result = run(["cluster", "--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "remove" in result.output
+    assert "show" in result.output
+
+
+@pytest.mark.parametrize("run", FRONT_ENDS)
+def test_cluster_remove_passes_name_and_minutes(run):
+    """cluster remove hands the name and --minutes to the library."""
+    with patch("lftools_uv.openstack.cluster.remove") as mock_remove:
+        result = run(["cluster", "remove", "--minutes", "15", "csit-job-12"])
+
+    assert result.exit_code == 0, result.output
+    mock_remove.assert_called_once_with("test-cloud", cluster_name="csit-job-12", minutes=15)
+
+
+@pytest.mark.parametrize("run", FRONT_ENDS)
+def test_cluster_show_passes_name(run):
+    """cluster show hands the name to the library."""
+    with patch("lftools_uv.openstack.cluster.show") as mock_show:
+        result = run(["cluster", "show", "csit-job-12"])
+
+    assert result.exit_code == 0, result.output
+    mock_show.assert_called_once_with("test-cloud", cluster_name="csit-job-12")

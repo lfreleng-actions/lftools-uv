@@ -17,6 +17,7 @@ import json
 import logging
 import sys
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 # aislop-ignore-file hallucinated-import -- the declared openstacksdk dependency provides the `openstack` import package
@@ -153,6 +154,85 @@ def list_clusters(os_cloud: str) -> None:
         log.error("COE cluster operations not supported by this OpenStack SDK version")
         log.error("Please ensure openstacksdk >= 4.0.0 is installed")
         sys.exit(1)
+
+
+def _get_cluster(cloud: openstack.connection.Connection, cluster_name: str) -> Any:
+    """Return the full record of the named COE cluster, exiting 1 if it cannot be found.
+
+    :arg cloud: Connection to the cloud holding the cluster.
+    :arg str cluster_name: Name or ID of the cluster.
+    """
+    try:
+        # get_coe_cluster resolves the name from Magnum's list summary, which
+        # omits created_at and details such as api_address, so fetch the
+        # full resource by ID.
+        summary = cloud.get_coe_cluster(cluster_name)
+        cluster = cloud.container_infrastructure_management.get_cluster(summary.id) if summary else None
+    except OpenStackCloudException as e:
+        log.error("Failed to look up cluster %s: %s", cluster_name, e)
+        sys.exit(1)
+    except AttributeError as e:
+        log.error("COE cluster operations not supported by this OpenStack SDK version: %s", e)
+        log.error("Please ensure openstacksdk >= 4.0.0 is installed")
+        sys.exit(1)
+
+    if not cluster:
+        log.error("Cluster %s not found.", cluster_name)
+        sys.exit(1)
+    return cluster
+
+
+def _created_within_minutes(created_at: str, minutes: int) -> bool:
+    """Return whether a resource was created within the last ``minutes`` minutes.
+
+    Magnum reports ``created_at`` in UTC, with or without a zone suffix,
+    so a value without one is read as UTC.
+    """
+    created = datetime.fromisoformat(created_at)
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=UTC)
+    return created >= datetime.now(UTC) - timedelta(minutes=minutes)
+
+
+def remove(os_cloud: str, cluster_name: str, minutes: int = 0) -> None:
+    """Remove a COE cluster from cloud.
+
+    Exits non-zero if the cluster cannot be found or deleted.
+
+    :arg str os_cloud: Cloud name as defined in OpenStack clouds.yaml.
+    :arg str cluster_name: Name or ID of the cluster to remove.
+    :arg int minutes: Only delete the cluster if it is older than this many
+        minutes; the default 0 deletes it whatever its age.
+    """
+    cloud = openstack.connection.from_config(cloud=os_cloud)
+    cluster = _get_cluster(cloud, cluster_name)
+
+    if minutes > 0 and _created_within_minutes(cluster.created_at, minutes):
+        log.warning('Cluster "%s" (%s) is not older than %d minutes.', cluster.name, cluster.id, minutes)
+        return
+
+    try:
+        deleted = cloud.delete_coe_cluster(cluster.id)
+    except OpenStackCloudException as e:
+        log.error("Failed to delete cluster %s: %s", cluster_name, e)
+        sys.exit(1)
+    # delete_coe_cluster looks the cluster up again and returns False,
+    # without raising, when that lookup finds nothing.
+    if not deleted:
+        log.error("Failed to delete cluster %s: not found.", cluster_name)
+        sys.exit(1)
+    log.info("Deleted cluster %s", cluster_name)
+
+
+def show(os_cloud: str, cluster_name: str) -> None:
+    """Print the attributes of a COE cluster as JSON.
+
+    :arg str os_cloud: Cloud name as defined in OpenStack clouds.yaml.
+    :arg str cluster_name: Name or ID of the cluster to show.
+    """
+    cloud = openstack.connection.from_config(cloud=os_cloud)
+    cluster = _get_cluster(cloud, cluster_name)
+    echo(json.dumps(cluster.to_dict(), indent=2, sort_keys=True, default=str))
 
 
 def cleanup(os_cloud: str, jenkins_urls: str | None = None) -> None:
