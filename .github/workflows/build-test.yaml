@@ -39,7 +39,7 @@ jobs:
       pull-requests: read  # Read PR metadata for status reporting
     # Pinned to python-workflows v0.1.1 release commit
     # yamllint disable-line rule:line-length
-    uses: lfreleng-actions/python-workflows/.github/workflows/build-test.yaml@e6e1ea99f84dc0993a14759c749555268a393cab  # v0.6.0
+    uses: lfreleng-actions/python-workflows/.github/workflows/build-test.yaml@d9336718eea42197699c233134f3b34a69520012  # v0.7.0
     with:
       # Preserve the current behaviour: monitor egress (audit) rather than
       # enforce a block-mode allow-list. Switching to 'block' is a possible
