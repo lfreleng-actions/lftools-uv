@@ -65,7 +65,6 @@ dependencies = [
     # https://bugs.launchpad.net/openstacksdk/+bug/2175057
     "openstacksdk>=4.0.0,!=4.23.0,<5.0.0",
     "pbr",
-    "pygerrit2",
     "PyGithub",
     "PyJWT",
     "python-jenkins",
@@ -245,7 +244,6 @@ module = [
     "ldap.*",
     "openstack.*",
     "platformdirs.*",
-    "pygerrit2.*",
     "ruamel.*",
 ]
 ignore_missing_imports = true
