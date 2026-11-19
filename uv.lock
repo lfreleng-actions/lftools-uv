@@ -1656,9 +1656,12 @@ wheels = [
 
 [[package]]
 name = "multi-key-dict"
-version = "2.0.3"
+version = "2.0.4"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/6d/97/2e9c47ca1bbde6f09cb18feb887d5102e8eacd82fbc397c77b221f27a2ab/multi_key_dict-2.0.3.tar.gz", hash = "sha256:deebdec17aa30a1c432cb3f437e81f8621e1c0542a0c0617a74f71e232e9939e", size = 8429, upload-time = "2015-09-20T19:38:19.749Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e6/42/5cc239c3b8667f7bb78852011977d5bd0cecc6fc1a4b0cd6669355d148e9/multi_key_dict-2.0.4.tar.gz", hash = "sha256:34b0fece445cae0147f0dcd542290ec8cab83a800535890a6b7c615c0c779d08", size = 9209, upload-time = "2026-10-30T16:31:16.74Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f1/be/475576d52e3d68f13cc768aaaa41958b37c488cf1351662e4a527f501860/multi_key_dict-2.0.4-py3-none-any.whl", hash = "sha256:9b83bdb54ae128c8a1696caec923b926e44ca6f88faa58daaedb6302759a87da", size = 10185, upload-time = "2026-10-30T16:31:15.301Z" },
+]
 
 [[package]]
 name = "mypy"
