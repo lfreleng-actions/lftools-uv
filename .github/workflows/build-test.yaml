@@ -23,7 +23,6 @@ on:
       - '**'
       - '!.github/**'
       - '!.*'
-      - '!tox.ini'
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
@@ -45,3 +44,7 @@ jobs:
       # enforce a block-mode allow-list. Switching to 'block' is a possible
       # follow-up once the allow-list is validated against this build.
       harden_runner_egress: 'audit'
+      # Run the unit tests in the tox 'locked' environment, which installs
+      # the versions uv.lock records rather than the newest on PyPI.
+      tox_tests: true
+      tox_envs: 'locked'

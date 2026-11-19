@@ -53,6 +53,8 @@ MANIFEST
 
 # Per-project virtualenvs
 .venv*/
+# tox-uv's lock runner writes a .venv file naming its environment
+/.venv
 .conda*/
 .python-version
 
