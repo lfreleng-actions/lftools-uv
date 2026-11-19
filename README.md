@@ -367,6 +367,20 @@ pipeline {
    uv run pytest
    ```
 
+   CI runs the tests in the tox `locked` environment, which installs
+   the versions `uv.lock` records with `uv sync --locked`, on the
+   Python that runs tox. Running it needs `tox` and `tox-uv`:
+
+   ```bash
+   tox -e locked
+   ```
+
+   Where no `.venv` directory exists, this leaves a `.venv` file naming
+   the tox environment. uv 0.13.7 refuses to work beside that file;
+   later releases follow it, so `uv sync` and `uv run` act on the tox
+   environment instead. Delete the file before using them. An existing
+   `.venv` directory stays untouched.
+
 4. Format and lint code:
 
    ```bash
