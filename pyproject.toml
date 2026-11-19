@@ -62,7 +62,6 @@ dependencies = [
     "nodeenv",
     "openstacksdk>=4.0.0,<5.0.0",
     "pbr",
-    "pygerrit2",
     "PyGithub",
     "PyJWT",
     "python-jenkins",
@@ -242,7 +241,6 @@ module = [
     "ldap.*",
     "openstack.*",
     "platformdirs.*",
-    "pygerrit2.*",
     "ruamel.*",
 ]
 ignore_missing_imports = true

@@ -21,11 +21,12 @@ from typing import Any, cast
 import click
 import ruamel.yaml
 import yaml
-from pygerrit2 import GerritRestAPI, HTTPBasicAuth
+from requests.auth import HTTPBasicAuth
 from ruamel.yaml.comments import CommentedMap
 
 from lftools_uv import config
 from lftools_uv.cli.errors import error_handler
+from lftools_uv.gerrit_rest import GerritRestAPI
 from lftools_uv.github_helper import prvotes
 from lftools_uv.ldap_cli import helper_yaml4info
 from lftools_uv.output import echo
