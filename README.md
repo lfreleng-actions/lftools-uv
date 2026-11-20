@@ -260,6 +260,26 @@ uvx lftools-uv version
 uvx lftools-uv --help
 ```
 
+#### Pinned Dependencies for CI
+
+A plain install resolves the dependencies afresh, to the newest versions
+the ranges in `pyproject.toml` allow, so a new upstream release can break a
+pipeline that ran yesterday. The `pinned` extra holds each core dependency at
+the version `uv.lock` records for that lftools-uv release, the set its tests
+ran on. Use it in CI:
+
+```bash
+uvx "lftools-uv[pinned]" version
+uvx --from "lftools-uv[pinned]" lftools-uv --help
+```
+
+It works the same with `uv tool install` and `pip install`, and combines
+with other extras: `"lftools-uv[pinned,ldap]"`. It pins the core
+dependencies and nothing else: a package that the `ldap`, `openstack` or
+`zulip` extra brings, and the core does not, still resolves to the newest
+version its range allows. The extra exists in published sdists and wheels,
+built by `tox -e build`, and not in `pyproject.toml`.
+
 #### Using Optional Dependencies
 
 When using features that require optional dependencies (like LDAP or
