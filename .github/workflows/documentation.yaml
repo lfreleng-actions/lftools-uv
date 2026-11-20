@@ -8,7 +8,7 @@
 # .readthedocs.yml) continues to publish independently.
 #
 # This workflow resolves the Python project's distribution name and
-# version at runtime via the python-project-metadata-action (with a
+# version at runtime via the build-metadata-action (with a
 # fall-back to the repository name when Python project metadata is
 # unavailable), but it is not fully project-agnostic: the build assumes
 # a Python project with a `pyproject.toml` that can be installed via
@@ -165,14 +165,20 @@ jobs:
         id: python-metadata
         continue-on-error: true
         # yamllint disable-line rule:line-length
-        uses: lfreleng-actions/python-project-metadata-action@17e75d13ed765a9662ca8fce583b2fb8c908eaa2  # v0.1.25
+        uses: lfreleng-actions/build-metadata-action@689e13653176908922b12f85cb93b061c467ba6f  # v0.13.2
+        with:
+          use_version_extract: 'false'
+          include_environment: 'false'
+          artifact_upload: 'false'
+          output_format: ''
+          python_offline_mode: 'true'
 
       - name: 'Resolve project name'
         id: resolve-name
         shell: bash
         env:
           PYTHON_PROJECT_NAME: >-
-            ${{ steps.python-metadata.outputs.python_project_name }}
+            ${{ steps.python-metadata.outputs.project_name }}
           REPOSITORY_NAME: >-
             ${{ steps.repo-metadata.outputs.repository_name }}
         run: |
@@ -182,7 +188,7 @@ jobs:
           # resolve a name.
           if [ -n "${PYTHON_PROJECT_NAME}" ]; then
             name="${PYTHON_PROJECT_NAME}"
-            source="python-project-metadata-action"
+            source="build-metadata-action"
           else
             name="${REPOSITORY_NAME}"
             source="repository-metadata-action (fallback)"
@@ -223,13 +229,13 @@ jobs:
         shell: bash
         env:
           PYTHON_PROJECT_VERSION: >-
-            ${{ steps.python-metadata.outputs.python_project_version }}
+            ${{ steps.python-metadata.outputs.project_version }}
         run: |
-          # Use the version reported by python-project-metadata-action
-          # (which handles both static pyproject.toml versions and
-          # dynamic backends like hatch-vcs / setuptools-scm). If the
-          # action failed to resolve or emit a version, fall through
-          # to an "unknown" placeholder.
+          # Use the version build-metadata-action reads from a static
+          # `version` in pyproject.toml. It does not resolve dynamic
+          # versions (hatch-vcs / setuptools-scm / etc.), so for a
+          # dynamically versioned project, or when the action fails,
+          # fall through to an "unknown" placeholder.
           version="${PYTHON_PROJECT_VERSION:-unknown}"
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
           echo "Resolved project version: ${version}"
