@@ -124,9 +124,7 @@ ldap = [
     "python-ldap>=3.4,<4.0"
 ]
 
-openstack = [
-    "osc-lib>=2.2,<4.8"
-]
+openstack = []
 
 test = [
     "pytest>=8.3.0",

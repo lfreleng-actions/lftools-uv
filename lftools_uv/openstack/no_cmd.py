@@ -19,8 +19,9 @@ import click
 @click.group()
 @click.pass_context
 def openstack(ctx, os_cloud):
-    """(lftools-uv[openstack]) Provides an OpenStack interface.
+    """Provides an OpenStack interface (unavailable).
 
-    To activate this interface run `uv pip install "lftools-uv[openstack]"`.
+    The OpenStack modules failed to import, so this interface is disabled.
+    Reinstall lftools-uv to restore its core dependencies.
     """
     pass

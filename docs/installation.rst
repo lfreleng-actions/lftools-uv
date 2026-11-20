@@ -18,18 +18,20 @@ For Install
 
 lftools-uv is available on PyPI. Install it with ``uv pip install lftools-uv``
 or ``pip install lftools-uv`` in your virtual environment. Optional features
-such as LDAP and OpenStack support are extras, for example
-``pip install "lftools-uv[ldap]"``.
+such as LDAP support are extras, for example
+``pip install "lftools-uv[ldap]"``. The ``openstack`` commands need no
+extra; the ``openstack`` extra remains, empty, so that callers that name
+it keep working.
 
 For CI, use the ``pinned`` extra, for example ``uvx "lftools-uv[pinned]"``.
 A plain install resolves the dependencies to the newest versions the ranges
 in ``pyproject.toml`` allow; ``pinned`` holds each core dependency at the
 version ``uv.lock`` records for that release, the set its tests ran on. It
 combines with other extras, as in ``"lftools-uv[pinned,ldap]"``, but pins
-the core dependencies and nothing else: a package that the ``ldap``,
-``openstack`` or ``zulip`` extra brings, and the core does not, is not
-pinned. The extra exists in the published sdist and wheel, which
-``tox -e build`` produces, and not in ``pyproject.toml``.
+the core dependencies and nothing else: a package that the ``ldap`` or
+``zulip`` extra brings, and the core does not, is not pinned. The extra
+exists in the published sdist and wheel, which ``tox -e build`` produces,
+and not in ``pyproject.toml``.
 
 The package installs the ``lftools-uv`` command. It does not install the
 ``lftools`` command from legacy lftools.
