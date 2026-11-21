@@ -275,25 +275,19 @@ uvx --from "lftools-uv[pinned]" lftools-uv --help
 
 It works the same with `uv tool install` and `pip install`, and combines
 with other extras: `"lftools-uv[pinned,ldap]"`. It pins the core
-dependencies and nothing else: a package that the `ldap`, `openstack` or
-`zulip` extra brings, and the core does not, still resolves to the newest
-version its range allows. The extra exists in published sdists and wheels,
-built by `tox -e build`, and not in `pyproject.toml`.
+dependencies and nothing else: a package that the `ldap` or `zulip` extra
+brings, and the core does not, still resolves to the newest version its
+range allows. The extra exists in published sdists and wheels, built by
+`tox -e build`, and not in `pyproject.toml`.
 
 #### Using Optional Dependencies
 
-When using features that require optional dependencies (like LDAP or
-OpenStack), you need to specify the extras:
+When using features that require optional dependencies (like LDAP), you
+need to specify the extras:
 
 ```bash
 # For LDAP functionality - note the quotes to prevent shell expansion
 uvx "lftools-uv[ldap]" ldap --help
-
-# For OpenStack functionality
-uvx "lftools-uv[openstack]" openstack --help
-
-# Combined extras
-uvx "lftools-uv[ldap,openstack]" --help
 
 # All extras for full functionality
 uvx "lftools-uv[all]" --help
@@ -306,8 +300,11 @@ You can also use the `--from` flag for clarity:
 ```bash
 # Same as the above
 uvx --from "lftools-uv[ldap]" lftools-uv ldap csv mygroup
-uvx --from "lftools-uv[openstack]" lftools-uv openstack --help
 ```
+
+The `openstack` commands need no extra: `uvx lftools-uv openstack --help`
+works as is. The `openstack` extra remains, empty, so that callers that
+name it, such as `"lftools-uv[openstack]"`, keep working.
 
 #### CI/CD Pipeline Examples
 
