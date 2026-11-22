@@ -6,8 +6,10 @@
 openstack
 *********
 
-Requires a `pip install lftools-uv[openstack]` to activate this command.
-Requires `qemu-img` binary to upload images
+This command needs no extra: its dependencies are part of the core install.
+Requires `qemu-img` binary to upload images.
+Requires the `openstack` command from `python-openstackclient` on `PATH` to
+share images (`image share`).
 
 .. program-output:: lftools-uv openstack --help
 
