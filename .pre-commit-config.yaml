@@ -4,7 +4,7 @@
 
 ci:
   # pre-commit.ci sandbox lacks uv/project venv; skip system-local hooks
-  skip: [pytest, gha-workflow-linter, basedpyright]
+  skip: [gha-workflow-linter, basedpyright]
   autofix_prs: false
   autofix_commit_msg: |
     Chore: pre-commit autofixes
@@ -149,14 +149,3 @@ repos:
         types:
           - yaml
       - id: check-readthedocs
-
-  # Run tests to ensure code changes don't break functionality
-  - repo: local
-    hooks:
-      - id: pytest
-        name: pytest
-        entry: uv run --extra test pytest
-        language: system
-        pass_filenames: false
-        always_run: true
-        args: [--tb=no, --no-cov, -q]

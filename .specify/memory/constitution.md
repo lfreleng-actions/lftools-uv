@@ -1,5 +1,50 @@
 <!--
 # Sync Impact Report
+**Version Change**: 2.0.0 → 3.0.0
+**Change Type**: MAJOR - Redefinition of where a mandatory check runs:
+the test suite no longer runs as a pre-commit hook; CI enforces it
+
+## Rationale
+The pre-commit `pytest` hook was a stop-gap to stop local agent
+sessions pushing code with failing tests. The CI test workflow
+(`.github/workflows/build-test.yaml`) already runs the suite on every
+pull request, so the hook is removed from every `lfreleng-actions`
+repository that carries one. Pre-commit execution is also moving from
+pre-commit.ci to the organisation linting workflow, which fails any
+run whose `ci.skip` names a hook the configuration does not define, so
+`pytest` leaves `ci.skip` as well.
+
+## Modified Principles
+- UPDATED: Principle IV (Pre-Commit Integrity) > Pre-Commit
+  Requirements - removed "Test suite execution (pytest)"; the
+  `.pre-commit-config.yaml` no longer defines a `pytest` hook
+- UPDATED: Development Standards > Testing Requirements > Test
+  Execution - tests MUST pass before merge, enforced by the CI test
+  workflow (`build-test.yaml`) and run locally with
+  `uv run pytest tests/` or `make test`
+
+## Added Sections
+- None
+
+## Removed Sections
+- None
+
+## Templates Review Status
+- ✅ `.specify/templates/plan-template.md` - reviewed; its only pytest
+      mention is an example test framework, not the pre-commit hook
+- ✅ `.specify/templates/spec-template.md` - reviewed, no conflicts
+- ✅ `.specify/templates/tasks-template.md` - reviewed, no conflicts
+- ✅ `.specify/templates/constitution-template.md` - reviewed, no
+      conflicts
+- ✅ `.specify/templates/checklist-template.md` - reviewed, no conflicts
+- ✅ `.specify/templates/commands/*.md` - not present, no updates needed
+
+## Follow-up TODOs
+- None
+-->
+
+<!--
+# Sync Impact Report (previous)
 **Version Change**: 1.1.0 → 2.0.0
 **Change Type**: MAJOR - Governance change: constitutional authority now
 ranks below the lfreleng-actions organisation guidelines
@@ -182,7 +227,6 @@ All commits must pass the following validations (per
 - License compliance (reuse-tool)
 - GitHub Actions validation (actionlint, check-github-actions,
   check-github-workflows, gha-workflow-linter)
-- Test suite execution (pytest)
 
 **Rationale**: Pre-commit hooks are the first line of defense against
 defects, security issues, licensing violations, and technical debt.
@@ -288,8 +332,9 @@ to every Linux Foundation project that uses it for CI/CD operations.
 - **Test Types**: Unit tests for all business logic; functional tests
   available via `scripts/run_functional_tests.sh` for integration
   validation.
-- **Test Execution**: Tests MUST pass before commit (verified via
-  pre-commit pytest hook and manually via `uv run pytest tests/`).
+- **Test Execution**: Tests MUST pass before merge, enforced by the CI
+  test workflow (`.github/workflows/build-test.yaml`). Run them locally
+  with `uv run pytest tests/` or `make test`.
 - **Make Targets**: Use `make test` for quick test runs, `make check`
   for lint + test combined.
 
@@ -378,4 +423,4 @@ constitutional principles.
 
 ---
 
-**Version**: 2.0.0 | **Ratified**: 2026-04-28 | **Last Amended**: 2026-10-01
+**Version**: 3.0.0 | **Ratified**: 2026-04-28 | **Last Amended**: 2026-11-23
