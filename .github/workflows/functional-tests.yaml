@@ -391,18 +391,62 @@ jobs:
           # identical OS + Python + uv.lock inputs.
           cache-suffix: "functional-${{ matrix.test_filter }}"
 
+      - name: "Enforce HTTPS for APT"
+        id: apt-https
+        if: >-
+          !(matrix.requires_secrets
+            && needs.check-actor.outputs.skip-credential-tests == 'true')
+        uses: lfreleng-actions/apt-https-enforce-action@107838afeb79d37aeddb2b7f227f80f51df25180  # v0.0.1
+        with:
+          http_fallback_override: ${{ vars.APT_HTTP_FALLBACK }}
+
       - name: "Install system packages for python-ldap"
         if: >-
           !(matrix.requires_secrets
             && needs.check-actor.outputs.skip-credential-tests == 'true')
         shell: bash
         run: |
-          sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libldap2-dev libsasl2-dev libssl-dev \
             libsasl2-modules gcc build-essential
           sudo rm -rf /var/lib/apt/lists/*
 
+      - name: "Verify APT used HTTPS"
+        if: >-
+          !(matrix.requires_secrets
+            && needs.check-actor.outputs.skip-credential-tests == 'true')
+        shell: bash
+        env:
+          APT_TRANSPORT: ${{ steps.apt-https.outputs.transport }}
+          APT_FALLBACK_ENABLED: ${{ steps.apt-https.outputs.fallback_enabled }}
+        run: |
+          echo "transport=${APT_TRANSPORT}"
+          echo "fallback_enabled=${APT_FALLBACK_ENABLED}"
+
+          [[ "${APT_TRANSPORT}" == "https" ]]
+          [[ "${APT_FALLBACK_ENABLED}" == "false" ]]
+
+          source_files=(
+            /etc/apt/sources.list
+            /etc/apt/sources.list.d/*.list
+            /etc/apt/sources.list.d/*.sources
+          )
+          for source_file in "${source_files[@]}"; do
+            [[ -f "${source_file}" ]] || continue
+            http_sources="$(awk '
+              {
+                sub(/#.*/, "")
+                if (tolower($0) ~ /http:\/\//) {
+                  print FILENAME ":" FNR ": " $0
+                }
+              }
+            ' "${source_file}")"
+            if [[ -n "${http_sources}" ]]; then
+              printf '%s\n' "${http_sources}" >&2
+              echo "Found an HTTP APT source." >&2
+              exit 1
+            fi
+          done
 
       - name: "Set up Python"
         if: >-
@@ -769,14 +813,53 @@ jobs:
           # the same cache key when running in parallel.
           cache-suffix: "security-baseline"
 
+      - name: "Enforce HTTPS for APT"
+        id: apt-https
+        uses: lfreleng-actions/apt-https-enforce-action@107838afeb79d37aeddb2b7f227f80f51df25180  # v0.0.1
+        with:
+          http_fallback_override: ${{ vars.APT_HTTP_FALLBACK }}
+
       - name: "Install system packages for python-ldap"
         shell: bash
         run: |
-          sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libldap2-dev libsasl2-dev libssl-dev \
             libsasl2-modules gcc build-essential
           sudo rm -rf /var/lib/apt/lists/*
+
+      - name: "Verify APT used HTTPS"
+        shell: bash
+        env:
+          APT_TRANSPORT: ${{ steps.apt-https.outputs.transport }}
+          APT_FALLBACK_ENABLED: ${{ steps.apt-https.outputs.fallback_enabled }}
+        run: |
+          echo "transport=${APT_TRANSPORT}"
+          echo "fallback_enabled=${APT_FALLBACK_ENABLED}"
+
+          [[ "${APT_TRANSPORT}" == "https" ]]
+          [[ "${APT_FALLBACK_ENABLED}" == "false" ]]
+
+          source_files=(
+            /etc/apt/sources.list
+            /etc/apt/sources.list.d/*.list
+            /etc/apt/sources.list.d/*.sources
+          )
+          for source_file in "${source_files[@]}"; do
+            [[ -f "${source_file}" ]] || continue
+            http_sources="$(awk '
+              {
+                sub(/#.*/, "")
+                if (tolower($0) ~ /http:\/\//) {
+                  print FILENAME ":" FNR ": " $0
+                }
+              }
+            ' "${source_file}")"
+            if [[ -n "${http_sources}" ]]; then
+              printf '%s\n' "${http_sources}" >&2
+              echo "Found an HTTP APT source." >&2
+              exit 1
+            fi
+          done
 
       - name: "Security check: No Category 2/3 tests in default run"
         run: |
