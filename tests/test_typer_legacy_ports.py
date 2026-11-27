@@ -2,7 +2,8 @@
 # SPDX-FileCopyrightText: 2026 The Linux Foundation
 """Tests that the Typer front-end runs the commands global-jjb calls.
 
-``nexus release``, ``sign sigul``, ``infofile check-votes`` and
+``nexus release``, ``sign sigul``, ``infofile check-votes``,
+``infofile get-committers``, ``infofile sync-committers`` and
 ``license check-dir`` existed only in the legacy Click front-end, so on the
 default Typer front-end they failed as usage errors and global-jjb had to set
 ``LEGACY_CLI=1``. Each test runs the same arguments through both front-ends
@@ -14,6 +15,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+import yaml
 from click.testing import CliRunner as ClickRunner
 from click.testing import Result as ClickResult
 from pytest_mock import MockerFixture
@@ -288,3 +290,164 @@ def test_check_dir_fails_on_missing_directory(run: Run, reference: Path, tmp_pat
     result = run(["license", "check-dir", str(tmp_path / "missing"), "-l", str(reference)])
 
     assert result.exit_code == 1
+
+
+# ---------------------------------------------------------------------------
+# infofile get-committers and sync-committers
+
+COMMITTERS_INFO = """---
+project: 'demo'
+repositories:
+    - 'demo'
+    - 'demo-docs'
+committers:
+    - name: 'Alice Example'
+      email: 'alice@example.org'
+      company: 'Example'
+      id: 'alice'
+      timezone: 'UTC'
+    - name: 'Bob Example'
+      email: 'bob@example.org'
+      company: 'Example'
+      id: 'bob'
+      timezone: 'UTC'
+"""
+
+COMMITTERS_LDAP = """---
+committers:
+    - name: 'Alice Example'
+      email: 'alice@example.org'
+      company: 'Example'
+      id: 'alice'
+      timezone: 'UTC'
+    - name: 'Carol Example'
+      email: 'carol@example.org'
+      company: 'Example'
+      id: 'carol'
+      timezone: 'Europe/London'
+"""
+
+
+@pytest.fixture
+def committers_info(tmp_path: Path) -> Path:
+    """Write an INFO.yaml naming alice and bob as committers."""
+    path = tmp_path / "INFO.yaml"
+    path.write_text(COMMITTERS_INFO)
+    return path
+
+
+@pytest.fixture
+def committers_ldap(tmp_path: Path) -> Path:
+    """Write an LDAP dump naming alice and carol as committers."""
+    path = tmp_path / "LDAP.yaml"
+    path.write_text(COMMITTERS_LDAP)
+    return path
+
+
+@FRONT_ENDS
+@pytest.mark.parametrize(
+    ("options", "expected"),
+    [
+        ([], "      id: alice\n      id: bob\n"),
+        (
+            ["--full"],
+            "    - name: Alice Example\n      email: alice@example.org\n      id: alice\n"
+            "    - name: Bob Example\n      email: bob@example.org\n      id: bob\n",
+        ),
+        (["--id", "bob"], "      id: bob\n"),
+        (["--id", "bob", "--full"], "    - name: Bob Example\n      email: bob@example.org\n      id: bob\n"),
+        (["--id", "dave"], ""),
+    ],
+    ids=["plain", "full", "id-present", "id-full", "id-absent"],
+)
+def test_get_committers_prints_committers(run: Run, committers_info: Path, options: list[str], expected: str) -> None:
+    result = run(["infofile", "get-committers", *options, str(committers_info)])
+
+    assert result.exit_code == 0, result.output
+    assert result.stdout == expected
+
+
+@FRONT_ENDS
+def test_get_committers_reads_file_from_environment(
+    run: Run, committers_info: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FILE_NAME", str(committers_info))
+    result = run(["infofile", "get-committers"])
+
+    assert result.exit_code == 0, result.output
+    assert result.stdout == "      id: alice\n      id: bob\n"
+
+
+@FRONT_ENDS
+def test_get_committers_missing_file(run: Run, tmp_path: Path) -> None:
+    """The shared error handler maps FileNotFoundError to exit code 7."""
+    result = run(["infofile", "get-committers", str(tmp_path / "missing.yaml")])
+
+    assert result.exit_code == 7
+    assert result.stdout == ""
+
+
+REPO_OPTIONS = pytest.mark.parametrize("repo", [None, "demo-new"], ids=["no-repo", "repo"])
+
+
+def _sync(run: Run, info: Path, ldap: Path, committer: str, repo: str | None) -> ClickResult | TyperResult:
+    repo_args = ["--repo", repo] if repo else []
+    return run(["infofile", "sync-committers", str(info), str(ldap), committer, *repo_args])
+
+
+@FRONT_ENDS
+def test_sync_committers_without_repo_keeps_repositories(
+    run: Run, committers_info: Path, committers_ldap: Path
+) -> None:
+    result = _sync(run, committers_info, committers_ldap, "carol", None)
+
+    assert result.exit_code == 0, result.output
+    info = yaml.safe_load(committers_info.read_text())
+    assert info["repositories"] == ["demo", "demo-docs"]
+    assert info["committers"][-1]["id"] == "carol"
+
+
+@FRONT_ENDS
+def test_sync_committers_with_repo_replaces_first_repository(
+    run: Run, committers_info: Path, committers_ldap: Path
+) -> None:
+    result = _sync(run, committers_info, committers_ldap, "carol", "demo-new")
+
+    assert result.exit_code == 0, result.output
+    assert result.stdout == ""
+    info = yaml.safe_load(committers_info.read_text())
+    assert info["repositories"] == ["demo-new", "demo-docs"]
+    assert info["committers"][-1] == {
+        "name": "Carol Example",
+        "company": "Example",
+        "email": "carol@example.org",
+        "id": "carol",
+        "timezone": "Europe/London",
+    }
+    assert [c["id"] for c in info["committers"]] == ["alice", "bob", "carol"]
+
+
+def test_sync_committers_writes_same_file_in_both_front_ends(tmp_path: Path, committers_ldap: Path) -> None:
+    written = []
+    for name, run in (("click", _click), ("typer", _typer)):
+        info = tmp_path / f"{name}.yaml"
+        info.write_text(COMMITTERS_INFO)
+        result = _sync(run, info, committers_ldap, "carol", "demo-new")
+        assert result.exit_code == 0, result.output
+        written.append(info.read_text())
+
+    assert written[0] == written[1]
+
+
+@FRONT_ENDS
+@REPO_OPTIONS
+@pytest.mark.parametrize(("committer", "exit_code"), [("alice", 0), ("dave", 1)], ids=["present", "not-in-ldap"])
+def test_sync_committers_leaves_file_alone(
+    run: Run, committers_info: Path, committers_ldap: Path, repo: str | None, committer: str, exit_code: int
+) -> None:
+    """An existing committer exits 0, and one LDAP lacks exits 1, without writing."""
+    result = _sync(run, committers_info, committers_ldap, committer, repo)
+
+    assert result.exit_code == exit_code, result.output
+    assert result.stdout == ""
+    assert committers_info.read_text() == COMMITTERS_INFO

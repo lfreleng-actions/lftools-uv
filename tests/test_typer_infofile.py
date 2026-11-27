@@ -1,63 +1,44 @@
 # SPDX-License-Identifier: EPL-1.0
 # SPDX-FileCopyrightText: 2026 The Linux Foundation
-"""Tests for the guidance printed by the Typer ``infofile`` placeholders.
+"""Tests for the Typer ``infofile`` command set and its one placeholder.
 
-Apart from ``check-votes``, the Typer ``infofile`` commands are placeholders
-that point the user at the Click implementation. The hints named ``lftools``, the legacy executable that
-lftools-uv does not install, and three of them name commands that exist in no
-front-end. A hint must name a command the user can run, or say plainly that
-none exists.
+``check-votes``, ``get-committers`` and ``sync-committers`` are full ports;
+tests for them live in test_typer_legacy_ports.py. ``create-info-file`` is
+still a placeholder that points the user at the Click implementation. Its
+hint must name a command the user can run: ``lftools``, the legacy
+executable, is not installed by lftools-uv.
 
-The placeholders do no work, so each exits 1 with its guidance on stderr.
+The placeholder does no work, so it exits 1 with its guidance on stderr.
 """
 
 import re
 
-import pytest
 from typer.testing import CliRunner
 
-from lftools_uv.cli.infofile import infofile as click_infofile
 from lftools_uv.typer_apps.infofile import infofile_app
 
 runner = CliRunner()
 
-PLACEHOLDER_ARGS = {
-    "create-info-file": ["gerrit.example.org", "foo/bar"],
-    "get-committers": ["gerrit.example.org", "foo/bar", "grp", "INFO.yaml"],
-    "validate-info-file": ["INFO.yaml"],
-    "check-committers": ["INFO.yaml"],
-    "match-ldap": ["INFO.yaml"],
-}
+PLACEHOLDER_ARGS = ["create-info-file", "gerrit.example.org", "foo/bar"]
 
 
-@pytest.mark.parametrize("command", PLACEHOLDER_ARGS)
-def test_placeholder_hint_names_a_runnable_command(command):
-    """The hint matches what the Click front-end actually provides."""
-    result = runner.invoke(infofile_app, [command, *PLACEHOLDER_ARGS[command]])
-    output = result.output
-
-    assert re.search(r"\blftools(?!-uv)\b", output) is None
-    if command in click_infofile.commands:
-        assert f"LEGACY_CLI=1 lftools-uv infofile {command}" in output
-    else:
-        assert "lftools-uv infofile" not in output
-        assert "not implemented" in output
-
-
-def test_placeholders_cover_every_typer_command():
-    """Guard the parametrisation: a new placeholder must be checked too.
-
-    ``check-votes`` is a full port, not a placeholder; tests for it live in
-    test_typer_legacy_ports.py.
-    """
+def test_lists_only_working_commands():
+    """Commands that exist in no front-end are not offered."""
     registered = {cmd.name for cmd in infofile_app.registered_commands}
-    assert registered - {"check-votes"} == set(PLACEHOLDER_ARGS)
+    assert registered == {"check-votes", "create-info-file", "get-committers", "sync-committers"}
 
 
-@pytest.mark.parametrize("command", PLACEHOLDER_ARGS)
-def test_placeholder_exits_non_zero_with_note_on_stderr(command):
+def test_placeholder_hint_names_a_runnable_command():
+    """The hint matches what the Click front-end actually provides."""
+    result = runner.invoke(infofile_app, PLACEHOLDER_ARGS)
+
+    assert re.search(r"\blftools(?!-uv)\b", result.output) is None
+    assert "LEGACY_CLI=1 lftools-uv infofile create-info-file" in result.output
+
+
+def test_placeholder_exits_non_zero_with_note_on_stderr():
     """A placeholder does no work, so it must not report success."""
-    result = runner.invoke(infofile_app, [command, *PLACEHOLDER_ARGS[command]])
+    result = runner.invoke(infofile_app, PLACEHOLDER_ARGS)
 
     assert result.exit_code == 1
     assert result.stdout == ""

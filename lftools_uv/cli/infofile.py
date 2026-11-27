@@ -171,48 +171,36 @@ tsc:
         echo(line)
 
 
-@click.command(name="get-committers")
-@click.argument("file", envvar="FILE_NAME", required=True)
-@click.option("--full", is_flag=True, help="Output name email and id for all committers in an infofile")
-@click.option("--id", type=str, required=False, help="Full output for a specific LFID")
-@click.pass_context
-@error_handler
-def get_committers(ctx, file, full, id):
-    """Extract Committer info from INFO.yaml or LDAP dump."""
+def print_committers(file: str, full: bool, committer_id: str | None) -> None:
+    """Print the committers listed in an INFO.yaml file or LDAP dump.
+
+    Shared by the Click and Typer get-committers commands. Each committer's
+    id goes to stdout; *full* adds the name and email. With *committer_id*,
+    print only that committer, or nothing when the file lacks it.
+    """
     with open(file) as yaml_file:
         project = yaml.safe_load(yaml_file)
 
-    def echo_committer_info(committer, full):
-        """Write one committer to stdout."""
+    for committer in project.get("committers", []):
+        if committer_id and committer.get("id") != committer_id:
+            continue
         if full:
             echo(f"    - name: {committer.get('name', '')}")
             echo(f"      email: {committer.get('email', '')}")
         echo(f"      id: {committer.get('id', '')}")
-
-    def list_committers(full, id, project):
-        """List committers from the INFO.yaml file."""
-        lookup = project.get("committers", [])
-        for item in lookup:
-            if id:
-                if item.get("id") == id:
-                    echo_committer_info(item, full)
-                    break
-                else:
-                    continue
-            echo_committer_info(item, full)
-
-    list_committers(full, id, project)
+        if committer_id:
+            break
 
 
-@click.command(name="sync-committers")
-@click.argument("info_file")
-@click.argument("ldap_file")
-@click.argument("id")
-@click.option("--repo", type=str, required=False, help="repo name")
-@click.pass_context
-@error_handler
-def sync_committers(ctx, id, info_file, ldap_file, repo):
-    """Sync committer information from LDAP into INFO.yaml."""
+def sync_committer(info_file: str, ldap_file: str, committer_id: str, repo: str | None) -> None:
+    """Copy one committer from an LDAP dump into an INFO.yaml file.
+
+    Shared by the Click and Typer sync-committers commands. Exits 0 without
+    writing when *committer_id* is already a committer in *info_file*, and 1
+    when *ldap_file* lists no such committer. With *repo*, the first entry of
+    ``repositories`` becomes *repo*; without it, ``repositories`` is left as
+    it is.
+    """
     ryaml = ruamel.yaml.YAML()
     ryaml.preserve_quotes = True
     ryaml.indent(mapping=4, sequence=6, offset=4)
@@ -228,44 +216,58 @@ def sync_committers(ctx, id, info_file, ldap_file, repo):
     with open(ldap_file) as f:
         ldap_data = ryaml.load(f)
 
-    def readfile(data, ldap_data, id):
-        committer_info = info_data["committers"]
-        repo_info = info_data["repositories"]
-        committer_info_ldap = ldap_data["committers"]
-        readldap(id, ldap_file, committer_info, committer_info_ldap, repo, repo_info)
+    committer_info = info_data["committers"]
+    if any(committer["id"] == committer_id for committer in committer_info):
+        log.info(f"{committer_id} is already in {info_file}")
+        sys.exit(0)
 
-    def readldap(id, ldap_file, committer_info, committer_info_ldap, repo, repo_info):
-        for idx, _ in enumerate(committer_info):
-            committer = info_data["committers"][idx]["id"]
-            if committer == id:
-                log.info(f"{id} is already in {info_file}")
-                sys.exit(0)
+    # The last matching LDAP entry wins, as it always has.
+    matches = [committer for committer in ldap_data["committers"] if committer["id"] == committer_id]
+    ldap_committer = matches[-1] if matches else None
+    if ldap_committer is None or ldap_committer.get("name") is None:
+        log.error(f"{committer_id} does not exist in {ldap_file}")
+        sys.exit(1)
 
-        name = email = formatid = company = timezone = None
-        for idx, _ in enumerate(committer_info_ldap):
-            committer = ldap_data["committers"][idx]["id"]
-            if committer == id:
-                name = ldap_data["committers"][idx].get("name")
-                email = ldap_data["committers"][idx].get("email")
-                formatid = ldap_data["committers"][idx].get("id")
-                company = ldap_data["committers"][idx].get("company")
-                timezone = ldap_data["committers"][idx].get("timezone")
-        if name is None:
-            log.error(f"{id} does not exist in {ldap_file}")
-            sys.exit(1)
-
-        user = CommentedMap(
-            (("name", name), ("company", company), ("email", email), ("id", formatid), ("timezone", timezone))
+    user = CommentedMap(
+        (
+            ("name", ldap_committer.get("name")),
+            ("company", ldap_committer.get("company")),
+            ("email", ldap_committer.get("email")),
+            ("id", ldap_committer.get("id")),
+            ("timezone", ldap_committer.get("timezone")),
         )
+    )
 
+    if repo is not None:
         info_data["repositories"][0] = repo
-        committer_info.append(user)
+    committer_info.append(user)
 
-        with open(info_file, "w") as f:
-            ryaml.dump(info_data, f)
-        log.info(f"Updated {info_file} with committer {id}")
+    with open(info_file, "w") as f:
+        ryaml.dump(info_data, f)
+    log.info(f"Updated {info_file} with committer {committer_id}")
 
-    readfile(info_data, ldap_data, id)
+
+@click.command(name="get-committers")
+@click.argument("file", envvar="FILE_NAME", required=True)
+@click.option("--full", is_flag=True, help="Output name email and id for all committers in an infofile")
+@click.option("--id", type=str, required=False, help="Full output for a specific LFID")
+@click.pass_context
+@error_handler
+def get_committers(ctx, file, full, id):
+    """Extract Committer info from INFO.yaml or LDAP dump."""
+    print_committers(file, full, id)
+
+
+@click.command(name="sync-committers")
+@click.argument("info_file")
+@click.argument("ldap_file")
+@click.argument("id")
+@click.option("--repo", type=str, required=False, help="repo name")
+@click.pass_context
+@error_handler
+def sync_committers(ctx, id, info_file, ldap_file, repo):
+    """Sync committer information from LDAP into INFO.yaml."""
+    sync_committer(info_file, ldap_file, id, repo)
 
 
 # aislop-ignore-next-line too-many-params -- recursion state, not CLI options; see below

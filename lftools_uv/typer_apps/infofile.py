@@ -14,15 +14,11 @@ import logging
 import typer
 
 from lftools_uv.cli.errors import error_handler
-from lftools_uv.cli.infofile import tally_votes
+from lftools_uv.cli.infofile import print_committers, sync_committer, tally_votes
 
 _HELP_INFO_YAML_PATH = "Path to INFO.yaml file"
 _MSG_USE_LEGACY_CLI = "Note: This command is implemented only in the legacy Click CLI."
-_MSG_NOT_IMPLEMENTED = "Note: This command is not implemented yet."
 
-
-# Import functions that we'll wrap - these are Click-based functions
-# We'll create simplified wrappers for now
 
 log = logging.getLogger(__name__)
 
@@ -76,110 +72,42 @@ def create_info_file(
 
 
 @infofile_app.command("get-committers")
+@error_handler
 def get_committers(
-    gerrit_url: str = typer.Argument(..., help="Gerrit URL"),
-    gerrit_project: str = typer.Argument(..., help="Gerrit project path"),
-    ldap_group: str = typer.Argument(..., help="LDAP group name"),
+    file: str = typer.Argument(..., envvar="FILE_NAME", help="INFO.yaml file or LDAP dump to read"),
+    full: bool = typer.Option(False, "--full", help="Output name email and id for all committers in an infofile"),
+    committer_id: str | None = typer.Option(None, "--id", help="Full output for a specific LFID"),
+) -> None:
+    """Extract Committer info from INFO.yaml or LDAP dump.
+
+    Each committer's id goes to stdout; --full adds the name and email.
+
+    Examples:
+        lftools-uv infofile get-committers INFO.yaml
+        lftools-uv infofile get-committers --full --id alice INFO.yaml
+    """
+    print_committers(file, full, committer_id)
+
+
+@infofile_app.command("sync-committers")
+@error_handler
+def sync_committers(
     info_file: str = typer.Argument(..., help=_HELP_INFO_YAML_PATH),
-    directory: str = typer.Option("r", "--directory", help="Custom gerrit directory"),
+    ldap_file: str = typer.Argument(..., help="LDAP dump to copy the committer from"),
+    committer_id: str = typer.Argument(..., help="LFID of the committer to add"),
+    repo: str | None = typer.Option(None, "--repo", help="Repository name to set as the first in repositories"),
 ) -> None:
-    """Get committers from LDAP and update INFO file.
+    """Sync committer information from LDAP into INFO.yaml.
 
-    Args:
-        gerrit_url: Gerrit URL
-        gerrit_project: Gerrit project path
-        ldap_group: LDAP group name
-        info_file: Path to INFO.yaml file
-        directory: Custom gerrit directory
+    Exits 0 without writing when the committer is already in the INFO
+    file, and 1 when the LDAP dump lists no such committer. Without
+    --repo, repositories is left unchanged.
 
     Examples:
-        lftools-uv infofile get-committers gerrit.example.com project/name ldap-group INFO.yaml
+        lftools-uv infofile sync-committers INFO.yaml LDAP.yaml alice
+        lftools-uv infofile sync-committers INFO.yaml LDAP.yaml alice --repo my-repo
     """
-    try:
-        typer.echo(f"Getting committers for project: {gerrit_project}", err=True)
-        typer.echo(f"LDAP group: {ldap_group}", err=True)
-        typer.echo(f"INFO file: {info_file}", err=True)
-        typer.echo(_MSG_USE_LEGACY_CLI, err=True)
-        typer.echo("Use: LEGACY_CLI=1 lftools-uv infofile get-committers", err=True)
-        raise typer.Exit(1)
-    except typer.Exit:
-        raise
-    except Exception as e:
-        log.exception("Failed to get committers")
-        typer.echo(f"Error: Failed to get committers: {e}", err=True)
-        raise typer.Exit(1) from None
-
-
-@infofile_app.command("validate-info-file")
-def validate_info_file(
-    info_file: str = typer.Argument(..., help="Path to INFO.yaml file to validate"),
-) -> None:
-    """Validate INFO.yaml file format and content.
-
-    Args:
-        info_file: Path to INFO.yaml file to validate
-
-    Examples:
-        lftools-uv infofile validate-info-file INFO.yaml
-    """
-    try:
-        typer.echo(f"Validating INFO file: {info_file}", err=True)
-        typer.echo(_MSG_NOT_IMPLEMENTED, err=True)
-        raise typer.Exit(1)
-    except typer.Exit:
-        raise
-    except Exception as e:
-        log.exception("INFO file validation failed")
-        typer.echo(f"Error: INFO file validation failed: {e}", err=True)
-        raise typer.Exit(1) from None
-
-
-@infofile_app.command("check-committers")
-def check_committers(
-    info_file: str = typer.Argument(..., help=_HELP_INFO_YAML_PATH),
-) -> None:
-    """Check committers in INFO file against LDAP.
-
-    Args:
-        info_file: Path to INFO.yaml file
-
-    Examples:
-        lftools-uv infofile check-committers INFO.yaml
-    """
-    try:
-        typer.echo(f"Checking committers in INFO file: {info_file}", err=True)
-        typer.echo(_MSG_NOT_IMPLEMENTED, err=True)
-        raise typer.Exit(1)
-    except typer.Exit:
-        raise
-    except Exception as e:
-        log.exception("Committers check failed")
-        typer.echo(f"Error: Committers check failed: {e}", err=True)
-        raise typer.Exit(1) from None
-
-
-@infofile_app.command("match-ldap")
-def match_ldap(
-    info_file: str = typer.Argument(..., help=_HELP_INFO_YAML_PATH),
-) -> None:
-    """Match LDAP information to INFO file.
-
-    Args:
-        info_file: Path to INFO.yaml file
-
-    Examples:
-        lftools-uv infofile match-ldap INFO.yaml
-    """
-    try:
-        typer.echo(f"Matching LDAP information for INFO file: {info_file}", err=True)
-        typer.echo(_MSG_NOT_IMPLEMENTED, err=True)
-        raise typer.Exit(1)
-    except typer.Exit:
-        raise
-    except Exception as e:
-        log.exception("LDAP matching failed")
-        typer.echo(f"Error: LDAP matching failed: {e}", err=True)
-        raise typer.Exit(1) from None
+    sync_committer(info_file, ldap_file, committer_id, repo)
 
 
 @infofile_app.command("check-votes")
