@@ -94,9 +94,8 @@ docker
 .. program-output:: lftools-uv nexus docker --help
 
 While a settings.yaml file is still supported for ``nexus docker`` commands,
-the preferred way to login is to use an lftools-uv.ini file, and provide the
-server address using the ``--server`` option. The config file should be at
-$HOME/.config/lftools-uv/lftools-uv.ini.
+the preferred way to login is to use :ref:`lftools.ini <lftools-ini>`, and
+provide the server address using the ``--server`` option.
 
 .. _nexus-docker-delete:
 
@@ -120,11 +119,9 @@ release
 .. program-output:: lftools-uv nexus release --help
 
 While a settings.yaml file is still supported for ``nexus release`` commands,
-the preferred way to login is to use an lftools-uv.ini file, and provide the
-server address using the ``--server`` option. The config file should be at
-$HOME/.config/lftools-uv/lftools-uv.ini.
-Requires an [nexus.example.com] for each Nexus repositories in
-~/.config/lftools-uv/lftools-uv.ini:
+the preferred way to login is to use :ref:`lftools.ini <lftools-ini>`, and
+provide the server address using the ``--server`` option. It requires a
+[nexus.example.com] section for each Nexus server:
 
 .. code-block:: bash
 

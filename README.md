@@ -283,11 +283,12 @@ range allows. The extra exists in published sdists and wheels, built by
 #### Using Optional Dependencies
 
 When using features that require optional dependencies (like LDAP), you
-need to specify the extras:
+need to specify the extras. The `ldap` commands exist in the legacy front
+end alone, so they also need `LEGACY_CLI=1`:
 
 ```bash
 # For LDAP functionality - note the quotes to prevent shell expansion
-uvx "lftools-uv[ldap]" ldap --help
+LEGACY_CLI=1 uvx "lftools-uv[ldap]" ldap --help
 
 # All extras for full functionality
 uvx "lftools-uv[all]" --help
@@ -299,7 +300,7 @@ You can also use the `--from` flag for clarity:
 
 ```bash
 # Same as the above
-uvx --from "lftools-uv[ldap]" lftools-uv ldap csv mygroup
+LEGACY_CLI=1 uvx --from "lftools-uv[ldap]" lftools-uv ldap csv mygroup
 ```
 
 The `openstack` commands need no extra: `uvx lftools-uv openstack --help`
@@ -337,7 +338,7 @@ pipeline {
         stage('Deploy') {
             steps {
                 sh 'uvx lftools-uv version'
-                sh 'uvx "lftools-uv[ldap]" ldap csv project-committers'
+                sh 'LEGACY_CLI=1 uvx "lftools-uv[ldap]" ldap csv project-committers'
             }
         }
     }

@@ -53,7 +53,7 @@ votes
 
 
 
-API requires a [github] or [github.OrgName] section in ~/.config/lftools-uv/lftools-uv.ini:
+API requires a [github] or [github.OrgName] section in :ref:`lftools.ini <lftools-ini>`:
 
 .. code-block:: bash
 
