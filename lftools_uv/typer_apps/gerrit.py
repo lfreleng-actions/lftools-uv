@@ -33,8 +33,10 @@ def addfile(
     gerrit_fqdn: str = typer.Argument(..., help=_HELP_GERRIT_FQDN),
     gerrit_project: str = typer.Argument(..., help=_HELP_GERRIT_PROJECT),
     filename: str = typer.Argument(..., help="Filename to add"),
-    issue_id: str | None = typer.Option(None, "--issue-id", help=_HELP_ISSUE_ID),
-    file_location: str | None = typer.Option(None, "--file-location", help="File path within the repository"),
+    issue_id: str | None = typer.Option(None, "--issue-id", "--issue_id", help=_HELP_ISSUE_ID),
+    file_location: str | None = typer.Option(
+        None, "--file-location", "--file_location", help="File path within the repository"
+    ),
 ) -> None:
     """Add a file for review to a Project.
 
@@ -59,7 +61,7 @@ def addinfojob(
     gerrit_fqdn: str = typer.Argument(..., help=_HELP_GERRIT_FQDN),
     gerrit_project: str = typer.Argument(..., help=_HELP_GERRIT_PROJECT),
     jjbrepo: str = typer.Argument(..., help="JJB repository name"),
-    issue_id: str | None = typer.Option(None, "--issue-id", help=_HELP_ISSUE_ID),
+    issue_id: str | None = typer.Option(None, "--issue-id", "--issue_id", help=_HELP_ISSUE_ID),
     agent: str | None = typer.Option(None, "--agent", help="Specify the Jenkins agent label to run the job on"),
 ) -> None:
     """Add an INFO job for a new Project.
@@ -87,7 +89,7 @@ def addinfojob(
 def addgitreview(
     gerrit_fqdn: str = typer.Argument(..., help=_HELP_GERRIT_FQDN),
     gerrit_project: str = typer.Argument(..., help=_HELP_GERRIT_PROJECT),
-    issue_id: str | None = typer.Option(None, "--issue-id", help=_HELP_ISSUE_ID),
+    issue_id: str | None = typer.Option(None, "--issue-id", "--issue_id", help=_HELP_ISSUE_ID),
 ) -> None:
     """Add git review to a project.
 
@@ -219,11 +221,12 @@ def addmavenconfig(
     gerrit_fqdn: str = typer.Argument(..., help=_HELP_GERRIT_FQDN),
     gerrit_project: str = typer.Argument(..., help=_HELP_GERRIT_PROJECT),
     jjbrepo: str = typer.Argument(..., help="JJB repository name"),
-    issue_id: str | None = typer.Option(None, "--issue-id", help=_HELP_ISSUE_ID),
+    issue_id: str | None = typer.Option(None, "--issue-id", "--issue_id", help=_HELP_ISSUE_ID),
     nexus3: str | None = typer.Option(None, "--nexus3", help="Specify a Nexus 3 server, e.g. nexus3.example.org"),
     nexus3_ports: str | None = typer.Option(
         None,
         "--nexus3-ports",
+        "--nexus3_ports",
         help="Comma-separated list of ports supported by the Nexus 3 server specified",
     ),
 ) -> None:
