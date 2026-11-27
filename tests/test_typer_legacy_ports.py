@@ -36,11 +36,6 @@ def _typer(args: list[str]) -> TyperResult:
 
 
 FRONT_ENDS = pytest.mark.parametrize("run", [_click, _typer], ids=["click", "typer"])
-TYPER_PENDING = pytest.mark.parametrize(
-    "run",
-    [_click, pytest.param(_typer, marks=pytest.mark.xfail(strict=True, reason="Not yet ported to Typer"))],
-    ids=["click", "typer"],
-)
 
 
 # ---------------------------------------------------------------------------
@@ -125,7 +120,7 @@ NEXUS_CMD = pytest.mark.parametrize(
 )
 
 
-@TYPER_PENDING
+@FRONT_ENDS
 @NEXUS_CMD
 def test_nexus_command_passes_options(
     run: Run, mocker: MockerFixture, args: list[str], target: str, expected: tuple[str | None, ...]
