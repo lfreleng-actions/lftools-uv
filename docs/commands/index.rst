@@ -21,6 +21,7 @@ It supports the following commands:
     github
     infofile
     lfidapi
+    lfx
     license
     nexus
     nexus2
