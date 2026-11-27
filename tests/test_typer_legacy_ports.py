@@ -295,13 +295,6 @@ def test_check_dir_fails_on_missing_directory(run: Run, reference: Path, tmp_pat
 # ---------------------------------------------------------------------------
 # infofile get-committers and sync-committers
 
-TYPER_UNPORTED = pytest.mark.xfail(strict=True, reason="Typer front-end lacks the committer commands")
-COMMITTER_FRONT_ENDS = pytest.mark.parametrize(
-    "run",
-    [_click, pytest.param(_typer, marks=TYPER_UNPORTED)],
-    ids=["click", "typer"],
-)
-
 COMMITTERS_INFO = """---
 project: 'demo'
 repositories:
@@ -351,7 +344,7 @@ def committers_ldap(tmp_path: Path) -> Path:
     return path
 
 
-@COMMITTER_FRONT_ENDS
+@FRONT_ENDS
 @pytest.mark.parametrize(
     ("options", "expected"),
     [
@@ -374,7 +367,7 @@ def test_get_committers_prints_committers(run: Run, committers_info: Path, optio
     assert result.stdout == expected
 
 
-@COMMITTER_FRONT_ENDS
+@FRONT_ENDS
 def test_get_committers_reads_file_from_environment(
     run: Run, committers_info: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -385,7 +378,7 @@ def test_get_committers_reads_file_from_environment(
     assert result.stdout == "      id: alice\n      id: bob\n"
 
 
-@COMMITTER_FRONT_ENDS
+@FRONT_ENDS
 def test_get_committers_missing_file(run: Run, tmp_path: Path) -> None:
     """The shared error handler maps FileNotFoundError to exit code 7."""
     result = run(["infofile", "get-committers", str(tmp_path / "missing.yaml")])
@@ -402,14 +395,7 @@ def _sync(run: Run, info: Path, ldap: Path, committer: str, repo: str | None) ->
     return run(["infofile", "sync-committers", str(info), str(ldap), committer, *repo_args])
 
 
-@pytest.mark.parametrize(
-    "run",
-    [
-        pytest.param(_click, marks=pytest.mark.xfail(strict=True, reason="Click overwrites repositories with null")),
-        pytest.param(_typer, marks=TYPER_UNPORTED),
-    ],
-    ids=["click", "typer"],
-)
+@FRONT_ENDS
 def test_sync_committers_without_repo_keeps_repositories(
     run: Run, committers_info: Path, committers_ldap: Path
 ) -> None:
@@ -421,7 +407,7 @@ def test_sync_committers_without_repo_keeps_repositories(
     assert info["committers"][-1]["id"] == "carol"
 
 
-@COMMITTER_FRONT_ENDS
+@FRONT_ENDS
 def test_sync_committers_with_repo_replaces_first_repository(
     run: Run, committers_info: Path, committers_ldap: Path
 ) -> None:
@@ -441,7 +427,6 @@ def test_sync_committers_with_repo_replaces_first_repository(
     assert [c["id"] for c in info["committers"]] == ["alice", "bob", "carol"]
 
 
-@pytest.mark.xfail(strict=True, reason="Typer front-end lacks the committer commands")
 def test_sync_committers_writes_same_file_in_both_front_ends(tmp_path: Path, committers_ldap: Path) -> None:
     written = []
     for name, run in (("click", _click), ("typer", _typer)):
@@ -454,7 +439,7 @@ def test_sync_committers_writes_same_file_in_both_front_ends(tmp_path: Path, com
     assert written[0] == written[1]
 
 
-@COMMITTER_FRONT_ENDS
+@FRONT_ENDS
 @REPO_OPTIONS
 @pytest.mark.parametrize(("committer", "exit_code"), [("alice", 0), ("dave", 1)], ids=["present", "not-in-ldap"])
 def test_sync_committers_leaves_file_alone(
