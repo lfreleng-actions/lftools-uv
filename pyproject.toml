@@ -86,7 +86,6 @@ dependencies = [
     "wrapt",
     "platformdirs",
     "google-auth",
-    "google-auth-oauthlib",
     # Security: pyasn1>=0.6.2 fixes DoS vulnerability in decoder
     "pyasn1>=0.6.2",
 ]
@@ -321,11 +320,6 @@ constraint-dependencies = [
     "authlib>=1.6.9",
     # Fixes CVE-2026-26007 (subgroup attack on SECT curves)
     "cryptography>=46.0.5",
-    # Fixes CVE-2026-49264 (JSONP callback injection), CVE-2026-49265
-    # (PKCE timing attack), CVE-2026-49272 / GHSA-3jp2-3mrg-2vxc (device
-    # flow token issued without device_code validation);
-    # via google-auth-oauthlib -> requests-oauthlib
-    "oauthlib>=4.0.1",
     # Bump transitive dependency to latest stable
     "pygments>=2.20.0",
 ]
