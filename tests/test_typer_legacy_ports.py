@@ -5,7 +5,8 @@
 ``nexus release``, ``sign sigul``, ``infofile check-votes`` and
 ``license check-dir`` existed only in the legacy Click front-end, so on the
 default Typer front-end they failed as usage errors and global-jjb had to set
-``LEGACY_CLI=1``. Each test runs the same arguments through both front-ends
+``LEGACY_CLI=1``. ``nexus create`` and ``nexus reorder-staged-repos``,
+which the INFO.yaml automation runs, had the same gap. Each test runs the same arguments through both front-ends
 and expects the same calls, output streams and exit codes.
 """
 
@@ -35,6 +36,11 @@ def _typer(args: list[str]) -> TyperResult:
 
 
 FRONT_ENDS = pytest.mark.parametrize("run", [_click, _typer], ids=["click", "typer"])
+TYPER_PENDING = pytest.mark.parametrize(
+    "run",
+    [_click, pytest.param(_typer, marks=pytest.mark.xfail(strict=True, reason="Not yet ported to Typer"))],
+    ids=["click", "typer"],
+)
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +96,64 @@ def test_nexus_release_keeps_release_exit_code(run: Run, release: MagicMock) -> 
     result = run(["nexus", "release", "-s", NEXUS, "repo-1"])
 
     assert result.exit_code == 1
+
+
+# ---------------------------------------------------------------------------
+# nexus create repo, nexus create role, nexus reorder-staged-repos
+
+NEXUS_CMD = pytest.mark.parametrize(
+    ("args", "target", "expected"),
+    [
+        (
+            ["create", "repo", "-u", NEXUS, "-c", "repo-config.yaml"],
+            "create_repos",
+            ("repo-config.yaml", None, NEXUS),
+        ),
+        (
+            ["create", "repo", "--configfile", "repo-config.yaml", "--settings", "settings.yaml"],
+            "create_repos",
+            ("repo-config.yaml", "settings.yaml", None),
+        ),
+        (
+            ["create", "role", "-c", "role-config.yaml", "-s", "settings.yaml"],
+            "create_roles",
+            ("role-config.yaml", "settings.yaml"),
+        ),
+        (["reorder-staged-repos", "-s", "settings.yaml"], "reorder_staged_repos", ("settings.yaml",)),
+    ],
+    ids=["create-repo", "create-repo-settings", "create-role", "reorder-staged-repos"],
+)
+
+
+@TYPER_PENDING
+@NEXUS_CMD
+def test_nexus_command_passes_options(
+    run: Run, mocker: MockerFixture, args: list[str], target: str, expected: tuple[str | None, ...]
+) -> None:
+    call = mocker.patch(f"lftools_uv.nexus.cmd.{target}")
+    result = run(["nexus", *args])
+
+    assert result.exit_code == 0, result.output
+    call.assert_called_once_with(*expected)
+
+
+@FRONT_ENDS
+@pytest.mark.parametrize(
+    ("args", "target"),
+    [
+        (["create", "repo", "-u", NEXUS], "create_repos"),
+        (["create", "role", "-s", "settings.yaml"], "create_roles"),
+        (["create", "role", "-c", "role-config.yaml"], "create_roles"),
+        (["reorder-staged-repos"], "reorder_staged_repos"),
+    ],
+    ids=["repo-no-configfile", "role-no-config", "role-no-settings", "reorder-no-settings"],
+)
+def test_nexus_command_requires_options(run: Run, mocker: MockerFixture, args: list[str], target: str) -> None:
+    call = mocker.patch(f"lftools_uv.nexus.cmd.{target}")
+    result = run(["nexus", *args])
+
+    assert result.exit_code == 2
+    call.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
