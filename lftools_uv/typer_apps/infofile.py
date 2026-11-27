@@ -14,10 +14,9 @@ import logging
 import typer
 
 from lftools_uv.cli.errors import error_handler
-from lftools_uv.cli.infofile import print_committers, sync_committer, tally_votes
+from lftools_uv.cli.infofile import print_committers, print_info_file, sync_committer, tally_votes
 
 _HELP_INFO_YAML_PATH = "Path to INFO.yaml file"
-_MSG_USE_LEGACY_CLI = "Note: This command is implemented only in the legacy Click CLI."
 
 
 log = logging.getLogger(__name__)
@@ -36,39 +35,34 @@ def infofile_callback() -> None:
 
 
 @infofile_app.command("create-info-file")
+@error_handler
 def create_info_file(
     gerrit_url: str = typer.Argument(..., help="Gerrit URL (e.g., gerrit.example.com)"),
     gerrit_project: str = typer.Argument(..., help="Gerrit project path (e.g., project/full-name)"),
     directory: str = typer.Option("r", "--directory", help="Custom gerrit directory, e.g. not /r/"),
     empty: bool = typer.Option(False, "--empty", help="Create info file for uncreated project"),
-    tsc_approval: str = typer.Option("missing", "--tsc-approval", help="Optionally provide a TSC approval link"),
+    tsc_approval: str = typer.Option(
+        "missing", "--tsc-approval", "--tsc_approval", help="Optionally provide a TSC approval link"
+    ),
+    group: str | None = typer.Option(
+        None,
+        "--group",
+        help="LDAP group whose members become the committers, in place of UMBRELLA-gerrit-PROJECT-committers",
+    ),
 ) -> None:
     """Create an initial INFO file.
 
-    Args:
-        gerrit_url: Gerrit URL (e.g., gerrit.umbrella.com)
-        gerrit_project: Gerrit project path (e.g., project/full-name)
-        directory: Custom gerrit directory (e.g., /gerrit/ rather than /r/)
-        empty: Create info file for uncreated project
-        tsc_approval: TSC approval link
+    The INFO.yaml template goes to stdout. Unless --empty is given, the
+    project's access is read from Gerrit and the committers are the
+    members of the LDAP group UMBRELLA-gerrit-PROJECT-committers, or
+    of --group. A failed member lookup prints nothing and exits non-zero.
 
     Examples:
         lftools-uv infofile create-info-file gerrit.example.com project/name
         lftools-uv infofile create-info-file gerrit.example.com project/name --empty
+        lftools-uv infofile create-info-file gerrit.example.com project/name --group project-maintainers
     """
-    try:
-        # For now, provide guidance on using the original command
-        typer.echo(f"Creating INFO file for project: {gerrit_project}", err=True)
-        typer.echo(f"Gerrit URL: {gerrit_url}", err=True)
-        typer.echo(_MSG_USE_LEGACY_CLI, err=True)
-        typer.echo("Use: LEGACY_CLI=1 lftools-uv infofile create-info-file", err=True)
-        raise typer.Exit(1)
-    except typer.Exit:
-        raise
-    except Exception as e:
-        log.exception("Failed to create info file")
-        typer.echo(f"Error: Failed to create info file: {e}", err=True)
-        raise typer.Exit(1) from None
+    print_info_file(gerrit_url, gerrit_project, directory, empty, tsc_approval, group)
 
 
 @infofile_app.command("get-committers")

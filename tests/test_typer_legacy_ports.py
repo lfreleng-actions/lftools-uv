@@ -517,14 +517,6 @@ def test_sync_committers_leaves_file_alone(
 # ---------------------------------------------------------------------------
 # infofile create-info-file
 
-TYPER_PLACEHOLDER = pytest.mark.xfail(strict=True, reason="Typer create-info-file is a placeholder")
-NO_GROUP_OPTION = pytest.mark.xfail(strict=True, reason="create-info-file has no --group option")
-NO_HYPHENATED_TSC = pytest.mark.xfail(strict=True, reason="Click create-info-file lacks --tsc-approval")
-CREATE_FRONT_ENDS = pytest.mark.parametrize(
-    "run",
-    [_click, pytest.param(_typer, marks=TYPER_PLACEHOLDER)],
-    ids=["click", "typer"],
-)
 STUB_COMMITTERS = (
     "    - name: 'Alice Example'\n      email: 'alice@example.org'\n      company: 'Example'\n      id: 'alice'\n"
 )
@@ -549,7 +541,7 @@ def yaml4info(mocker: MockerFixture) -> MagicMock:
     return mock
 
 
-@CREATE_FRONT_ENDS
+@FRONT_ENDS
 def test_create_info_file_empty_makes_no_request(run: Run, gerrit: MagicMock, yaml4info: MagicMock) -> None:
     result = run(["infofile", "create-info-file", "gerrit.example.org", "foo/bar", "--empty"])
 
@@ -562,7 +554,6 @@ def test_create_info_file_empty_makes_no_request(run: Run, gerrit: MagicMock, ya
     yaml4info.assert_not_called()
 
 
-@pytest.mark.xfail(strict=True, reason="Typer create-info-file is a placeholder")
 def test_create_info_file_empty_matches_between_front_ends() -> None:
     args = ["infofile", "create-info-file", "gerrit.example.org", "foo/bar", "--empty"]
     click_result = _click(args)
@@ -572,7 +563,7 @@ def test_create_info_file_empty_matches_between_front_ends() -> None:
     assert typer_result.stdout == click_result.stdout
 
 
-@CREATE_FRONT_ENDS
+@FRONT_ENDS
 @pytest.mark.parametrize(
     ("host", "project", "group"),
     [
@@ -594,11 +585,7 @@ def test_create_info_file_lists_derived_group(
     gerrit.return_value.get.assert_called_once()
 
 
-@pytest.mark.parametrize(
-    "run",
-    [pytest.param(_click, marks=NO_GROUP_OPTION), pytest.param(_typer, marks=TYPER_PLACEHOLDER)],
-    ids=["click", "typer"],
-)
+@FRONT_ENDS
 def test_create_info_file_group_replaces_derived_name(run: Run, gerrit: MagicMock, yaml4info: MagicMock) -> None:
     result = run(["infofile", "create-info-file", "gerrit.example.org", "foo/bar", "--group", "foo-maintainers"])
 
@@ -607,16 +594,8 @@ def test_create_info_file_group_replaces_derived_name(run: Run, gerrit: MagicMoc
     assert f"_ptl\n{STUB_COMMITTERS}tsc:\n" in result.stdout
 
 
-@pytest.mark.parametrize(
-    ("run", "option"),
-    [
-        (_click, "--tsc_approval"),
-        pytest.param(_click, "--tsc-approval", marks=NO_HYPHENATED_TSC),
-        pytest.param(_typer, "--tsc_approval", marks=TYPER_PLACEHOLDER),
-        pytest.param(_typer, "--tsc-approval", marks=TYPER_PLACEHOLDER),
-    ],
-    ids=["click-underscore", "click-hyphen", "typer-underscore", "typer-hyphen"],
-)
+@FRONT_ENDS
+@pytest.mark.parametrize("option", ["--tsc_approval", "--tsc-approval"], ids=["underscore", "hyphen"])
 def test_create_info_file_tsc_approval_spellings(run: Run, option: str) -> None:
     link = "https://example.org/tsc/approval"
     result = run(["infofile", "create-info-file", "gerrit.example.org", "foo", "--empty", option, link])

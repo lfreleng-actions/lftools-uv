@@ -41,25 +41,45 @@ def infofile(ctx):
     pass
 
 
-@click.command(name="create-info-file")
-@click.argument("gerrit_url", required=True)
-@click.argument("gerrit_project", required=True)
-@click.option("--directory", type=str, required=False, default="r", help="custom gerrit directory, eg not /r/")
-@click.option("--empty", is_flag=True, required=False, help="Create info file for uncreated project.")
-@click.option(
-    "--tsc_approval", type=str, required=False, default="missing", help="optionally provide a tsc approval link"
-)
-@click.pass_context
-@error_handler
-def create_info_file(ctx, gerrit_url, gerrit_project, directory, empty, tsc_approval):
-    """Create an initial INFO file.
+def _check_project_access(url: str, gerrit_project: str) -> None:
+    """Warn when a project inherits from an unusual parent or has no owner."""
+    user = config.get_setting("gerrit", "username")
+    pass1 = config.get_setting("gerrit", "password")
+    rest = GerritRestAPI(url=url, auth=HTTPBasicAuth(user, pass1))
+    projectid_encoded = gerrit_project.replace("/", "%2F")
+    headers = {"Content-Type": "application/json; charset=UTF-8"}
+    result: dict[str, Any] = cast(dict[str, Any], rest.get(f"projects/{projectid_encoded}/access", headers=headers))
 
-    gerrit_project example: project/full-name
-    gerrit_url example: gerrit.umbrella.com
-    directory example: /gerrit/ (rather than most projects /r/)
+    if "inherits_from" in result:
+        inherits = result["inherits_from"]["id"]
+        if inherits != "All-Projects":
+            log.info("    Inherits from: %s", inherits)
+            log.warning("Better Check this unconventional inherit")
+
+    try:
+        has_owner = "rules" in result["local"]["refs/*"]["permissions"]["owner"]
+    except (KeyError, TypeError):
+        has_owner = False
+    if not has_owner:
+        log.error("ERROR: Check project config, no owner set!")
+
+
+def print_info_file(
+    gerrit_url: str,
+    gerrit_project: str,
+    directory: str,
+    empty: bool,
+    tsc_approval: str,
+    group: str | None,
+) -> None:
+    """Print an initial INFO.yaml for a Gerrit project on stdout.
+
+    Shared by the Click and Typer create-info-file commands. With *empty*,
+    contact nothing and list one empty committer. Otherwise check the
+    project's access in Gerrit and list the members of *group*, or of
+    ``<umbrella>-gerrit-<project>-committers`` when *group* is None.
     """
     url = f"https://{gerrit_url}/{directory}"
-    projectid_encoded = gerrit_project.replace("/", "%2F")
     # project name with only underscores for info file anchors.
     # project name with only dashes for ldap groups.
     project_underscored = gerrit_project.replace("/", "_")
@@ -74,30 +94,7 @@ def create_info_file(ctx, gerrit_url, gerrit_project, directory, empty, tsc_appr
     umbrella_tld = match.group(0)
 
     if not empty:
-        user = config.get_setting("gerrit", "username")
-        pass1 = config.get_setting("gerrit", "password")
-        auth = HTTPBasicAuth(user, pass1)
-        rest = GerritRestAPI(url=url, auth=auth)
-        access_str = f"projects/{projectid_encoded}/access"
-        headers = {"Content-Type": "application/json; charset=UTF-8"}
-        result: dict[str, Any] = cast(dict[str, Any], rest.get(access_str, headers=headers))
-
-        if "inherits_from" in result:
-            inherits = result["inherits_from"]["id"]
-            if inherits != "All-Projects":
-                log.info("    Inherits from: %s", inherits)
-                log.warning("Better Check this unconventional inherit")
-
-        try:
-            owner = result["local"]["refs/*"]["permissions"]["owner"]["rules"]
-        except Exception:
-            log.error("ERROR: Check project config, no owner set!")
-            owner = {}
-
-        for x in owner:
-            match = re.search(r"[^=]+(?=,)", x)
-            if match is not None:
-                ldap_group = match.group(0)
+        _check_project_access(url, gerrit_project)
 
     if umbrella == "o-ran-sc":
         umbrella = "oran"
@@ -106,7 +103,7 @@ def create_info_file(ctx, gerrit_url, gerrit_project, directory, empty, tsc_appr
 
     date = datetime.datetime.now().strftime("%Y-%m-%d")
 
-    ldap_group = f"{umbrella}-gerrit-{project_dashed}-committers"
+    ldap_group = group or f"{umbrella}-gerrit-{project_dashed}-committers"
 
     long_string = f"""---
 project: '{project_underscored}'
@@ -169,6 +166,38 @@ tsc:
         echo(line)
     for line in tsc_string.splitlines():
         echo(line)
+
+
+@click.command(name="create-info-file")
+@click.argument("gerrit_url", required=True)
+@click.argument("gerrit_project", required=True)
+@click.option("--directory", type=str, required=False, default="r", help="custom gerrit directory, eg not /r/")
+@click.option("--empty", is_flag=True, required=False, help="Create info file for uncreated project.")
+@click.option(
+    "--tsc_approval",
+    "--tsc-approval",
+    "tsc_approval",
+    type=str,
+    required=False,
+    default="missing",
+    help="optionally provide a tsc approval link",
+)
+@click.option(
+    "--group",
+    type=str,
+    required=False,
+    default=None,
+    help="LDAP group whose members become the committers, in place of UMBRELLA-gerrit-PROJECT-committers",
+)
+@error_handler
+def create_info_file(gerrit_url, gerrit_project, directory, empty, tsc_approval, group):
+    """Create an initial INFO file.
+
+    gerrit_project example: project/full-name
+    gerrit_url example: gerrit.umbrella.com
+    directory example: /gerrit/ (rather than most projects /r/)
+    """
+    print_info_file(gerrit_url, gerrit_project, directory, empty, tsc_approval, group)
 
 
 def print_committers(file: str, full: bool, committer_id: str | None) -> None:
