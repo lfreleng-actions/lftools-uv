@@ -133,7 +133,8 @@ def create_group_command(
         raise typer.Exit(1) from None
 
 
-@lfidapi_app.command("match-ldap-info")
+@lfidapi_app.command("match-ldap-to-info")
+@lfidapi_app.command("match-ldap-info", hidden=True)
 def match_ldap_info(
     info_file: str = typer.Argument(..., help="Path to INFO.yaml file"),
     group: str = typer.Argument(..., help="LDAP group name"),

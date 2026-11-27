@@ -108,7 +108,6 @@ GITHUB_CASES.update(
 )
 
 
-@pytest.mark.xfail(strict=True, reason="legacy option names not yet accepted")
 @pytest.mark.parametrize(("current", "legacy"), GERRIT_CASES.values(), ids=GERRIT_CASES.keys())
 def test_gerrit_legacy_option_matches_current(gerrit_mocks, current, legacy):
     """The underscored spelling makes the same calls as the hyphenated one."""
@@ -116,7 +115,6 @@ def test_gerrit_legacy_option_matches_current(gerrit_mocks, current, legacy):
     assert _gerrit_calls(legacy, gerrit_mocks) == expected
 
 
-@pytest.mark.xfail(strict=True, reason="legacy option names not yet accepted")
 @pytest.mark.parametrize(("current", "legacy"), GITHUB_CASES.values(), ids=GITHUB_CASES.keys())
 def test_github_legacy_option_matches_current(github_org, current, legacy):
     """The underscored spelling makes the same calls as the hyphenated one."""
@@ -133,16 +131,7 @@ def test_github_update_repo_off_form_still_works(github_org, feature):
     assert edit.call_args.kwargs[f"has_{feature}"] is False
 
 
-@pytest.mark.parametrize(
-    "command",
-    [
-        pytest.param(
-            "match-ldap-to-info",
-            marks=pytest.mark.xfail(strict=True, reason="legacy command name not yet registered"),
-        ),
-        "match-ldap-info",
-    ],
-)
+@pytest.mark.parametrize("command", ["match-ldap-to-info", "match-ldap-info"])
 def test_lfidapi_match_ldap_names_reach_helper(command):
     """Both command names call the helper with the same arguments."""
     with patch("lftools_uv.typer_apps.lfidapi.helper_match_ldap_to_info") as helper:
@@ -151,7 +140,6 @@ def test_lfidapi_match_ldap_names_reach_helper(command):
     helper.assert_called_once_with("INFO.yaml", "grp", "org", True)
 
 
-@pytest.mark.xfail(strict=True, reason="legacy command name not yet registered")
 def test_lfidapi_help_lists_match_ldap_to_info():
     """``lfidapi --help`` names the command as the legacy front-end does."""
     result = runner.invoke(app, ["lfidapi", "--help"])

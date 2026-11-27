@@ -97,9 +97,9 @@ def create_repo(
     organization: str = typer.Argument(..., help=_HELP_GITHUB_ORG),
     repository: str = typer.Argument(..., help="Repository name to create"),
     description: str = typer.Argument(..., help="Repository description"),
-    has_issues: bool = typer.Option(False, "--has-issues", help="Repo should have issues"),
-    has_projects: bool = typer.Option(False, "--has-projects", help="Repo should have projects"),
-    has_wiki: bool = typer.Option(False, "--has-wiki", help="Repo should have wiki"),
+    has_issues: bool = typer.Option(False, "--has-issues", "--has_issues", help="Repo should have issues"),
+    has_projects: bool = typer.Option(False, "--has-projects", "--has_projects", help="Repo should have projects"),
+    has_wiki: bool = typer.Option(False, "--has-wiki", "--has_wiki", help="Repo should have wiki"),
 ) -> None:
     """Create a Github repo within an Organization.
 
@@ -128,16 +128,16 @@ def update_repo(
     organization: str = typer.Argument(..., help=_HELP_GITHUB_ORG),
     repository: str = typer.Argument(..., help="Repository name to update"),
     has_issues: bool | None = typer.Option(
-        None, "--has-issues/--no-has-issues", help="Turn issues on or off; unchanged if omitted"
+        None, "--has-issues/--no-has-issues", "--has_issues", help="Turn issues on or off; unchanged if omitted"
     ),
     has_projects: bool | None = typer.Option(
-        None, "--has-projects/--no-has-projects", help="Turn projects on or off; unchanged if omitted"
+        None, "--has-projects/--no-has-projects", "--has_projects", help="Turn projects on or off; unchanged if omitted"
     ),
     has_wiki: bool | None = typer.Option(
-        None, "--has-wiki/--no-has-wiki", help="Turn the wiki on or off; unchanged if omitted"
+        None, "--has-wiki/--no-has-wiki", "--has_wiki", help="Turn the wiki on or off; unchanged if omitted"
     ),
-    add_team: str | None = typer.Option(None, "--add-team", help="Add team to repo"),
-    remove_team: str | None = typer.Option(None, "--remove-team", help="Remove team from repo"),
+    add_team: str | None = typer.Option(None, "--add-team", "--add_team", help="Add team to repo"),
+    remove_team: str | None = typer.Option(None, "--remove-team", "--remove_team", help="Remove team from repo"),
 ) -> None:
     """Update a Github repo within an Organization.
 
