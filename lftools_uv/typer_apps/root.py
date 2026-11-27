@@ -29,6 +29,7 @@ from lftools_uv.typer_apps.github_cli import github_app
 from lftools_uv.typer_apps.infofile import get_infofile_app
 from lftools_uv.typer_apps.jenkins import jenkins_app
 from lftools_uv.typer_apps.lfidapi import get_lfidapi_app
+from lftools_uv.typer_apps.lfx import lfx_app
 from lftools_uv.typer_apps.license import get_license_app
 from lftools_uv.typer_apps.nexus import nexus_app
 from lftools_uv.typer_apps.nexus2 import nexus2_app
@@ -142,6 +143,7 @@ app.add_typer(nexus3_app, name="nexus3")
 app.add_typer(get_openstack_app(), name="openstack")
 app.add_typer(get_schema_app(), name="schema")
 app.add_typer(get_lfidapi_app(), name="lfidapi")
+app.add_typer(lfx_app, name="lfx")
 app.add_typer(get_license_app(), name="license")
 app.add_typer(get_sign_app(), name="sign")
 app.add_typer(get_infofile_app(), name="infofile")
