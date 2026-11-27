@@ -7,10 +7,12 @@
 ``license check-dir`` existed only in the legacy Click front-end, so on the
 default Typer front-end they failed as usage errors and global-jjb had to set
 ``LEGACY_CLI=1``. ``nexus create`` and ``nexus reorder-staged-repos``,
-which the INFO.yaml automation runs, had the same gap. Each test runs the same arguments through both front-ends
-and expects the same calls, output streams and exit codes.
+which the INFO.yaml automation runs, had the same gap, and
+``infofile create-info-file`` was a placeholder that exited 1. Each test
+runs the same arguments through both front-ends and expects the same calls, output streams and exit codes.
 """
 
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -510,3 +512,123 @@ def test_sync_committers_leaves_file_alone(
     assert result.exit_code == exit_code, result.output
     assert result.stdout == ""
     assert committers_info.read_text() == COMMITTERS_INFO
+
+
+# ---------------------------------------------------------------------------
+# infofile create-info-file
+
+TYPER_PLACEHOLDER = pytest.mark.xfail(strict=True, reason="Typer create-info-file is a placeholder")
+NO_GROUP_OPTION = pytest.mark.xfail(strict=True, reason="create-info-file has no --group option")
+NO_HYPHENATED_TSC = pytest.mark.xfail(strict=True, reason="Click create-info-file lacks --tsc-approval")
+CREATE_FRONT_ENDS = pytest.mark.parametrize(
+    "run",
+    [_click, pytest.param(_typer, marks=TYPER_PLACEHOLDER)],
+    ids=["click", "typer"],
+)
+STUB_COMMITTERS = (
+    "    - name: 'Alice Example'\n      email: 'alice@example.org'\n      company: 'Example'\n      id: 'alice'\n"
+)
+EMPTY_COMMITTER = "    - name: ''\n      email: ''\n      company: ''\n      id: ''\n"
+
+
+@pytest.fixture
+def gerrit(mocker: MockerFixture) -> MagicMock:
+    """Answer Gerrit's access request with a project that has an owner."""
+    mocker.patch("lftools_uv.cli.infofile.config.get_setting", return_value="secret")
+    rest: MagicMock = mocker.patch("lftools_uv.cli.infofile.GerritRestAPI")
+    rest.return_value.get.return_value = {
+        "local": {"refs/*": {"permissions": {"owner": {"rules": {"ldap:cn=owners,ou=Groups": {}}}}}}
+    }
+    return rest
+
+
+@pytest.fixture
+def yaml4info(mocker: MockerFixture) -> MagicMock:
+    """Return two committers from the LDAP helper without running it."""
+    mock: MagicMock = mocker.patch("lftools_uv.cli.infofile.helper_yaml4info", return_value=STUB_COMMITTERS)
+    return mock
+
+
+@CREATE_FRONT_ENDS
+def test_create_info_file_empty_makes_no_request(run: Run, gerrit: MagicMock, yaml4info: MagicMock) -> None:
+    result = run(["infofile", "create-info-file", "gerrit.example.org", "foo/bar", "--empty"])
+
+    assert result.exit_code == 0, result.output
+    assert result.stdout.startswith("---\nproject: 'foo_bar'\n")
+    assert "repositories:\n    - foo/bar\ncommitters:\n    - <<: *example_foo_bar_ptl\n" in result.stdout
+    assert f"*example_foo_bar_ptl\n{EMPTY_COMMITTER}tsc:\n" in result.stdout
+    assert "    approval: 'missing'\n" in result.stdout
+    gerrit.assert_not_called()
+    yaml4info.assert_not_called()
+
+
+@pytest.mark.xfail(strict=True, reason="Typer create-info-file is a placeholder")
+def test_create_info_file_empty_matches_between_front_ends() -> None:
+    args = ["infofile", "create-info-file", "gerrit.example.org", "foo/bar", "--empty"]
+    click_result = _click(args)
+    typer_result = _typer(args)
+
+    assert typer_result.exit_code == click_result.exit_code == 0
+    assert typer_result.stdout == click_result.stdout
+
+
+@CREATE_FRONT_ENDS
+@pytest.mark.parametrize(
+    ("host", "project", "group"),
+    [
+        ("gerrit.example.org", "foo/bar", "example-gerrit-foo-bar-committers"),
+        ("gerrit.example.org", "foo/bar_baz", "example-gerrit-foo-bar-baz-committers"),
+        ("gerrit.o-ran-sc.org", "foo", "oran-gerrit-foo-committers"),
+        ("git.opendaylight.org", "foo", "odl-gerrit-foo-committers"),
+    ],
+    ids=["example", "underscore", "o-ran-sc", "opendaylight"],
+)
+def test_create_info_file_lists_derived_group(
+    run: Run, gerrit: MagicMock, yaml4info: MagicMock, host: str, project: str, group: str
+) -> None:
+    result = run(["infofile", "create-info-file", host, project])
+
+    assert result.exit_code == 0, result.output
+    yaml4info.assert_called_once_with(group)
+    assert f"_ptl\n{STUB_COMMITTERS}tsc:\n" in result.stdout
+    gerrit.return_value.get.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "run",
+    [pytest.param(_click, marks=NO_GROUP_OPTION), pytest.param(_typer, marks=TYPER_PLACEHOLDER)],
+    ids=["click", "typer"],
+)
+def test_create_info_file_group_replaces_derived_name(run: Run, gerrit: MagicMock, yaml4info: MagicMock) -> None:
+    result = run(["infofile", "create-info-file", "gerrit.example.org", "foo/bar", "--group", "foo-maintainers"])
+
+    assert result.exit_code == 0, result.output
+    yaml4info.assert_called_once_with("foo-maintainers")
+    assert f"_ptl\n{STUB_COMMITTERS}tsc:\n" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("run", "option"),
+    [
+        (_click, "--tsc_approval"),
+        pytest.param(_click, "--tsc-approval", marks=NO_HYPHENATED_TSC),
+        pytest.param(_typer, "--tsc_approval", marks=TYPER_PLACEHOLDER),
+        pytest.param(_typer, "--tsc-approval", marks=TYPER_PLACEHOLDER),
+    ],
+    ids=["click-underscore", "click-hyphen", "typer-underscore", "typer-hyphen"],
+)
+def test_create_info_file_tsc_approval_spellings(run: Run, option: str) -> None:
+    link = "https://example.org/tsc/approval"
+    result = run(["infofile", "create-info-file", "gerrit.example.org", "foo", "--empty", option, link])
+
+    assert result.exit_code == 0, result.output
+    assert f"    approval: '{link}'\n" in result.stdout
+
+
+@FRONT_ENDS
+def test_create_info_file_failed_lookup_prints_nothing(run: Run, gerrit: MagicMock, yaml4info: MagicMock) -> None:
+    yaml4info.side_effect = subprocess.CalledProcessError(1, ["yaml4info"])
+    result = run(["infofile", "create-info-file", "gerrit.example.org", "foo/bar"])
+
+    assert result.exit_code != 0
+    assert result.stdout == ""
