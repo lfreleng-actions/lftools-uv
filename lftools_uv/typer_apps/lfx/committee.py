@@ -12,31 +12,40 @@ from __future__ import annotations
 import enum
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import typer
 
 from lftools_uv.api.endpoints.lfx import (
     COMMITTEE_CATEGORIES,
     JOIN_MODES,
+    NO_USERNAME,
     LfxAPIError,
     LfxClient,
     LfxError,
     LfxNotFoundError,
+    add_committee_member,
     count_without_username,
     create_committee,
+    find_members,
     find_project_uid,
     format_csv,
     format_info_yaml,
     format_text,
     get_committee,
     get_committee_members,
+    hide_emails,
+    invite_to_committee,
     list_project_committees,
+    remove_committee_member,
     resolve_committee_uid,
     show_committee,
 )
 from lftools_uv.output import echo
 from lftools_uv.typer_apps.lfx.apps import committee_app
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 log = logging.getLogger(__name__)
 
@@ -69,6 +78,10 @@ MEMBERS_FORBIDDEN_HINT = (
 
 CREATE_FORBIDDEN_HINT = "the token may be missing or expired, or may not be a writer on the project"
 
+WRITER_FORBIDDEN_HINT = "the token may be missing or expired, or may not be a writer on the committee"
+
+INVITER_FORBIDDEN_HINT = "the token may be missing or expired, or may not have the inviter relation on the committee"
+
 
 class MemberFormat(enum.StrEnum):
     """Output formats of ``committee members``."""
@@ -79,15 +92,19 @@ class MemberFormat(enum.StrEnum):
 
 
 def handle_lfx_error(
-    exc: LfxError, forbidden_hint: str = FORBIDDEN_HINT, http_404_exit: int = EXIT_NOT_FOUND
+    exc: LfxError,
+    forbidden_hint: str = FORBIDDEN_HINT,
+    http_404_exit: int = EXIT_NOT_FOUND,
+    scrub: Callable[[str], str] | None = None,
 ) -> typer.Exit:
     """Report an LFX error on stderr and return the ``typer.Exit`` to raise.
 
     :arg forbidden_hint: What a 403 may mean, appended to its message.
     :arg http_404_exit: Exit status for an API answer of 404; a lookup
         that found nothing exits :data:`EXIT_NOT_FOUND` either way.
+    :arg scrub: Applied to the error's message before it is printed.
     """
-    message = str(exc)
+    message = str(exc) if scrub is None else scrub(str(exc))
     code = EXIT_ERROR
     if isinstance(exc, LfxNotFoundError):
         code = EXIT_NOT_FOUND
@@ -265,3 +282,189 @@ def committee_create(
         return
     fields = [body.get("sso_group_name"), body.get("uid")]
     echo(client.redact("\t".join(value if isinstance(value, str) else "" for value in fields)))
+
+
+def _membership_error(exc: LfxError, forbidden_hint: str, http_404_exit: int = EXIT_ERROR) -> typer.Exit:
+    """Return :func:`handle_lfx_error` for a membership command, with email addresses hidden."""
+    return handle_lfx_error(exc, forbidden_hint, http_404_exit, scrub=hide_emails)
+
+
+def _fail(message: str) -> typer.Exit:
+    """Print ``message`` as an error, with email addresses hidden, and return the exit to raise."""
+    typer.echo(f"Error: {hide_emails(message)}", err=True)
+    return typer.Exit(code=EXIT_ERROR)
+
+
+def _string(value: Any) -> str:
+    return value if isinstance(value, str) else ""
+
+
+def _quoted(client: LfxClient, username: str) -> str:
+    # repr() doubles a backslash, after which neither the token nor an
+    # address with an escaped quote matches, so redact and hide first.
+    return repr(hide_emails(client.redact(username)))
+
+
+def _described(client: LfxClient, username: str) -> str:
+    return f"username {_quoted(client, username)}" if username else "no username"
+
+
+def _report_existing_member(client: LfxClient, uid: str, email: str, username: str | None, conflict: LfxError) -> None:
+    """Report the member an add found already there, and raise ``typer.Exit`` unless it is the one wanted."""
+    try:
+        matches = find_members(get_committee_members(client, uid), email=email)
+    except LfxError as exc:
+        raise _membership_error(exc, MEMBERS_FORBIDDEN_HINT) from None
+    if not matches:
+        raise _membership_error(conflict, WRITER_FORBIDDEN_HINT)
+    existing = _string(matches[0].get("username"))
+    member_uid = _string(matches[0].get("uid"))
+    found = client.redact(f"already a member, with {_described(client, existing)}")
+    if username is not None and existing.casefold() != username.casefold():
+        raise _fail(client.redact(f"the address is {found}, not {_quoted(client, username)}; member UID {member_uid}"))
+    typer.echo(hide_emails(client.redact(f"The address is {found}; member UID {member_uid}")), err=True)
+
+
+def _undo_add(client: LfxClient, uid: str, member: dict[str, Any], username: str, *, notify: bool) -> typer.Exit:
+    """Remove a member just added under the wrong username and return the exit to raise."""
+    resolved = _string(member.get("username"))
+    member_uid = _string(member.get("uid"))
+    reason = client.redact(f"the address resolved to {_described(client, resolved)}, not {_quoted(client, username)}")
+    if not member_uid:
+        return _fail(f"{reason}; the answer carried no member UID, so the member could not be removed")
+    try:
+        remove_committee_member(client, uid, member_uid, notify=notify)
+    except LfxError as exc:
+        return _fail(client.redact(f"{reason}; removing it failed too, member UID {member_uid}: {exc}"))
+    return _fail(f"{reason}; removed the member again")
+
+
+@committee_app.command("add-member")
+def committee_add_member(
+    committee: str = typer.Argument(..., help="Committee UID, or its SSO group name."),
+    email: str = typer.Option(
+        ..., "--email", help="Email address of the person to add; the service finds their LF account by it."
+    ),
+    first_name: str | None = typer.Option(
+        None, "--first-name", help="First name; the service takes it from the LF account when omitted."
+    ),
+    last_name: str | None = typer.Option(
+        None, "--last-name", help="Last name; the service takes it from the LF account when omitted."
+    ),
+    organization: str | None = typer.Option(None, "--organization", help="Name of the member's organisation."),
+    username: str | None = typer.Option(
+        None, "--username", help="LFID the address must belong to; a member added under another is removed again."
+    ),
+    notify: bool = typer.Option(False, "--notify", help="Let the service email the member."),
+    json_output: bool = typer.Option(False, "--json", help="Print the member object as JSON."),
+) -> None:
+    """Add a member to a committee by email address.
+
+    Prints added, the username the service resolved from the address and
+    the member UID, separated by tabs.
+    """
+    if username is not None and not username.strip():
+        # An empty LFID would match a member the service gave no username.
+        raise typer.BadParameter("must name an LFID, not be empty", param_hint="'--username'")
+    try:
+        client = LfxClient()
+        uid = resolve_committee_uid(client, committee, scrub=hide_emails)
+    except LfxError as exc:
+        raise _membership_error(exc, WRITER_FORBIDDEN_HINT, EXIT_NOT_FOUND) from None
+
+    request: dict[str, Any] = {"email": email}
+    if first_name is not None:
+        request["first_name"] = first_name
+    if last_name is not None:
+        request["last_name"] = last_name
+    if organization is not None:
+        request["organization"] = {"name": organization}
+    try:
+        member = add_committee_member(client, uid, request, notify=notify)
+    except LfxAPIError as exc:
+        if exc.status != 409:
+            raise _membership_error(exc, WRITER_FORBIDDEN_HINT) from None
+        _report_existing_member(client, uid, email, username, exc)
+        return
+    except LfxError as exc:
+        raise _membership_error(exc, WRITER_FORBIDDEN_HINT) from None
+
+    resolved = _string(member.get("username"))
+    if username is not None and resolved.casefold() != username.casefold():
+        raise _undo_add(client, uid, member, username, notify=notify)
+    if not resolved:
+        log.warning("The member has no username: no LF account owns the address yet")
+    if json_output:
+        echo(json.dumps(client.redact_data(member), indent=2))
+        return
+    echo(client.redact(f"added\t{resolved or NO_USERNAME}\t{_string(member.get('uid'))}"))
+
+
+@committee_app.command("remove-member")
+def committee_remove_member(
+    committee: str = typer.Argument(..., help="Committee UID, or its SSO group name."),
+    username: str | None = typer.Option(None, "--username", help="Username (LFID) of the member to remove."),
+    email: str | None = typer.Option(None, "--email", help="Email address of the member to remove."),
+    member_uid: str | None = typer.Option(None, "--member-uid", help="UID of the member to remove."),
+    notify: bool = typer.Option(False, "--notify", help="Let the service email the member."),
+) -> None:
+    """Remove a member from a committee.
+
+    Name the member with exactly one of --username, --email and
+    --member-uid. Prints removed and the member UID, separated by a tab.
+    """
+    if sum(value is not None for value in (username, email, member_uid)) != 1:
+        msg = "give exactly one of --username, --email and --member-uid"
+        raise typer.BadParameter(msg)
+    try:
+        client = LfxClient()
+        uid = resolve_committee_uid(client, committee, scrub=hide_emails)
+        members = [] if member_uid is not None else get_committee_members(client, uid)
+    except LfxError as exc:
+        raise _membership_error(exc, MEMBERS_FORBIDDEN_HINT, EXIT_NOT_FOUND) from None
+
+    if member_uid is None:
+        matches = find_members(members, username=username, email=email)
+        what = f"the username {_quoted(client, username)}" if username is not None else "that email address"
+        if not matches:
+            typer.echo(hide_emails(client.redact(f"Error: no member of the committee has {what}")), err=True)
+            raise typer.Exit(code=EXIT_NOT_FOUND)
+        if len(matches) > 1:
+            uids = ", ".join(sorted(_string(item.get("uid")) for item in matches))
+            hint = f"{len(matches)} members have {what}: {uids}; name one with --member-uid"
+            raise _fail(client.redact(hint))
+        member_uid = _string(matches[0].get("uid"))
+        if not member_uid:
+            raise _fail(client.redact(f"the member with {what} carries no member UID"))
+
+    try:
+        remove_committee_member(client, uid, member_uid, notify=notify)
+    except LfxError as exc:
+        raise _membership_error(exc, WRITER_FORBIDDEN_HINT, EXIT_NOT_FOUND) from None
+    echo(client.redact(f"removed\t{member_uid}"))
+
+
+@committee_app.command("invite")
+def committee_invite(
+    committee: str = typer.Argument(..., help="Committee UID, or its SSO group name."),
+    email: str = typer.Argument(..., help="Email address to invite."),
+    json_output: bool = typer.Option(False, "--json", help="Print the invite object as JSON."),
+) -> None:
+    """Invite an email address to join a committee.
+
+    Prints the invite UID and its status, separated by a tab.
+    """
+    try:
+        client = LfxClient()
+        uid = resolve_committee_uid(client, committee, scrub=hide_emails)
+    except LfxError as exc:
+        raise _membership_error(exc, INVITER_FORBIDDEN_HINT, EXIT_NOT_FOUND) from None
+    try:
+        invite = invite_to_committee(client, uid, email)
+    except LfxError as exc:
+        raise _membership_error(exc, INVITER_FORBIDDEN_HINT) from None
+
+    if json_output:
+        echo(json.dumps(client.redact_data(invite), indent=2))
+        return
+    echo(client.redact(f"{_string(invite.get('uid'))}\t{_string(invite.get('status'))}"))

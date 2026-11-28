@@ -2,6 +2,9 @@
 # SPDX-FileCopyrightText: 2026 The Linux Foundation
 """Committee members from the LFX v2 API, and the formats lftools-uv prints.
 
+Besides reading members, this module adds one, removes one and invites an
+email address to a committee.
+
 The formatters reproduce what ``lfidapi search-members``, ``ldap csv`` and
 ``shell/yaml4info`` printed for one group, except that CSV fields and
 INFO.yaml values are quoted so a comma or an apostrophe in a name keeps
@@ -13,6 +16,7 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
@@ -30,6 +34,19 @@ NO_USERNAME = "(no username)"
 #: Usernames INFO.yaml never lists, as ``shell/yaml4info`` leaves them out.
 INFO_YAML_EXCLUDED = frozenset({"lfservices_releng"})
 
+#: The header that stops the committee service emailing the member about a change.
+SKIP_NOTIFICATION_HEADER = "X-Skip-Notification"
+
+# A local part is a run of ordinary characters or a quoted string, and a
+# domain is a run of ordinary characters or an address literal in brackets.
+# An apostrophe is ordinary in a local part except as its first character,
+# so a message that wraps an address in single quotes keeps the opening one;
+# a local part made of apostrophes alone is matched whole.
+_EMAIL_ADDRESS = re.compile(
+    r"""(?:"(?:[^"\\\r\n]|\\.)*"|[^\s@<>()\[\],;:'"][^\s@<>()\[\],;:"]*|'+)"""
+    r"""@(?:\[[^\]\s]*\]|[^\s@<>()\[\],;:'"]+)"""
+)
+
 
 def _keep(value: str) -> str:
     return value
@@ -45,7 +62,7 @@ def get_committee_members(client: LfxClient, uid: str) -> list[dict[str, Any]]:
     :raises LfxNotFoundError: The API answered 404.
     :raises LfxAPIError: Any other failure, 403 included.
     """
-    path = f"/committees/{quote(uid, safe='')}/members"
+    path = _members_path(uid)
     try:
         body = client.get_json(path)
     except LfxAPIError as exc:
@@ -57,6 +74,111 @@ def get_committee_members(client: LfxClient, uid: str) -> list[dict[str, Any]]:
         msg = client.redact(f"GET {path} answered a body that is not a JSON array")
         raise LfxAPIError(msg)
     return [item for item in body if isinstance(item, dict)]
+
+
+def _members_path(uid: str, member_uid: str | None = None) -> str:
+    path = f"/committees/{quote(uid, safe='')}/members"
+    return path if member_uid is None else f"{path}/{quote(member_uid, safe='')}"
+
+
+def _notification_headers(notify: bool) -> dict[str, str]:
+    return {} if notify else {SKIP_NOTIFICATION_HEADER: "true"}
+
+
+def hide_emails(text: str) -> str:
+    """Return ``text`` with every email address in it replaced by ``<email>``.
+
+    Diagnostics pass through here, since a service message may quote the
+    address a request carried.
+    """
+    return _EMAIL_ADDRESS.sub("<email>", text)
+
+
+def add_committee_member(client: LfxClient, uid: str, body: dict[str, Any], *, notify: bool) -> dict[str, Any]:
+    """Send ``POST /committees/{uid}/members`` with ``body`` and return the new member.
+
+    The service sets the member's username itself, from the LF account
+    that owns ``body["email"]``, and leaves it empty when none does. It
+    emails the member unless ``notify`` is false. The token needs the
+    ``writer`` relation on the committee.
+
+    :raises LfxAPIError: The request failed or the API answered outside
+        2xx, 409 for an address already a member included, or the answer
+        is not a JSON object.
+    """
+    path = _members_path(uid)
+    answer = client.post_json(path, body, headers=_notification_headers(notify))
+    if not isinstance(answer, dict):
+        msg = client.redact(f"POST {path} answered a body that is not a JSON object")
+        raise LfxAPIError(msg)
+    return answer
+
+
+def _member_etag(client: LfxClient, uid: str, member_uid: str) -> str:
+    path = _members_path(uid, member_uid)
+    etag = client.get_response(path).headers.get("ETag")
+    if not etag:
+        msg = client.redact(f"GET {path} answered no ETag header")
+        raise LfxAPIError(msg)
+    return etag
+
+
+def remove_committee_member(client: LfxClient, uid: str, member_uid: str, *, notify: bool) -> None:
+    """Remove the member with ``member_uid`` from the committee with ``uid``.
+
+    Reads the member for its ``ETag`` and sends ``DELETE`` with that
+    value, unchanged, in ``If-Match``. When the member changed in
+    between and the service answers 409, it reads the member again and
+    retries once. The service emails the member unless ``notify`` is
+    false. The token needs the ``writer`` relation on the committee.
+
+    :raises LfxAPIError: Any failure, 404 for no such member and 409 when
+        the retry also met a change included.
+    """
+    path = _members_path(uid, member_uid)
+    headers = _notification_headers(notify)
+    for attempt in (1, 2):
+        headers["If-Match"] = _member_etag(client, uid, member_uid)
+        try:
+            client.delete(path, headers=headers)
+        except LfxAPIError as exc:
+            if exc.status == 409 and attempt == 1:
+                continue
+            raise
+        return
+
+
+def invite_to_committee(client: LfxClient, uid: str, email: str) -> dict[str, Any]:
+    """Send ``POST /committees/{uid}/invites`` for ``email`` and return the invite.
+
+    The token needs the ``inviter`` relation on the committee.
+
+    :raises LfxAPIError: The request failed or the API answered outside
+        2xx, 409 for a pending invite or an existing member included, or
+        the answer is not a JSON object.
+    """
+    path = f"/committees/{quote(uid, safe='')}/invites"
+    answer = client.post_json(path, {"invitee_email": email})
+    if not isinstance(answer, dict):
+        msg = client.redact(f"POST {path} answered a body that is not a JSON object")
+        raise LfxAPIError(msg)
+    return answer
+
+
+def find_members(
+    members: Iterable[dict[str, Any]], *, username: str | None = None, email: str | None = None
+) -> list[dict[str, Any]]:
+    """Return the ``members`` whose username or email address is the one given, ignoring case.
+
+    Give exactly one of ``username`` and ``email``. Email addresses are
+    also compared without surrounding whitespace, as the service
+    compares them when it refuses a duplicate member.
+    """
+    if username is not None:
+        wanted = username.casefold()
+        return [member for member in members if wanted and _text(member, "username").casefold() == wanted]
+    wanted = (email or "").strip().casefold()
+    return [member for member in members if wanted and _text(member, "email").strip().casefold() == wanted]
 
 
 def _text(member: dict[str, Any], key: str) -> str:
@@ -215,12 +337,18 @@ def format_info_yaml(members: Iterable[dict[str, Any]], redact: Callable[[str], 
 __all__ = [
     "INFO_YAML_EXCLUDED",
     "NO_USERNAME",
+    "SKIP_NOTIFICATION_HEADER",
+    "add_committee_member",
     "company",
     "count_without_username",
+    "find_members",
     "format_csv",
     "format_info_yaml",
     "format_text",
     "full_name",
     "get_committee_members",
+    "hide_emails",
+    "invite_to_committee",
+    "remove_committee_member",
     "sort_members",
 ]

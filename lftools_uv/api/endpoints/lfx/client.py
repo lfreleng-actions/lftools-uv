@@ -286,8 +286,9 @@ class LfxClient:
         path: str,
         params: Mapping[str, str] | None = None,
         json_body: Any = None,
+        headers: Mapping[str, str] | None = None,
     ) -> requests.Response:
-        """Send ``method`` to ``path``, with ``json_body`` when given, and return the 2xx response."""
+        """Send ``method`` to ``path``, with ``json_body`` and ``headers`` when given, and return the 2xx response."""
         # The API serves an expired token as anonymous, so a token that
         # expires mid-lookup would silently hide what it could see.
         check_token_expiry(self._token)
@@ -301,6 +302,7 @@ class LfxClient:
                 url,
                 params=query,
                 json=json_body,
+                headers=dict(headers) if headers else None,
                 timeout=self.timeout,
                 allow_redirects=False,
                 hooks={"response": functools.partial(self._refuse_redirect, method, path)},
@@ -325,15 +327,27 @@ class LfxClient:
         """
         return self._decode("GET", path, self.get_response(path, params))
 
-    def post_json(self, path: str, body: Any) -> Any:
+    def post_json(self, path: str, body: Any, headers: Mapping[str, str] | None = None) -> Any:
         """Send ``POST`` to ``path`` with ``body`` as JSON and return the decoded JSON answer.
+
+        ``headers`` are sent with the request, besides the client's own.
 
         :raises LfxConfigError: The token expired since the client was
             built; nothing was sent.
         :raises LfxAPIError: The request failed, was redirected, answered
             outside 2xx, or answered a body that is not JSON.
         """
-        return self._decode("POST", path, self._send("POST", path, json_body=body))
+        return self._decode("POST", path, self._send("POST", path, json_body=body, headers=headers))
+
+    def delete(self, path: str, headers: Mapping[str, str] | None = None) -> requests.Response:
+        """Send ``DELETE`` to ``path`` with ``headers`` and return the 2xx response.
+
+        :raises LfxConfigError: The token expired since the client was
+            built; nothing was sent.
+        :raises LfxAPIError: The request failed, was redirected, or
+            answered outside 2xx.
+        """
+        return self._send("DELETE", path, headers=headers)
 
     def _decode(self, method: str, path: str, response: requests.Response) -> Any:
         """Return the decoded JSON body of ``response``, or raise :class:`LfxAPIError`."""
