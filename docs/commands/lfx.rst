@@ -210,6 +210,66 @@ answers 403 and the command exits ``1``.
 ``--json`` prints the API's member array as it came; the command
 refuses ``--json`` together with ``--format``.
 
+committee inactive
+------------------
+
+.. program-output:: lftools-uv lfx committee inactive --help
+
+Reports when each member of the committee last owned or reviewed a
+change in Gerrit, so that a project can review its inactive
+committers. It replaces ``ldap inactivecommitters`` and the
+``inactivecommitters`` script. That script, still installed, now runs
+this command with its two arguments and the default ``--months``.
+
+``GERRIT_URL`` is the Gerrit host and path, such as
+``gerrit.example.org/r``, with or without ``https://``. lftools-uv
+refuses any other scheme, since it sends the credentials ``~/.netrc``
+holds for the host, if any. It also refuses a URL carrying a user name
+or password, which the report would print: put those in ``~/.netrc``.
+It follows no redirect, since requests would send the ``~/.netrc``
+credentials to the new URL, in clear when that is ``http://``; a
+Gerrit answer that redirects is a failed query. Give the URL Gerrit
+serves its REST API at.
+Gerrit answers change queries without credentials too.
+
+It reads the members as ``committee members`` does, so the token needs
+the same ``auditor`` relation. Members without a username have no LFID
+to ask Gerrit about: the command skips them and gives their count on
+stderr. For each other member, in username order, it asks Gerrit for
+the newest change they own or reviewed with an update in the last
+``--months`` months, 12 by default, then, when there is none, for the
+newest change at any time. It prints one line per member:
+
+.. code-block:: text
+
+     OK jdoe, Jane Doe, jdoe@example.org last submission or review 2026-10-30
+     WARNING bob, Bob Smith, bob@example.com inactive since 2025-02-11 655 days ago
+     ERROR amy, Amy Newcomer, amy@example.net has no activity
+     ERROR zed, Zed Nobody, zed@example.org has no Gerrit account
+
+A line break in a member's username, name or email prints as an
+escape, such as ``\n`` or ``\r``, so each member stays on one line.
+
+``has no Gerrit account`` means Gerrit answered HTTP 400
+``Account 'USERNAME' not found``. The old script printed the account's
+registration date here, which it read with ``gerrit gsql``; Gerrit 3.0
+removed that command.
+
+``--json`` prints a JSON array instead, with one object per member
+holding ``username``, ``name``, ``email``, ``status`` (``ok``,
+``inactive``, ``no_activity`` or ``no_account``), ``last_activity``
+and ``days_ago``; the last two are ``null`` without a change.
+
+A committee that is not found exits ``3``. Any Gerrit failure other
+than an unknown account exits ``1``, after the lines printed so far, so
+a Gerrit that does not answer never makes a member look inactive.
+The command needs neither the ``ldap`` extra, an LDAP server nor SSH
+access to Gerrit.
+
+.. code-block:: bash
+
+   lftools-uv lfx committee inactive gerrit.example.org/r example-gerrit-foo-committers
+
 committee create
 ----------------
 
@@ -323,11 +383,13 @@ Replacing the LDAP and LFID API commands
      - ``lfx committee members GROUP --format csv``
    * - ``ldap yaml4info GROUP``
      - ``lfx committee members GROUP --format info-yaml``
+   * - ``ldap inactivecommitters GERRIT_URL GROUP``
+     - ``lfx committee inactive GERRIT_URL GROUP``
 
 The output matches the old commands for one group, with two fixes: CSV
 quotes a field holding a comma or a line break, and INFO.yaml doubles
 an apostrophe in a value and escapes a line break or other control
-character.
+character. ``committee inactive`` describes how its report differs.
 ``ldap csv`` took more than one group, and LDAP wildcards, in one call.
-``lfx committee members`` takes one committee: run it once per
+The ``lfx committee`` commands take one committee: run them once per
 committee.
