@@ -38,7 +38,7 @@ def gerrit_mocks() -> Iterator[tuple[MagicMock, MagicMock]]:
 def github_org() -> Iterator[MagicMock]:
     """Replace the GitHub client and return the organization mock."""
     with (
-        patch("lftools_uv.typer_apps.github_cli.config.get_setting", return_value="token"),
+        patch("lftools_uv.config.get_setting", return_value="token"),
         patch("lftools_uv.typer_apps.github_cli.Github") as github,
     ):
         yield github.return_value.get_organization.return_value

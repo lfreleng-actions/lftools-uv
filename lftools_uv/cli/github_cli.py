@@ -15,14 +15,20 @@ import logging
 import sys
 
 import click
-from github import Github, GithubException
+from github import Github
 
-from lftools_uv import config
-from lftools_uv.github_helper import helper_list, helper_user_github, prvotes
+from lftools_uv.github_helper import (
+    apply_repo_teams,
+    connect,
+    helper_list,
+    helper_user_github,
+    prvotes,
+    resolve_repo_teams,
+)
+from lftools_uv.github_helper import create_repo as helper_create_repo
+from lftools_uv.github_helper import create_team as helper_create_team
+from lftools_uv.github_helper import submit_pr as helper_submit_pr
 from lftools_uv.output import echo
-
-_GITHUB_PREFIX = "github."
-
 
 log = logging.getLogger(__name__)
 
@@ -41,28 +47,7 @@ def github_cli(ctx):
 @click.pass_context
 def submit_pr(ctx, organization, repo, pr):
     """Submit a pr if mergeable."""
-    if config.get_setting(_GITHUB_PREFIX + organization, "token"):
-        token = config.get_setting(_GITHUB_PREFIX + organization, "token")
-    else:
-        token = config.get_setting("github", "token")
-
-    g = Github(token)
-    orgName = organization
-    try:
-        org = g.get_organization(orgName)
-    except GithubException as ghe:
-        log.exception(ghe)
-        sys.exit(1)
-
-    repo = org.get_repo(repo)
-    pr_mergable = repo.get_pull(pr).mergeable
-
-    if pr_mergable:
-        echo(pr_mergable)
-        repo.get_pull(pr).merge(commit_message="Vote Completed, merging INFO file")
-    else:
-        log.error(f"PR NOT MERGEABLE {pr_mergable}")
-        sys.exit(1)
+    helper_submit_pr(connect(organization, Github), repo, pr)
 
 
 @click.command(name="votes")
@@ -106,41 +91,8 @@ def createrepo(ctx, organization, repository, description, has_issues, has_proje
     By default has_issues has_wiki and has_projects is set to false.
     See --help to create a repo with these enabled.
     """
-    if config.get_setting(_GITHUB_PREFIX + organization, "token"):
-        token = config.get_setting(_GITHUB_PREFIX + organization, "token")
-    else:
-        token = config.get_setting("github", "token")
-
-    g = Github(token)
-    orgName = organization
-    has_issues = has_issues or False
-    has_wiki = has_wiki or False
-    has_projects = has_projects or False
-    log.info(f"Creating repo under organization: {orgName}")
-    try:
-        org = g.get_organization(orgName)
-    except GithubException as ghe:
-        log.exception(ghe)
-        sys.exit(1)
-    repos = org.get_repos()
-    for repo in repos:
-        if repo.name == repository:
-            log.error("repo already exists")
-            sys.exit(1)
-    try:
-        org.create_repo(
-            repository,
-            allow_rebase_merge=False,
-            auto_init=False,
-            description=description,
-            has_issues=has_issues,
-            has_projects=has_projects,
-            has_wiki=has_wiki,
-            private=False,
-        )
-    except GithubException as ghe:
-        log.exception(ghe)
-        sys.exit(1)
+    org = connect(organization, Github)
+    helper_create_repo(org, repository, description, has_issues, has_projects, has_wiki)
 
 
 @click.command(name="update-repo")
@@ -159,47 +111,23 @@ def updaterepo(ctx, organization, repository, has_issues, has_projects, has_wiki
     By default has_issues has_wiki and has_projects is set to false.
     See --help to use this command to enable these options.
     """
-    if config.get_setting(_GITHUB_PREFIX + organization, "token"):
-        token = config.get_setting(_GITHUB_PREFIX + organization, "token")
-    else:
-        token = config.get_setting("github", "token")
-    g = Github(token)
-    orgName = organization
+    org = connect(organization, Github)
 
     has_issues = has_issues or False
     has_wiki = has_wiki or False
     has_projects = has_projects or False
-
-    try:
-        org = g.get_organization(orgName)
-    except GithubException as ghe:
-        log.exception(ghe)
-        sys.exit(1)
 
     repo = next((repo for repo in org.get_repos() if repo.name == repository), None)
     if repo is None:
         log.error("repo not found")
         sys.exit(1)
 
+    add, remove = resolve_repo_teams(org, add_team, remove_team)
+
     if has_wiki or has_issues or has_projects:
         repo.edit(has_issues=has_issues, has_wiki=has_wiki, has_projects=has_projects)
 
-    if add_team or remove_team:
-        unmatched = {name for name in (add_team, remove_team) if name}
-        for team in org.get_teams():
-            if team.name == add_team:
-                log.info(f"Adding team {team.id}")
-                team.add_to_repos(repo)
-                team.update_team_repository(repo, "push")
-                unmatched.discard(add_team)
-            elif team.name == remove_team:
-                log.info(f"Removing team {team.id}")
-                team.remove_from_repos(repo)
-                unmatched.discard(remove_team)
-
-        if unmatched:
-            log.error("team not found: %s", ", ".join(sorted(unmatched)))
-            sys.exit(1)
+    apply_repo_teams(repo, add, remove)
 
 
 @click.command(name="create-team")
@@ -214,62 +142,7 @@ def createteam(ctx, organization, name, repo, privacy):
     Privacy should be set to closed
     This allows us to control group membership.
     """
-    if config.get_setting(_GITHUB_PREFIX + organization, "token"):
-        token = config.get_setting(_GITHUB_PREFIX + organization, "token")
-    else:
-        token = config.get_setting("github", "token")
-
-    g = Github(token)
-    orgName = organization
-    log.info(f"Creating team {name} for repo {repo} under organization {orgName} ")
-    try:
-        org = g.get_organization(orgName)
-    except GithubException as ghe:
-        log.exception(ghe)
-        sys.exit(1)
-
-    repos = []
-    if repo:
-        try:
-            get_repos = org.get_repos
-        except GithubException as ghe:
-            log.exception(ghe)
-            sys.exit(1)
-
-        my_repos = [repo]
-        repos = [repo for repo in get_repos() if repo.name in my_repos]
-        for repo in repos:
-            log.info(repo)
-        if repos:
-            log.info("repo found")
-        else:
-            log.error("repo not found")
-            sys.exit(1)
-
-    try:
-        teams = org.get_teams
-    except GithubException as ghe:
-        log.exception(ghe)
-        sys.exit(1)
-
-    for team in teams():
-        if team.name == name:
-            log.error(f"team {team} already exists")
-            sys.exit(1)
-
-    if repo:
-        try:
-            org.create_team(name=name, repo_names=repos, privacy=privacy)
-        except GithubException as ghe:
-            log.exception(ghe)
-            sys.exit(1)
-
-    if not repo:
-        try:
-            org.create_team(name=name, privacy=privacy)
-        except GithubException as ghe:
-            log.exception(ghe)
-            sys.exit(1)
+    helper_create_team(connect(organization, Github), name, privacy, repo)
 
 
 @click.command(name="user")

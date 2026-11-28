@@ -20,7 +20,7 @@ from lftools_uv.api.endpoints.readthedocs import ReadTheDocsError, ReadTheDocsNo
 def github_org():
     """Patch the GitHub client and return the organization mock."""
     with (
-        mock.patch("lftools_uv.cli.github_cli.config.get_setting", return_value="token"),
+        mock.patch("lftools_uv.config.get_setting", return_value="token"),
         mock.patch("lftools_uv.cli.github_cli.Github") as github,
     ):
         org = github.return_value.get_organization.return_value

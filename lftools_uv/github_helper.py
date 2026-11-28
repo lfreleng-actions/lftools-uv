@@ -13,12 +13,14 @@ from __future__ import annotations
 
 import logging
 import sys
+from configparser import NoOptionError, NoSectionError
 from typing import TYPE_CHECKING
 
 # aislop-ignore-file hallucinated-import -- the declared PyGithub dependency provides the `github` import package
-from github import Github, GithubException
+from github import Github, GithubException, UnknownObjectException
 from github.NamedUser import NamedUser
 from github.Organization import Organization
+from github.Repository import Repository
 from github.Team import Team
 
 from lftools_uv import config
@@ -42,12 +44,155 @@ def _get_org(g: Github, organization: str) -> Organization:
         sys.exit(1)
 
 
-def _get_token(organization: str) -> str:
-    """Retrieve the GitHub token for an organization."""
-    if config.has_section("github"):
-        return config.get_setting("github", "token")
-    section: str = f"github.{organization}"
-    return config.get_setting(section, "token")
+def get_token(organization: str) -> str:
+    """Return the GitHub token for an organization, exiting when none is set.
+
+    The ``token`` of ``[github.<organization>]`` wins; the ``token`` of
+    ``[github]`` is the fallback. Every ``github`` command, in both
+    front-ends, looks its token up here.
+    """
+    sections: tuple[str, str] = (f"github.{organization}", "github")
+    for section in sections:
+        try:
+            token: str = config.get_setting(section, "token")
+        except (NoSectionError, NoOptionError):
+            continue
+        if token:
+            return token
+    log.error(
+        "No GitHub token: set token in [%s] or [%s] in %s",
+        sections[0],
+        sections[1],
+        config.LFTOOLS_CONFIG_FILE,
+    )
+    sys.exit(1)
+
+
+def connect(organization: str, client: type[Github]) -> Organization:
+    """Return a GitHub organization through ``client``, exiting on failure.
+
+    Each front-end passes the ``Github`` class it imported.
+    """
+    return _get_org(client(get_token(organization)), organization)
+
+
+def _find_team(org: Organization, team: str) -> Team | None:
+    """Return the organization's team with ``team`` as its name or slug.
+
+    Returns None only when no team has that name and the slug lookup
+    answers 404; any other API error exits 1.
+    """
+    try:
+        for org_team in org.get_teams():
+            if org_team.name == team:
+                return org_team
+        try:
+            return org.get_team_by_slug(team)
+        except UnknownObjectException:
+            return None
+    except GithubException as ghe:
+        log.error(ghe)
+        sys.exit(1)
+
+
+def resolve_repo_teams(
+    org: Organization, add_team: str | None, remove_team: str | None
+) -> tuple[Team | None, Team | None]:
+    """Return the teams to add and to remove, each named by name or slug.
+
+    Changes nothing; exits 1 when either team is unknown, so a caller
+    resolves the teams before it edits the repository.
+    """
+    add = _find_team(org, add_team) if add_team else None
+    remove = _find_team(org, remove_team) if remove_team else None
+    unmatched = sorted(name for name, team in ((add_team, add), (remove_team, remove)) if name and team is None)
+    if unmatched:
+        log.error("team not found: %s", ", ".join(unmatched))
+        sys.exit(1)
+    return add, remove
+
+
+def apply_repo_teams(repo: Repository, add: Team | None, remove: Team | None) -> None:
+    """Add a team to a repository with ``push``, and remove one from it."""
+    try:
+        if add is not None:
+            log.info("Adding team %s", add.id)
+            add.add_to_repos(repo)
+            add.update_team_repository(repo, "push")
+        if remove is not None:
+            log.info("Removing team %s", remove.id)
+            remove.remove_from_repos(repo)
+    except GithubException as ghe:
+        log.error(ghe)
+        sys.exit(1)
+
+
+# aislop-ignore-next-line too-many-params -- mirrors the option set of the `create-repo` commands
+def create_repo(
+    org: Organization,
+    repository: str,
+    description: str,
+    has_issues: bool,
+    has_projects: bool,
+    has_wiki: bool,
+) -> None:
+    """Create a public, empty repository, exiting 1 when it already exists."""
+    log.info("Creating repo under organization: %s", org.login)
+    try:
+        if any(repo.name == repository for repo in org.get_repos()):
+            log.error("repo already exists")
+            sys.exit(1)
+        org.create_repo(
+            repository,
+            allow_rebase_merge=False,
+            auto_init=False,
+            description=description,
+            has_issues=has_issues,
+            has_projects=has_projects,
+            has_wiki=has_wiki,
+            private=False,
+        )
+    except GithubException as ghe:
+        log.error(ghe)
+        sys.exit(1)
+
+
+def create_team(org: Organization, name: str, privacy: str, repo: str | None) -> None:
+    """Create a team, optionally with a repository.
+
+    Exits 1 when a team of that name exists or ``repo`` names no
+    repository.
+    """
+    log.info("Creating team %s for repo %s under organization %s", name, repo, org.login)
+    try:
+        repos = [r for r in org.get_repos() if r.name == repo] if repo else []
+        if repo and not repos:
+            log.error("repo not found")
+            sys.exit(1)
+        if any(team.name == name for team in org.get_teams()):
+            log.error("team %s already exists", name)
+            sys.exit(1)
+        if repos:
+            org.create_team(name=name, repo_names=repos, privacy=privacy)
+        else:
+            org.create_team(name=name, privacy=privacy)
+    except GithubException as ghe:
+        log.error(ghe)
+        sys.exit(1)
+
+
+def submit_pr(org: Organization, repo: str, pr: int) -> None:
+    """Merge a pull request if it is mergeable, exiting 1 otherwise."""
+    try:
+        pull = org.get_repo(repo).get_pull(pr)
+        if not pull.mergeable:
+            log.error("PR NOT MERGEABLE %s", pull.mergeable)
+            sys.exit(1)
+        echo(pull.mergeable)
+        pull.merge(commit_message="Vote Completed, merging INFO file")
+    except GithubException as ghe:
+        log.error(ghe)
+        sys.exit(1)
 
 
 # aislop-ignore-next-line too-many-params -- mirrors the option set of the `github` commands
@@ -62,7 +207,7 @@ def helper_list(  # noqa: C901, PLR0912
     repofeatures: bool,
 ) -> list[str] | None:
     """List options for github org repos."""
-    token: str = _get_token(organization)
+    token: str = get_token(organization)
     g: Github = Github(token)
     org: Organization = _get_org(g, organization)
 
@@ -172,7 +317,7 @@ def prvotes(organization: str, repo: str, pr: int) -> list[str]:
     commands disagree about what their result is, and only the caller
     knows which stream a line belongs on.
     """
-    token: str = config.get_setting("github", "token")
+    token: str = get_token(organization)
     g: Github = Github(token)
     org: Organization = _get_org(g, organization)
 
@@ -223,7 +368,7 @@ def helper_user_github(  # noqa: C901, PLR0912
     invitation is reported but left in place, because revoking a pending
     invitation is not implemented.
     """
-    token: str = config.get_setting("github", "token")
+    token: str = get_token(organization)
     g: Github = Github(token)
     org: Organization = _get_org(g, organization)
 
