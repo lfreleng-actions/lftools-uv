@@ -418,8 +418,6 @@ def test_list_no_committees_exits_0(rsps: responses.RequestsMock, caplog: pytest
 
 # committee members
 
-MEMBERS_XFAIL = pytest.mark.xfail(strict=True, reason="lfx committee members is not implemented yet")
-
 
 def member(username: str, email: str, first: str, last: str, organization: object = None) -> dict[str, object]:
     body: dict[str, object] = {
@@ -458,7 +456,6 @@ def add_members(rsps: responses.RequestsMock, status: int = 200, body: object = 
     )
 
 
-@MEMBERS_XFAIL
 def test_members_text_sorted(rsps: responses.RequestsMock) -> None:
     add_query(rsps, [UID])
     add_members(rsps)
@@ -476,7 +473,6 @@ def test_members_text_sorted(rsps: responses.RequestsMock) -> None:
     ]
 
 
-@MEMBERS_XFAIL
 def test_members_csv(rsps: responses.RequestsMock) -> None:
     add_committee(rsps)
     add_members(rsps)
@@ -495,7 +491,6 @@ def test_members_csv(rsps: responses.RequestsMock) -> None:
     ]
 
 
-@MEMBERS_XFAIL
 def test_members_csv_group_falls_back_to_name(rsps: responses.RequestsMock) -> None:
     add_committee(rsps, body={**COMMITTEE, "sso_group_name": ""})
     add_members(rsps, body=MEMBERS[:1])
@@ -506,7 +501,6 @@ def test_members_csv_group_falls_back_to_name(rsps: responses.RequestsMock) -> N
     assert out.splitlines() == ["Example Committers,jdoe,Jane Doe,jdoe@example.org"]
 
 
-@MEMBERS_XFAIL
 @pytest.mark.parametrize("first", ["Jane\rAnn", "Jane\nAnn", "Jane\r\nAnn"])
 def test_members_csv_line_break_in_field(first: str) -> None:
     # Called directly: CliRunner folds CRLF in captured output into LF.
@@ -519,7 +513,6 @@ def test_members_csv_line_break_in_field(first: str) -> None:
     assert list(csv.reader(io.StringIO(out, newline=""))) == [[GROUP, "jdoe", f"{first} Doe", "jdoe@example.org"]]
 
 
-@MEMBERS_XFAIL
 def test_members_info_yaml(rsps: responses.RequestsMock, caplog: pytest.LogCaptureFixture) -> None:
     add_members(rsps)
     caplog.set_level(logging.INFO)
@@ -561,7 +554,6 @@ def test_members_info_yaml(rsps: responses.RequestsMock, caplog: pytest.LogCaptu
         'O\'Brien "Quoted" \\ Corp\n',
     ],
 )
-@MEMBERS_XFAIL
 def test_members_info_yaml_control_characters(rsps: responses.RequestsMock, name: str) -> None:
     add_members(rsps, body=[member("jdoe", "jdoe@example.org", "Jane", "Doe", {"name": name})])
 
@@ -581,7 +573,6 @@ def test_members_info_yaml_control_characters(rsps: responses.RequestsMock, name
     ]
 
 
-@MEMBERS_XFAIL
 def test_members_json_unchanged(rsps: responses.RequestsMock) -> None:
     add_members(rsps)
 
@@ -591,18 +582,16 @@ def test_members_json_unchanged(rsps: responses.RequestsMock) -> None:
     assert json.loads(out) == MEMBERS
 
 
-@MEMBERS_XFAIL
 @pytest.mark.parametrize("fmt", ["text", "csv", "info-yaml"])
 def test_members_json_refuses_format(rsps: responses.RequestsMock, fmt: str) -> None:
     code, out, err = run("lfx", "committee", "members", UID, "--json", "--format", fmt)
 
     assert code == 2
     assert out == ""
-    assert "--format" in err
+    assert "cannot be combined with" in err
     assert len(rsps.calls) == 0
 
 
-@MEMBERS_XFAIL
 def test_members_403_names_auditor(rsps: responses.RequestsMock) -> None:
     add_members(rsps, status=403, body={"message": "access denied"})
 
@@ -614,7 +603,6 @@ def test_members_403_names_auditor(rsps: responses.RequestsMock) -> None:
     assert "auditor" in err
 
 
-@MEMBERS_XFAIL
 def test_members_unknown_committee_exits_3(rsps: responses.RequestsMock) -> None:
     add_query(rsps, [])
 
@@ -625,7 +613,6 @@ def test_members_unknown_committee_exits_3(rsps: responses.RequestsMock) -> None
     assert "cannot see" in err
 
 
-@MEMBERS_XFAIL
 def test_members_404_exits_3(rsps: responses.RequestsMock) -> None:
     add_members(rsps, status=404, body={"message": "committee not found"})
 

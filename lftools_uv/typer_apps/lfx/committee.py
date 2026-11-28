@@ -9,6 +9,7 @@ the ``rtd`` read commands, and any other failure exits :data:`EXIT_ERROR`.
 
 from __future__ import annotations
 
+import enum
 import json
 import logging
 from typing import Any
@@ -20,7 +21,14 @@ from lftools_uv.api.endpoints.lfx import (
     LfxClient,
     LfxError,
     LfxNotFoundError,
+    count_without_username,
+    format_csv,
+    format_info_yaml,
+    format_text,
+    get_committee,
+    get_committee_members,
     list_project_committees,
+    resolve_committee_uid,
     show_committee,
 )
 from lftools_uv.output import echo
@@ -50,15 +58,28 @@ SHOW_FIELDS = (
 
 FORBIDDEN_HINT = "the token may be missing, expired or without access to this committee, or the committee may not exist"
 
+MEMBERS_FORBIDDEN_HINT = (
+    "reading members needs the auditor relation on the committee, which a committee writer has; "
+    f"otherwise {FORBIDDEN_HINT}"
+)
 
-def handle_lfx_error(exc: LfxError) -> typer.Exit:
+
+class MemberFormat(enum.StrEnum):
+    """Output formats of ``committee members``."""
+
+    TEXT = "text"
+    CSV = "csv"
+    INFO_YAML = "info-yaml"
+
+
+def handle_lfx_error(exc: LfxError, forbidden_hint: str = FORBIDDEN_HINT) -> typer.Exit:
     """Report an LFX error on stderr and return the ``typer.Exit`` to raise."""
     message = str(exc)
     code = EXIT_ERROR
     if isinstance(exc, LfxNotFoundError) or (isinstance(exc, LfxAPIError) and exc.status == 404):
         code = EXIT_NOT_FOUND
     elif isinstance(exc, LfxAPIError) and exc.status == 403:
-        message = f"{message}; {FORBIDDEN_HINT}"
+        message = f"{message}; {forbidden_hint}"
     typer.echo(f"Error: {message}", err=True)
     return typer.Exit(code=code)
 
@@ -120,3 +141,48 @@ def committee_list(
     if not committees:
         kind = "committee with an SSO group enabled" if sso_only else "committee"
         log.info("Project %s has no %s the token can see", client.redact(project), kind)
+
+
+@committee_app.command("members")
+def committee_members(
+    committee: str = typer.Argument(..., help="Committee UID, or its SSO group name."),
+    output_format: MemberFormat | None = typer.Option(
+        None, "--format", help="Output format: text (the default), csv or info-yaml."
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print the API's member array as JSON."),
+) -> None:
+    """List a committee's members, sorted by username.
+
+    text prints each username and email address; csv prints the SSO
+    group name, username, full name and email; info-yaml prints INFO.yaml
+    committer entries, leaving out members without a username.
+    """
+    if json_output and output_format is not None:
+        raise typer.BadParameter("cannot be combined with --json", param_hint="'--format'")
+    output_format = output_format or MemberFormat.TEXT
+    try:
+        client = LfxClient()
+        uid = resolve_committee_uid(client, committee)
+        members = get_committee_members(client, uid)
+        group = ""
+        if output_format is MemberFormat.CSV:
+            body = get_committee(client, uid)
+            group = _format_value(body.get("sso_group_name") or body.get("name") or "")
+    except LfxError as exc:
+        raise handle_lfx_error(exc, MEMBERS_FORBIDDEN_HINT) from None
+
+    if json_output:
+        echo(json.dumps(client.redact_data(members), indent=2))
+        return
+    if output_format is MemberFormat.CSV:
+        text = format_csv(members, group, client.redact)
+    elif output_format is MemberFormat.INFO_YAML:
+        text = format_info_yaml(members, client.redact)
+        left_out = count_without_username(members)
+        if left_out:
+            noun = "member" if left_out == 1 else "members"
+            log.warning("Left out %d %s without a username", left_out, noun)
+    else:
+        text = format_text(members, client.redact)
+    if text:
+        typer.echo(text, nl=False)

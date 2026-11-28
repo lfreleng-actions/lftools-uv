@@ -14,6 +14,7 @@ from lftools_uv.typer_apps.lfx.committee import (
     EXIT_ERROR,
     EXIT_NOT_FOUND,
     committee_list,
+    committee_members,
     committee_show,
     handle_lfx_error,
 )
@@ -23,6 +24,7 @@ __all__ = [
     "EXIT_NOT_FOUND",
     "committee_app",
     "committee_list",
+    "committee_members",
     "committee_show",
     "handle_lfx_error",
     "lfx_app",
