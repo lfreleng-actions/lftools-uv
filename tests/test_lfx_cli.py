@@ -11,13 +11,17 @@ from __future__ import annotations
 
 import base64
 import configparser
+import csv
+import io
 import json
 import logging
 import time
+import uuid
 from typing import TYPE_CHECKING
 
 import pytest
 import responses
+import yaml
 from responses import matchers
 from typer.testing import CliRunner
 
@@ -410,3 +414,222 @@ def test_list_no_committees_exits_0(rsps: responses.RequestsMock, caplog: pytest
     assert code == 0
     assert out == ""
     assert "no committee" in caplog.text
+
+
+# committee members
+
+MEMBERS_XFAIL = pytest.mark.xfail(strict=True, reason="lfx committee members is not implemented yet")
+
+
+def member(username: str, email: str, first: str, last: str, organization: object = None) -> dict[str, object]:
+    body: dict[str, object] = {
+        "uid": str(uuid.uuid5(uuid.NAMESPACE_URL, email)),
+        "committee_uid": UID,
+        "committee_name": "Example Committers",
+        "username": username,
+        "email": email,
+        "first_name": first,
+        "last_name": last,
+        "role": {"name": "None"},
+        "status": "Active",
+        "voting": {"status": "None"},
+    }
+    if organization is not None:
+        body["organization"] = organization
+    return body
+
+
+MEMBERS = [
+    member("jdoe", "jdoe@example.org", "Jane", "Doe", {"id": "", "name": "Example Corp", "website": ""}),
+    member("", "zed@example.org", "Zed", "Nobody"),
+    member("Bob", "bob@example.com", "Bob", "Smith, Jr.", {"id": "", "name": "", "website": ""}),
+    member("lfservices_releng", "releng@example.org", "LF", "Releng"),
+    member("cobrien", "conor@corp.example.com", "Conor", "O'Brien"),
+    member("", "amy@example.net", "Amy", "Newcomer"),
+]
+
+
+def add_members(rsps: responses.RequestsMock, status: int = 200, body: object = MEMBERS) -> None:
+    rsps.get(
+        f"{BASE}/committees/{UID}/members",
+        status=status,
+        json=body,
+        match=[matchers.query_param_matcher({"v": "1"})],
+    )
+
+
+@MEMBERS_XFAIL
+def test_members_text_sorted(rsps: responses.RequestsMock) -> None:
+    add_query(rsps, [UID])
+    add_members(rsps)
+
+    code, out, err = run("lfx", "committee", "members", GROUP)
+
+    assert code == 0, err
+    assert out.splitlines() == [
+        "Bob <bob@example.com>",
+        "cobrien <conor@corp.example.com>",
+        "jdoe <jdoe@example.org>",
+        "lfservices_releng <releng@example.org>",
+        "(no username) <amy@example.net>",
+        "(no username) <zed@example.org>",
+    ]
+
+
+@MEMBERS_XFAIL
+def test_members_csv(rsps: responses.RequestsMock) -> None:
+    add_committee(rsps)
+    add_members(rsps)
+
+    code, out, err = run("lfx", "committee", "members", UID, "--format", "csv")
+
+    assert code == 0, err
+    assert f'{GROUP},Bob,"Bob Smith, Jr.",bob@example.com' in out.splitlines()
+    assert list(csv.reader(io.StringIO(out))) == [
+        [GROUP, "Bob", "Bob Smith, Jr.", "bob@example.com"],
+        [GROUP, "cobrien", "Conor O'Brien", "conor@corp.example.com"],
+        [GROUP, "jdoe", "Jane Doe", "jdoe@example.org"],
+        [GROUP, "lfservices_releng", "LF Releng", "releng@example.org"],
+        [GROUP, "", "Amy Newcomer", "amy@example.net"],
+        [GROUP, "", "Zed Nobody", "zed@example.org"],
+    ]
+
+
+@MEMBERS_XFAIL
+def test_members_csv_group_falls_back_to_name(rsps: responses.RequestsMock) -> None:
+    add_committee(rsps, body={**COMMITTEE, "sso_group_name": ""})
+    add_members(rsps, body=MEMBERS[:1])
+
+    code, out, _ = run("lfx", "committee", "members", UID, "--format", "csv")
+
+    assert code == 0
+    assert out.splitlines() == ["Example Committers,jdoe,Jane Doe,jdoe@example.org"]
+
+
+@MEMBERS_XFAIL
+@pytest.mark.parametrize("first", ["Jane\rAnn", "Jane\nAnn", "Jane\r\nAnn"])
+def test_members_csv_line_break_in_field(first: str) -> None:
+    # Called directly: CliRunner folds CRLF in captured output into LF.
+    from lftools_uv.api.endpoints.lfx import format_csv
+
+    out = format_csv([member("jdoe", "jdoe@example.org", first, "Doe")], GROUP)
+
+    assert out.endswith(",jdoe@example.org\n")
+    assert not out.endswith("\r\n")
+    assert list(csv.reader(io.StringIO(out, newline=""))) == [[GROUP, "jdoe", f"{first} Doe", "jdoe@example.org"]]
+
+
+@MEMBERS_XFAIL
+def test_members_info_yaml(rsps: responses.RequestsMock, caplog: pytest.LogCaptureFixture) -> None:
+    add_members(rsps)
+    caplog.set_level(logging.INFO)
+
+    code, out, err = run("lfx", "committee", "members", UID, "--format", "info-yaml")
+
+    assert code == 0, err
+    assert out == (
+        "    - name: 'Bob Smith, Jr.'\n"
+        "      email: 'bob@example.com'\n"
+        "      company: 'example'\n"
+        "      id: 'Bob'\n"
+        "      timezone: 'Unknown/Unknown'\n"
+        "    - name: 'Conor O''Brien'\n"
+        "      email: 'conor@corp.example.com'\n"
+        "      company: 'corp.example'\n"
+        "      id: 'cobrien'\n"
+        "      timezone: 'Unknown/Unknown'\n"
+        "    - name: 'Jane Doe'\n"
+        "      email: 'jdoe@example.org'\n"
+        "      company: 'Example Corp'\n"
+        "      id: 'jdoe'\n"
+        "      timezone: 'Unknown/Unknown'\n"
+    )
+    parsed = yaml.safe_load(f"committers:\n{out}")["committers"]
+    assert [entry["name"] for entry in parsed] == ["Bob Smith, Jr.", "Conor O'Brien", "Jane Doe"]
+    assert "2 members without a username" in caplog.text
+    assert "amy@example.net" not in caplog.text + err
+    assert "zed@example.org" not in caplog.text + err
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "Example\nCorp",
+        "Example\r\nCorp",
+        "Bell\x07 and \x7f Corp",
+        "Next\x85Line\u2028Sep\u2029Corp",
+        'O\'Brien "Quoted" \\ Corp\n',
+    ],
+)
+@MEMBERS_XFAIL
+def test_members_info_yaml_control_characters(rsps: responses.RequestsMock, name: str) -> None:
+    add_members(rsps, body=[member("jdoe", "jdoe@example.org", "Jane", "Doe", {"name": name})])
+
+    code, out, err = run("lfx", "committee", "members", UID, "--format", "info-yaml")
+
+    assert code == 0, err
+    assert len(out.splitlines()) == 5
+    parsed = yaml.safe_load(f"committers:\n{out}")["committers"]
+    assert parsed == [
+        {
+            "name": "Jane Doe",
+            "email": "jdoe@example.org",
+            "company": name,
+            "id": "jdoe",
+            "timezone": "Unknown/Unknown",
+        }
+    ]
+
+
+@MEMBERS_XFAIL
+def test_members_json_unchanged(rsps: responses.RequestsMock) -> None:
+    add_members(rsps)
+
+    code, out, _ = run("lfx", "committee", "members", UID, "--json")
+
+    assert code == 0
+    assert json.loads(out) == MEMBERS
+
+
+@MEMBERS_XFAIL
+@pytest.mark.parametrize("fmt", ["text", "csv", "info-yaml"])
+def test_members_json_refuses_format(rsps: responses.RequestsMock, fmt: str) -> None:
+    code, out, err = run("lfx", "committee", "members", UID, "--json", "--format", fmt)
+
+    assert code == 2
+    assert out == ""
+    assert "--format" in err
+    assert len(rsps.calls) == 0
+
+
+@MEMBERS_XFAIL
+def test_members_403_names_auditor(rsps: responses.RequestsMock) -> None:
+    add_members(rsps, status=403, body={"message": "access denied"})
+
+    code, out, err = run("lfx", "committee", "members", UID)
+
+    assert code == 1
+    assert out == ""
+    assert "HTTP 403" in err
+    assert "auditor" in err
+
+
+@MEMBERS_XFAIL
+def test_members_unknown_committee_exits_3(rsps: responses.RequestsMock) -> None:
+    add_query(rsps, [])
+
+    code, out, err = run("lfx", "committee", "members", GROUP)
+
+    assert code == 3
+    assert out == ""
+    assert "cannot see" in err
+
+
+@MEMBERS_XFAIL
+def test_members_404_exits_3(rsps: responses.RequestsMock) -> None:
+    add_members(rsps, status=404, body={"message": "committee not found"})
+
+    code, _, err = run("lfx", "committee", "members", UID)
+
+    assert code == 3
+    assert "committee not found" in err
