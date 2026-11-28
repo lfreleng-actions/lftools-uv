@@ -9,16 +9,36 @@
 ##############################################################################
 """Helper for INFO file generation."""
 
-from subprocess import check_output
+import logging
+
+from lftools_uv.api.endpoints.lfx import (
+    LfxClient,
+    count_without_username,
+    format_info_yaml,
+    get_committee_members,
+    resolve_committee_uid,
+)
+
+log = logging.getLogger(__name__)
 
 
 def helper_yaml4info(group: str) -> str:
     """Build yaml of committers for your INFO.yaml.
 
-    The script's error output goes to stderr, never into the YAML.
+    Returns one INFO.yaml committer entry per member of the LFX committee
+    whose SSO group name is ``group``, read with the token and API URL the
+    ``lfx`` commands use. A committee UID works in place of the name.
+    Members without a username are left out, with a warning.
 
     Raises:
-        subprocess.CalledProcessError: If the LDAP lookup fails.
+        LfxError: If the token or URL is missing or refused, no committee
+            or more than one has the name, or the API request fails,
+            a 403 for a token without the ``auditor`` relation included.
     """
-    command = ["yaml4info", group]
-    return check_output(command, text=True)
+    client = LfxClient()
+    members = get_committee_members(client, resolve_committee_uid(client, group))
+    left_out = count_without_username(members)
+    if left_out:
+        noun = "member" if left_out == 1 else "members"
+        log.warning("Left out %d %s without a username", left_out, noun)
+    return format_info_yaml(members, client.redact)

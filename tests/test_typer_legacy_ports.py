@@ -14,7 +14,6 @@ exited 1. Each test runs the same arguments through both front-ends and
 expects the same calls, output streams and exit codes.
 """
 
-import subprocess
 from pathlib import Path
 from typing import Protocol
 from unittest.mock import MagicMock
@@ -27,6 +26,7 @@ from pytest_mock import MockerFixture
 from typer.testing import CliRunner as TyperRunner
 from typer.testing import Result as TyperResult
 
+from lftools_uv.api.endpoints.lfx import LfxNotFoundError
 from lftools_uv.cli import cli
 from lftools_uv.cli_app import app as typer_app
 
@@ -682,7 +682,7 @@ def gerrit(mocker: MockerFixture) -> MagicMock:
 
 @pytest.fixture
 def yaml4info(mocker: MockerFixture) -> MagicMock:
-    """Return two committers from the LDAP helper without running it."""
+    """Return a committer from the committee helper without reaching the API."""
     mock: MagicMock = mocker.patch("lftools_uv.cli.infofile.helper_yaml4info", return_value=STUB_COMMITTERS)
     return mock
 
@@ -752,7 +752,7 @@ def test_create_info_file_tsc_approval_spellings(run: Run, option: str) -> None:
 
 @FRONT_ENDS
 def test_create_info_file_failed_lookup_prints_nothing(run: Run, gerrit: MagicMock, yaml4info: MagicMock) -> None:
-    yaml4info.side_effect = subprocess.CalledProcessError(1, ["yaml4info"])
+    yaml4info.side_effect = LfxNotFoundError("no committee has the SSO group name 'example-gerrit-foo-bar-committers'")
     result = run(["infofile", "create-info-file", "gerrit.example.org", "foo/bar"])
 
     assert result.exit_code != 0

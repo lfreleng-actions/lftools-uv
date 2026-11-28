@@ -63,8 +63,6 @@ ENTRIES = (
     "      timezone: 'Unknown/Unknown'\n"
 )
 
-EXPECTED_FAIL = pytest.mark.xfail(strict=True, reason="yaml4info still reads LDAP")
-
 
 @pytest.fixture(autouse=True)
 def _isolated(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -106,7 +104,6 @@ def add_members(rsps: responses.RequestsMock, status: int = 200, body: Any = MEM
 # helper_yaml4info
 
 
-@EXPECTED_FAIL
 def test_helper_lists_committee_members(rsps: responses.RequestsMock) -> None:
     add_query(rsps, [UID])
     add_members(rsps)
@@ -114,7 +111,6 @@ def test_helper_lists_committee_members(rsps: responses.RequestsMock) -> None:
     assert ldap_cli.helper_yaml4info(GROUP) == ENTRIES
 
 
-@EXPECTED_FAIL
 def test_helper_unknown_committee_raises(rsps: responses.RequestsMock) -> None:
     add_query(rsps, [])
 
@@ -122,7 +118,6 @@ def test_helper_unknown_committee_raises(rsps: responses.RequestsMock) -> None:
         ldap_cli.helper_yaml4info(GROUP)
 
 
-@EXPECTED_FAIL
 def test_helper_403_raises(rsps: responses.RequestsMock) -> None:
     add_query(rsps, [UID])
     add_members(rsps, status=403, body={"message": "access denied"})
@@ -143,7 +138,6 @@ def run_script(monkeypatch: pytest.MonkeyPatch, args: list[str]) -> int:
     return code
 
 
-@EXPECTED_FAIL
 def test_script_prints_committee_members(
     rsps: responses.RequestsMock, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -157,7 +151,6 @@ def test_script_prints_committee_members(
     assert out == ENTRIES
 
 
-@EXPECTED_FAIL
 def test_script_unknown_committee_fails(
     rsps: responses.RequestsMock, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -172,7 +165,6 @@ def test_script_unknown_committee_fails(
     assert len(rsps.calls) == 1
 
 
-@EXPECTED_FAIL
 def test_script_403_names_auditor(
     rsps: responses.RequestsMock, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -188,7 +180,6 @@ def test_script_403_names_auditor(
     assert TOKEN not in err
 
 
-@EXPECTED_FAIL
 @pytest.mark.parametrize(("args", "code"), [([], 1), (["-h"], 0)], ids=["no-argument", "help"])
 def test_script_usage(
     capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, args: list[str], code: int
@@ -200,7 +191,6 @@ def test_script_usage(
     assert "sso-group-name" in out
 
 
-@EXPECTED_FAIL
 @pytest.mark.parametrize("args", [["-x"], [GROUP, "other-group"]], ids=["unknown-option", "two-groups"])
 def test_script_refuses_bad_arguments(
     capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, args: list[str]
@@ -235,7 +225,6 @@ def gerrit(mocker: MockerFixture) -> None:
     rest.return_value.get.return_value = {"local": {"refs/*": {"permissions": {"owner": {"rules": {"o": {}}}}}}}
 
 
-@EXPECTED_FAIL
 @FRONT_ENDS
 @pytest.mark.usefixtures("gerrit")
 def test_create_info_file_lists_committee(rsps: responses.RequestsMock, run: Any) -> None:
@@ -248,7 +237,6 @@ def test_create_info_file_lists_committee(rsps: responses.RequestsMock, run: Any
     assert f"    - <<: *example_foo_bar_ptl\n{ENTRIES}tsc:\n" in result.stdout
 
 
-@EXPECTED_FAIL
 @FRONT_ENDS
 @pytest.mark.usefixtures("gerrit")
 @pytest.mark.parametrize("status", [None, 403], ids=["not-found", "forbidden"])

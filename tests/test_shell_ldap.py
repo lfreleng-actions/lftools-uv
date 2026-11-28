@@ -2,12 +2,12 @@
 # SPDX-FileCopyrightText: 2026 The Linux Foundation
 """Tests for how the LDAP helper scripts report failed lookups.
 
-``yaml4info``, ``inactivecommitters`` and ``autocorrectinfofile`` build on
+``inactivecommitters`` and ``autocorrectinfofile`` build on
 ``lftools-uv ldap csv``, ``ldap yaml4info`` and ``infofile get-committers``.
-A lookup that fails must fail the script, rather than produce an empty list
-of committers, report every committer as inactive, or count as a match.
-Click's ``infofile create-info-file`` must likewise print no INFO file when
-its lookup fails, and never take an error message for committers.
+A lookup that fails must fail the script, rather than report every
+committer as inactive or count as a match. ``tests/test_yaml4info.py``
+covers ``yaml4info`` and ``infofile create-info-file``, which read LFX
+committees.
 
 Each script runs under real bash, with a PATH holding only stubs and system
 tools. The ``lftools-uv`` stub answers from canned data and fails a command
@@ -19,14 +19,8 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
-from unittest import mock
 
 import pytest
-from click.testing import CliRunner, Result
-
-from lftools_uv import ldap_cli
-from lftools_uv.cli.infofile import infofile
 
 SHELL_DIR = Path(__file__).resolve().parent.parent / "shell"
 BASH = shutil.which("bash") or "/bin/bash"
@@ -128,24 +122,6 @@ def _run(script: str, env: dict[str, str], *args: str) -> subprocess.CompletedPr
         timeout=60,
         check=False,
     )
-
-
-def test_yaml4info_prints_each_committer(sandbox: dict[str, str]) -> None:
-    result = _run("yaml4info", sandbox, "grp")
-
-    assert result.returncode == 0, result.stderr
-    assert "    - name: 'Alice Example'" in result.stdout
-    assert "      id: 'bob'" in result.stdout
-
-
-def test_yaml4info_failed_lookup_exits_1(sandbox: dict[str, str]) -> None:
-    sandbox["FAIL"] = "ldap csv"
-
-    result = _run("yaml4info", sandbox, "grp")
-
-    assert result.returncode == 1
-    assert result.stdout == ""
-    assert "ERROR" in result.stderr
 
 
 def test_inactivecommitters_reports_each_committer(sandbox: dict[str, str]) -> None:
@@ -255,41 +231,3 @@ def test_autocorrectinfofile_unwritable_ldap_dump_exits_1(info_dir: tuple[dict[s
 
     assert result.returncode == 1
     assert "Could not write" in result.stderr
-
-
-def _create_info_file(runner_env: dict[str, str]) -> Result:
-    """Run Click's create-info-file for project foo with Gerrit access mocked out."""
-    access: dict[str, Any] = {"local": {"refs/*": {"permissions": {"owner": {"rules": {}}}}}}
-    with (
-        mock.patch("lftools_uv.cli.infofile.config.get_setting", return_value="secret"),
-        mock.patch("lftools_uv.cli.infofile.GerritRestAPI") as rest,
-    ):
-        rest.return_value.get.return_value = access
-        return CliRunner().invoke(infofile, ["create-info-file", "gerrit.example.org", "foo"], obj={}, env=runner_env)
-
-
-def test_create_info_file_lists_ldap_committers(sandbox: dict[str, str]) -> None:
-    result = _create_info_file({"PATH": sandbox["PATH"] + ":" + str(SHELL_DIR)})
-
-    assert result.exit_code == 0, result.output
-    assert "    - name: 'Alice Example'" in result.output
-    assert "repositories:" in result.output
-
-
-def test_create_info_file_failed_lookup_prints_nothing(sandbox: dict[str, str]) -> None:
-    """A failed lookup prints no INFO file, and its error never becomes committers."""
-    result = _create_info_file({"PATH": sandbox["PATH"] + ":" + str(SHELL_DIR), "FAIL": "ldap csv"})
-
-    assert result.exit_code == 1
-    assert "repositories:" not in result.stdout
-    assert "ERROR: ldap csv failed" not in result.stdout
-
-
-def test_helper_yaml4info_keeps_errors_out_of_its_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Only the script's standard output is YAML; a warning it prints is not."""
-    script = tmp_path / "yaml4info"
-    script.write_text("#!/bin/sh\necho \"    - name: 'Alice'\"\necho 'WARNING: slow LDAP server' >&2\n")
-    script.chmod(0o755)
-    monkeypatch.setenv("PATH", str(tmp_path))
-
-    assert ldap_cli.helper_yaml4info("grp") == "    - name: 'Alice'\n"
