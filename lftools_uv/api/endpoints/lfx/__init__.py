@@ -9,8 +9,8 @@ This package is the API layer for the ``lftools-uv lfx`` command group:
 * :mod:`~.client` holds :class:`LfxClient`, which sends every request with
   the token, ``Accept: application/json``, ``v=1`` and a timeout, and
   follows no redirect.
-* :mod:`~.committees` resolves a committee named by UID or SSO group name
-  and reads it, and lists a project's committees.
+* :mod:`~.committees` resolves a committee named by UID or SSO group name,
+  reads it, lists a project's committees, and creates one.
 * :mod:`~.members` reads a committee's members and formats them as
   text, CSV or INFO.yaml committers.
 
@@ -23,7 +23,10 @@ from __future__ import annotations
 
 from .client import DEFAULT_TIMEOUT, LfxClient
 from .committees import (
+    COMMITTEE_CATEGORIES,
     INVISIBLE_NOTE,
+    JOIN_MODES,
+    create_committee,
     find_committee_uids,
     find_project_uid,
     get_committee,
@@ -54,9 +57,11 @@ from .members import (
 )
 
 __all__ = [
+    "COMMITTEE_CATEGORIES",
     "DEFAULT_API_URL",
     "DEFAULT_TIMEOUT",
     "INVISIBLE_NOTE",
+    "JOIN_MODES",
     "TOKEN_ENV",
     "URL_ENV",
     "LfxAPIError",
@@ -68,6 +73,7 @@ __all__ = [
     "check_token",
     "check_token_expiry",
     "count_without_username",
+    "create_committee",
     "find_committee_uids",
     "find_project_uid",
     "format_csv",

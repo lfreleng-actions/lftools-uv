@@ -620,3 +620,252 @@ def test_members_404_exits_3(rsps: responses.RequestsMock) -> None:
 
     assert code == 3
     assert "committee not found" in err
+
+
+# committee create
+
+COMMITTEE_NAME = "gerrit-foo-committers"
+
+CREATED = {
+    "uid": UID,
+    "name": COMMITTEE_NAME,
+    "category": "Committers",
+    "project_uid": PROJECT_UID,
+    "sso_group_enabled": True,
+    "sso_group_name": GROUP,
+    "join_mode": "closed",
+    "public": False,
+}
+
+DEFAULT_CREATE_BODY = {
+    "name": COMMITTEE_NAME,
+    "category": "Committers",
+    "project_uid": PROJECT_UID,
+    "join_mode": "closed",
+    "public": False,
+    "sso_group_enabled": True,
+}
+
+
+@pytest.fixture
+def create_rsps() -> Iterator[responses.RequestsMock]:
+    """Mock the API without failing teardown on a request the test expects not to send."""
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as mock:
+        yield mock
+
+
+def add_projects(rsps: responses.RequestsMock, projects: list[tuple[str, str]]) -> None:
+    rsps.get(
+        f"{BASE}/query/resources",
+        json={
+            "resources": [
+                {"type": "project", "id": f"project:{uid}", "data": {"uid": uid, "slug": slug}}
+                for slug, uid in projects
+            ],
+            "page_token": None,
+        },
+        match=[matchers.query_param_matcher({"v": "1", "type": "project", "filters": f"slug:{SLUG}"})],
+    )
+
+
+def add_create(rsps: responses.RequestsMock, status: int = 201, body: object = CREATED) -> None:
+    rsps.post(f"{BASE}/committees", status=status, json=body, match=[matchers.query_param_matcher({"v": "1"})])
+
+
+def run_create(*extra: str) -> tuple[int, str, str]:
+    return run("lfx", "committee", "create", "--project", SLUG, "--name", COMMITTEE_NAME, *extra)
+
+
+def posts(rsps: responses.RequestsMock) -> list[object]:
+    bodies: list[object] = []
+    for call in rsps.calls:
+        if call.request.method != "POST":
+            continue
+        body = call.request.body
+        assert isinstance(body, bytes | str)
+        bodies.append(json.loads(body))
+    return bodies
+
+
+def test_create_defaults(create_rsps: responses.RequestsMock) -> None:
+    add_projects(create_rsps, [(SLUG, PROJECT_UID)])
+    add_create(create_rsps)
+
+    code, out, err = run_create()
+
+    assert code == 0, err
+    assert out == f"{GROUP}\t{UID}\n"
+    assert posts(create_rsps) == [DEFAULT_CREATE_BODY]
+
+
+@pytest.mark.parametrize(
+    ("extra", "changed"),
+    [
+        (["--category", "Technical Steering Committee"], {"category": "Technical Steering Committee"}),
+        (["--description", "Committers of foo"], {"description": "Committers of foo"}),
+        (["--join-mode", "invite_only"], {"join_mode": "invite_only"}),
+        (["--no-sso-group"], {"sso_group_enabled": False}),
+        (["--public"], {"public": True}),
+        (["--sso-group", "--private"], {}),
+    ],
+)
+def test_create_options_in_body(
+    create_rsps: responses.RequestsMock, extra: list[str], changed: dict[str, object]
+) -> None:
+    add_projects(create_rsps, [(SLUG, PROJECT_UID)])
+    add_create(create_rsps)
+
+    code, _, err = run_create(*extra)
+
+    assert code == 0, err
+    assert posts(create_rsps) == [{**DEFAULT_CREATE_BODY, **changed}]
+
+
+def test_create_prints_returned_sso_group_name(create_rsps: responses.RequestsMock) -> None:
+    add_projects(create_rsps, [(SLUG, PROJECT_UID)])
+    add_create(create_rsps, body={**CREATED, "sso_group_name": f"{GROUP}-2"})
+
+    code, out, _ = run_create()
+
+    assert code == 0
+    assert out == f"{GROUP}-2\t{UID}\n"
+
+
+def test_create_without_sso_group_name_prints_empty_field(create_rsps: responses.RequestsMock) -> None:
+    add_projects(create_rsps, [(SLUG, PROJECT_UID)])
+    add_create(create_rsps, body={**CREATED, "sso_group_enabled": False, "sso_group_name": None})
+
+    code, out, _ = run_create("--no-sso-group")
+
+    assert code == 0
+    assert out == f"\t{UID}\n"
+
+
+def test_create_json(create_rsps: responses.RequestsMock) -> None:
+    add_projects(create_rsps, [(SLUG, PROJECT_UID)])
+    add_create(create_rsps)
+
+    code, out, _ = run_create("--json")
+
+    assert code == 0
+    assert json.loads(out) == CREATED
+
+
+def test_create_unknown_project_exits_3_without_post(create_rsps: responses.RequestsMock) -> None:
+    add_projects(create_rsps, [("example-other", OTHER_UID)])
+    add_create(create_rsps)
+
+    code, out, err = run_create()
+
+    assert code == 3
+    assert out == ""
+    assert SLUG in err
+    assert posts(create_rsps) == []
+    assert len(create_rsps.calls) == 1
+
+
+def test_create_ambiguous_project_exits_1_without_post(create_rsps: responses.RequestsMock) -> None:
+    add_projects(create_rsps, [(SLUG, PROJECT_UID), (SLUG, OTHER_UID)])
+    add_create(create_rsps)
+
+    code, _, err = run_create()
+
+    assert code == 1
+    assert PROJECT_UID in err
+    assert OTHER_UID in err
+    assert posts(create_rsps) == []
+
+
+@pytest.mark.parametrize("extra", [["--category", "Committer"], ["--join-mode", "closed-ish"]])
+def test_create_refuses_unknown_choice_before_any_request(
+    create_rsps: responses.RequestsMock, extra: list[str]
+) -> None:
+    add_projects(create_rsps, [(SLUG, PROJECT_UID)])
+    add_create(create_rsps)
+
+    code, out, err = run_create(*extra)
+
+    assert code == 2
+    assert out == ""
+    assert extra[1] in err
+    assert len(create_rsps.calls) == 0
+
+
+@pytest.mark.parametrize(
+    ("status", "message", "expected"),
+    [
+        (409, "committee already exists", ["HTTP 409", "committee already exists"]),
+        (400, "name is too long", ["HTTP 400", "name is too long"]),
+        (403, "access denied", ["HTTP 403", "access denied", "writer"]),
+        (404, "not found", ["HTTP 404", "not found"]),
+    ],
+)
+def test_create_errors_exit_1(
+    create_rsps: responses.RequestsMock, status: int, message: str, expected: list[str]
+) -> None:
+    add_projects(create_rsps, [(SLUG, PROJECT_UID)])
+    add_create(create_rsps, status=status, body={"message": message})
+
+    code, out, err = run_create()
+
+    assert code == 1
+    assert out == ""
+    for text in expected:
+        assert text in err
+    assert len(posts(create_rsps)) == 1
+
+
+@pytest.mark.parametrize("extra", [[], ["--json"]])
+def test_create_redacts_token_in_response(create_rsps: responses.RequestsMock, extra: list[str]) -> None:
+    add_projects(create_rsps, [(SLUG, PROJECT_UID)])
+    add_create(create_rsps, body={**CREATED, "sso_group_name": f"leak-{TOKEN}"})
+
+    code, out, _ = run_create(*extra)
+
+    assert code == 0
+    assert TOKEN not in out
+    assert "leak-<redacted>" in out
+
+
+def test_create_token_expiring_after_lookup_sends_no_post(
+    monkeypatch: pytest.MonkeyPatch, create_rsps: responses.RequestsMock
+) -> None:
+    clock = {"now": 1_000_000.0}
+    monkeypatch.setattr(lfx_config.time, "time", lambda: clock["now"])
+    parts = ({"alg": "RS256"}, {"exp": 1_000_100})
+    encoded = (base64.urlsafe_b64encode(json.dumps(part).encode()).rstrip(b"=").decode() for part in parts)
+    token = ".".join([*encoded, "c2ln"])
+    monkeypatch.setenv("LFX_TOKEN", token)
+
+    def project_lookup(request: object) -> tuple[int, dict[str, str], str]:
+        clock["now"] = 1_000_200.0
+        resources = [{"type": "project", "id": f"project:{PROJECT_UID}", "data": {"uid": PROJECT_UID, "slug": SLUG}}]
+        return 200, {}, json.dumps({"resources": resources, "page_token": None})
+
+    create_rsps.add_callback(responses.GET, f"{BASE}/query/resources", callback=project_lookup)
+    add_create(create_rsps)
+
+    code, out, err = run_create()
+
+    assert code == 1
+    assert out == ""
+    assert "expired" in err
+    assert token not in err
+    assert posts(create_rsps) == []
+    assert len(create_rsps.calls) == 1
+
+
+@pytest.mark.parametrize("location", ["https://elsewhere.example.org/committees", "https://[broken"])
+def test_create_redirect_refused_without_follow_up(create_rsps: responses.RequestsMock, location: str) -> None:
+    add_projects(create_rsps, [(SLUG, PROJECT_UID)])
+    create_rsps.post(f"{BASE}/committees", status=307, headers={"Location": location})
+
+    result = CliRunner().invoke(app, ["lfx", "committee", "create", "--project", SLUG, "--name", COMMITTEE_NAME])
+
+    assert result.exit_code == 1
+    assert isinstance(result.exception, SystemExit)
+    assert result.stdout == ""
+    assert "HTTP 307" in result.stderr
+    assert "refusing to follow it" in result.stderr
+    assert len(posts(create_rsps)) == 1
+    assert len(create_rsps.calls) == 2

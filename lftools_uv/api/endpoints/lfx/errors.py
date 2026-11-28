@@ -30,7 +30,7 @@ class LfxAPIError(LfxError):
 
 
 class LfxNotFoundError(LfxError):
-    """No committee matched the name, or the API answered 404."""
+    """No committee or project matched the name, or the API answered 404."""
 
 
 class LfxAmbiguityError(LfxError):
