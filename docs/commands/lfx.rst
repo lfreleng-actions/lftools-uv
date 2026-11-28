@@ -113,8 +113,9 @@ Exit status
    * - ``2``
      - Usage error, such as a missing argument or an unknown option.
    * - ``3``
-     - No committee has that SSO group name, or the API answered 404. A
-       committee the token cannot see looks the same.
+     - No committee has that SSO group name, no project has that slug,
+       or the API answered 404. A committee or project the token cannot
+       see looks the same.
 
 Results go to stdout and errors to stderr, so ``--json`` output pipes
 cleanly:
@@ -135,3 +136,97 @@ Prints one ``key: value`` line each for ``uid``, ``name``,
 ``category``, ``project_uid``, ``project_name``,
 ``sso_group_enabled``, ``sso_group_name``, ``join_mode``, ``public``
 and ``total_members``. ``--json`` prints the API response body instead.
+
+committee list
+--------------
+
+.. program-output:: lftools-uv lfx committee list --help
+
+Finds the project whose slug matches ``--project`` in full and prints
+one line per committee the token can see, in name order, with three
+tab-separated fields: the SSO group name (empty when the committee has
+none), the UID and the name. The SSO option drops the committees whose
+``sso_group_enabled`` is not true. ``--json`` prints a JSON array of
+the committees' ``data`` objects instead.
+
+A project with no committee the token can see prints nothing, says so
+on stderr and exits ``0``. A slug no visible project has exits ``3``.
+
+.. code-block:: bash
+
+   lftools-uv lfx committee list --project example | cut -f1
+
+committee members
+-----------------
+
+.. program-output:: lftools-uv lfx committee members --help
+
+Reads every member of the committee from the committee service itself
+rather than the query index, which keeps the list current. The output
+lists members in username order, ignoring case, then members that have
+no username, in email order. A member has no username, which is their
+LFID, when no LF account owns their email address yet.
+
+The endpoint needs the ``auditor`` relation on the committee, which a
+committee writer has. Without it, or without a valid token, the API
+answers 403 and the command exits ``1``.
+
+``--format`` chooses the output:
+
+``text``, the default
+   ``username <email>``, one member per line. A member without a
+   username prints as ``(no username) <email>``.
+
+``csv``
+   Four fields and no header: the committee's SSO group name (its name,
+   when it has none), the username, the full name and the email
+   address. Quotes surround a field holding a comma, a double quote or
+   a line break, a bare carriage return included.
+
+``info-yaml``
+   One INFO.yaml committer entry per member:
+
+   .. code-block:: yaml
+
+          - name: 'Jane Doe'
+            email: 'jdoe@example.org'
+            company: 'Example Corp'
+            id: 'jdoe'
+            timezone: 'Unknown/Unknown'
+
+   ``company`` is the member's organisation. When that is empty, the
+   command takes the email domain without its last label, giving
+   ``example`` for ``jdoe@example.org``. lftools-uv doubles an
+   apostrophe in a value, keeping a name such as O'Brien valid YAML. A
+   value holding a line break or another control character takes
+   double quotes instead, with that character escaped, so it stays on
+   one line.
+   The output leaves out the ``lfservices_releng`` account and members
+   without a username; stderr gives the count of members without a
+   username, but not their addresses.
+
+``--json`` prints the API's member array as it came; the command
+refuses ``--json`` together with ``--format``.
+
+Replacing the LDAP and LFID API commands
+----------------------------------------
+
+.. list-table::
+   :header-rows: 1
+
+   * - Old
+     - New
+   * - ``lfidapi search-members GROUP``
+     - ``lfx committee members GROUP``
+   * - ``ldap csv GROUP``
+     - ``lfx committee members GROUP --format csv``
+   * - ``ldap yaml4info GROUP``
+     - ``lfx committee members GROUP --format info-yaml``
+
+The output matches the old commands for one group, with two fixes: CSV
+quotes a field holding a comma or a line break, and INFO.yaml doubles
+an apostrophe in a value and escapes a line break or other control
+character.
+``ldap csv`` took more than one group, and LDAP wildcards, in one call.
+``lfx committee members`` takes one committee: run it once per
+committee.
