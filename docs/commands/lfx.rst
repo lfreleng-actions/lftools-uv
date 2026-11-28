@@ -331,3 +331,15 @@ character.
 ``ldap csv`` took more than one group, and LDAP wildcards, in one call.
 ``lfx committee members`` takes one committee: run it once per
 committee.
+
+``yaml4info`` and ``infofile create-info-file``
+-----------------------------------------------
+
+The ``yaml4info`` script, and the legacy ``ldap yaml4info`` command that
+runs it, print what ``lfx committee members GROUP --format info-yaml``
+prints, for the committee whose SSO group name is ``GROUP``.
+``infofile create-info-file`` lists the same entries as the committers
+of the INFO file it creates. All three read committees rather than LDAP,
+so they need a token with the ``auditor`` relation on the committee, and
+take one group per call: LDAP wildcards such as
+``yaml4info 'project-gerrit-*'`` no longer list every matching group.
