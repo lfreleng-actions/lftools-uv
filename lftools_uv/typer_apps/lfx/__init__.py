@@ -19,12 +19,14 @@ from lftools_uv.typer_apps.lfx.committee import (
     committee_show,
     handle_lfx_error,
 )
+from lftools_uv.typer_apps.lfx.inactive import committee_inactive
 
 __all__ = [
     "EXIT_ERROR",
     "EXIT_NOT_FOUND",
     "committee_app",
     "committee_create",
+    "committee_inactive",
     "committee_list",
     "committee_members",
     "committee_show",

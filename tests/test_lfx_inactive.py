@@ -133,7 +133,6 @@ def queries(rsps: responses.RequestsMock) -> list[str]:
     ]
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee inactive is not implemented yet")
 @pytest.mark.parametrize("url", ["gerrit.example.org/r", GERRIT, GERRIT + "/"])
 def test_reports_each_member(rsps: responses.RequestsMock, url: str) -> None:
     """One line per member; a member without a username is skipped and counted."""
@@ -148,7 +147,6 @@ def test_reports_each_member(rsps: responses.RequestsMock, url: str) -> None:
     assert not any("zed" in query for query in queries(rsps))
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee inactive is not implemented yet")
 @pytest.mark.parametrize(("first", "shown"), [("Jane\nAnn", "Jane\\nAnn"), ("Jane\r\nAnn", "Jane\\r\\nAnn")])
 def test_line_break_in_name_stays_on_one_line(first: str, shown: str) -> None:
     # Called directly: CliRunner folds CRLF in captured output into LF.
@@ -166,7 +164,6 @@ def test_line_break_in_name_stays_on_one_line(first: str, shown: str) -> None:
     assert format_entry(entry).splitlines() == [f"  ERROR jdoe, {shown} Doe, jdoe@example.org has no activity"]
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee inactive is not implemented yet")
 def test_line_break_in_name_is_kept_in_json(rsps: responses.RequestsMock) -> None:
     add_committee(rsps, [member("carol", "carol@example.org", "Carol\nAnn", "Example")])
     add_gerrit(rsps)
@@ -177,7 +174,6 @@ def test_line_break_in_name_is_kept_in_json(rsps: responses.RequestsMock) -> Non
     assert json.loads(out)[0]["name"] == "Carol\nAnn Example"
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee inactive is not implemented yet")
 def test_unknown_account_is_not_queried_again(rsps: responses.RequestsMock) -> None:
     add_committee(rsps, [MEMBERS[0]])
     add_gerrit(rsps)
@@ -188,7 +184,6 @@ def test_unknown_account_is_not_queried_again(rsps: responses.RequestsMock) -> N
     assert len(queries(rsps)) == 1
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee inactive is not implemented yet")
 @pytest.mark.parametrize(("months", "low", "high"), [(None, 364, 366), ("3", 89, 92)])
 def test_months_sets_the_cut_off(rsps: responses.RequestsMock, months: str | None, low: int, high: int) -> None:
     add_committee(rsps, [MEMBERS[4]])
@@ -205,7 +200,6 @@ def test_months_sets_the_cut_off(rsps: responses.RequestsMock, months: str | Non
     assert "owner:alice" in query
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee inactive is not implemented yet")
 def test_json(rsps: responses.RequestsMock) -> None:
     add_committee(rsps)
     add_gerrit(rsps)
@@ -223,7 +217,6 @@ def test_json(rsps: responses.RequestsMock) -> None:
     assert report[1]["days_ago"] == 500
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee inactive is not implemented yet")
 @pytest.mark.parametrize(
     "answer",
     [
@@ -245,7 +238,6 @@ def test_gerrit_failure_exits_1(rsps: responses.RequestsMock, answer: dict[str, 
     assert "Error:" in err
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee inactive is not implemented yet")
 def test_unknown_committee_exits_3(rsps: responses.RequestsMock) -> None:
     rsps.get(f"{BASE}/query/resources", json={"resources": [], "page_token": None})
 
@@ -256,7 +248,6 @@ def test_unknown_committee_exits_3(rsps: responses.RequestsMock) -> None:
     assert "Error:" in err
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee inactive is not implemented yet")
 def test_refuses_plain_http(rsps: responses.RequestsMock) -> None:
     """~/.netrc credentials must not travel in clear."""
     code, _, err = run("lfx", "committee", "inactive", "http://gerrit.example.org/r", GROUP)
@@ -266,7 +257,6 @@ def test_refuses_plain_http(rsps: responses.RequestsMock) -> None:
     assert len(rsps.calls) == 0
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee inactive is not implemented yet")
 @pytest.mark.parametrize("url", ["https://user:s3cret@gerrit.example.org/r", "user:s3cret@gerrit.example.org/r"])
 def test_refuses_credentials_in_url(rsps: responses.RequestsMock, url: str) -> None:
     """A password in GERRIT_URL would be printed; ~/.netrc is the way to log in."""
@@ -278,7 +268,6 @@ def test_refuses_credentials_in_url(rsps: responses.RequestsMock, url: str) -> N
     assert len(rsps.calls) == 0
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee inactive is not implemented yet")
 def test_does_not_follow_a_redirect(rsps: responses.RequestsMock, tmp_path: Path) -> None:
     """Following HTTPS to HTTP would resend the ~/.netrc credentials in clear."""
     netrc = tmp_path / ".netrc"
@@ -306,7 +295,6 @@ def test_does_not_follow_a_redirect(rsps: responses.RequestsMock, tmp_path: Path
     assert "redirect" in err
 
 
-@pytest.mark.xfail(strict=True, reason="the inactivecommitters console script still runs the shell script")
 def test_console_script_takes_two_arguments(
     rsps: responses.RequestsMock, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

@@ -107,13 +107,6 @@ def test_yaml4info_reads_ldap_through_legacy_cli(sandbox):
     assert "- name: 'Alice Example'" in result.stdout
 
 
-def test_inactivecommitters_reads_ldap_through_legacy_cli(sandbox):
-    """``ldap csv`` exists only in the Click front-end."""
-    _run("inactivecommitters", ["gerrit.example.org/gerrit", "grp"], sandbox)
-
-    assert _calls(sandbox) == ["1|ldap csv grp"]
-
-
 def test_autocorrectinfofile_uses_legacy_cli_throughout(sandbox, tmp_path):
     """Every call reaches a real Click command, not a Typer stub.
 

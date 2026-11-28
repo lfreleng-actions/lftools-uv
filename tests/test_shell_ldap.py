@@ -2,16 +2,16 @@
 # SPDX-FileCopyrightText: 2026 The Linux Foundation
 """Tests for how the LDAP helper scripts report failed lookups.
 
-``yaml4info``, ``inactivecommitters`` and ``autocorrectinfofile`` build on
-``lftools-uv ldap csv``, ``ldap yaml4info`` and ``infofile get-committers``.
-A lookup that fails must fail the script, rather than produce an empty list
-of committers, report every committer as inactive, or count as a match.
+``yaml4info`` and ``autocorrectinfofile`` build on ``lftools-uv ldap csv``,
+``ldap yaml4info`` and ``infofile get-committers``. A lookup that fails must
+fail the script, rather than produce an empty list of committers or count as
+a match.
 Click's ``infofile create-info-file`` must likewise print no INFO file when
 its lookup fails, and never take an error message for committers.
 
 Each script runs under real bash, with a PATH holding only stubs and system
 tools. The ``lftools-uv`` stub answers from canned data and fails a command
-when the test asks; ``curl`` and ``ssh`` stubs stand in for Gerrit.
+when the test asks.
 """
 
 import os
@@ -62,30 +62,6 @@ elif command == "infofile get-committers":
         print(f"      id: {committer['id']}")
 """
 
-# Answers a Gerrit query as Gerrit does: for alice with a change updated
-# today, and for bob, an account Gerrit does not know, with HTTP 400. With
-# $GERRIT_STATUS set it answers that status instead, and with $CURL_EXIT set
-# it fails to connect. It writes the -w format after the body, as curl does.
-CURL_STUB = r"""
-import os
-import sys
-
-args = sys.argv[1:]
-if os.environ.get("CURL_EXIT"):
-    print("curl: (6) Could not resolve host", file=sys.stderr)
-    sys.exit(int(os.environ["CURL_EXIT"]))
-if os.environ.get("GERRIT_STATUS"):
-    code, body = int(os.environ["GERRIT_STATUS"]), "Service Unavailable\n"
-elif "alice" in args[-1]:
-    code, body = 200, ')]}\'\n[{"id":"1","created":"2026-10-30 09:00:00.000000000","updated":"2026-11-01 10:00:00.000000000"}]\n'
-else:
-    code, body = 400, "Account 'bob' not found\n"
-written = args[args.index("-w") + 1] if "-w" in args[:-1] else ""
-sys.stdout.write(body + written.replace("\\n", "\n").replace("%{http_code}", str(code)))
-"""
-
-SSH_STUB = "#!/bin/sh\nexit 0\n"
-
 TOOLS = (
     "awk",
     "cat",
@@ -101,20 +77,16 @@ TOOLS = (
 
 @pytest.fixture
 def sandbox(tmp_path):
-    """Return an environment whose PATH resolves lftools-uv, curl and ssh to stubs."""
+    """Return an environment whose PATH resolves lftools-uv to a stub."""
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     for tool in TOOLS:
         found = shutil.which(tool, path="/usr/bin:/bin")
         if found:
             (bin_dir / tool).symlink_to(found)
-    for name, source in (("lftools-uv", LFTOOLS_UV_STUB), ("curl", CURL_STUB)):
-        stub = bin_dir / name
-        stub.write_text(f"#!{sys.executable}{source}")
-        stub.chmod(0o755)
-    ssh = bin_dir / "ssh"
-    ssh.write_text(SSH_STUB)
-    ssh.chmod(0o755)
+    stub = bin_dir / "lftools-uv"
+    stub.write_text(f"#!{sys.executable}{LFTOOLS_UV_STUB}")
+    stub.chmod(0o755)
     return {"PATH": str(bin_dir), "HOME": str(tmp_path)}
 
 
@@ -146,53 +118,6 @@ def test_yaml4info_failed_lookup_exits_1(sandbox: dict[str, str]) -> None:
     assert result.returncode == 1
     assert result.stdout == ""
     assert "ERROR" in result.stderr
-
-
-def test_inactivecommitters_reports_each_committer(sandbox: dict[str, str]) -> None:
-    """Gerrit answers bob, an account it does not know, with 400: no activity, not a failure."""
-    result = _run("inactivecommitters", sandbox, "gerrit.example.org/gerrit", "grp")
-
-    assert result.returncode == 0, result.stderr
-    assert "  OK alice, Alice Example" in result.stdout
-    assert "  ERROR bob, Bob Example, bob@example.org has no activity" in result.stdout
-
-
-def test_inactivecommitters_reads_date_from_compact_json(sandbox: dict[str, str]) -> None:
-    """Gerrit sends each change's JSON on one line; the date is still found."""
-    result = _run("inactivecommitters", sandbox, "gerrit.example.org/gerrit", "grp")
-
-    assert result.returncode == 0, result.stderr
-    assert "alice@example.org last submission or review 2026-11-01\n" in result.stdout
-
-
-def test_inactivecommitters_failed_lookup_exits_1(sandbox: dict[str, str]) -> None:
-    sandbox["FAIL"] = "ldap csv"
-
-    result = _run("inactivecommitters", sandbox, "gerrit.example.org/gerrit", "grp")
-
-    assert result.returncode == 1
-    assert "ERROR" in result.stderr
-
-
-def test_inactivecommitters_unreachable_gerrit_exits_1(sandbox: dict[str, str]) -> None:
-    """An unreachable Gerrit must not make every committer look inactive."""
-    sandbox["CURL_EXIT"] = "6"
-
-    result = _run("inactivecommitters", sandbox, "gerrit.example.org/gerrit", "grp")
-
-    assert result.returncode == 1
-    assert "has no activity" not in result.stdout
-
-
-def test_inactivecommitters_gerrit_error_exits_1(sandbox: dict[str, str]) -> None:
-    """A Gerrit that answers with an error must not make every committer look inactive."""
-    sandbox["GERRIT_STATUS"] = "503"
-
-    result = _run("inactivecommitters", sandbox, "gerrit.example.org/gerrit", "grp")
-
-    assert result.returncode == 1
-    assert "has no activity" not in result.stdout
-    assert "503" in result.stderr
 
 
 @pytest.fixture
