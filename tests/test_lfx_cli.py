@@ -346,7 +346,6 @@ LIST_COMMITTEES = [
 ]
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee list is not implemented yet")
 def test_list_sorted_by_name(rsps: responses.RequestsMock) -> None:
     add_project(rsps, [SLUG])
     add_committees(rsps, [LIST_COMMITTEES])
@@ -361,7 +360,6 @@ def test_list_sorted_by_name(rsps: responses.RequestsMock) -> None:
     ]
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee list is not implemented yet")
 def test_list_sso_only(rsps: responses.RequestsMock) -> None:
     add_project(rsps, [SLUG])
     add_committees(rsps, [LIST_COMMITTEES])
@@ -372,7 +370,6 @@ def test_list_sso_only(rsps: responses.RequestsMock) -> None:
     assert out.splitlines() == [f"{GROUP}\t{UID}\tExample Committers", f"example-tsc\t{OTHER_UID}\tTSC"]
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee list is not implemented yet")
 def test_list_json(rsps: responses.RequestsMock) -> None:
     add_project(rsps, [SLUG])
     add_committees(rsps, [LIST_COMMITTEES])
@@ -383,7 +380,6 @@ def test_list_json(rsps: responses.RequestsMock) -> None:
     assert json.loads(out) == [LIST_COMMITTEES[1], LIST_COMMITTEES[2], LIST_COMMITTEES[0]]
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee list is not implemented yet")
 def test_list_spans_two_pages(rsps: responses.RequestsMock) -> None:
     add_project(rsps, [SLUG])
     add_committees(rsps, [LIST_COMMITTEES[:1], LIST_COMMITTEES[1:]])
@@ -394,7 +390,6 @@ def test_list_spans_two_pages(rsps: responses.RequestsMock) -> None:
     assert len(out.splitlines()) == 3
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee list is not implemented yet")
 def test_list_unknown_slug_exits_3(rsps: responses.RequestsMock) -> None:
     add_project(rsps, [f"{SLUG}-other"])
 
@@ -405,7 +400,6 @@ def test_list_unknown_slug_exits_3(rsps: responses.RequestsMock) -> None:
     assert SLUG in err
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee list is not implemented yet")
 def test_list_no_committees_exits_0(rsps: responses.RequestsMock, caplog: pytest.LogCaptureFixture) -> None:
     add_project(rsps, [SLUG])
     add_committees(rsps, [[]])

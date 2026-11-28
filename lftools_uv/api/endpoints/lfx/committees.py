@@ -128,11 +128,84 @@ def show_committee(client: LfxClient, committee: str) -> dict[str, Any]:
     return get_committee(client, resolve_committee_uid(client, committee))
 
 
+def _query_or_not_found(client: LfxClient, params: dict[str, str], note: str) -> list[dict[str, Any]]:
+    """Return :func:`query_resources`, raising :class:`LfxNotFoundError` on 404."""
+    try:
+        return query_resources(client, params)
+    except LfxAPIError as exc:
+        if exc.status == 404:
+            msg = f"{exc}; {note}"
+            raise LfxNotFoundError(msg) from None
+        raise
+
+
+def find_project_uid(client: LfxClient, slug: str) -> str:
+    """Return the UID of the project whose slug is exactly ``slug``.
+
+    :raises LfxNotFoundError: No visible project has the slug, or the
+        query service answered 404.
+    :raises LfxAmbiguityError: More than one project has the slug.
+    """
+    note = "a project the token cannot see looks the same as one that does not exist"
+    resources = _query_or_not_found(client, {"type": "project", "filters": f"slug:{slug}"}, note)
+    uids: list[str] = []
+    for resource in resources:
+        data = resource.get("data")
+        if not isinstance(data, dict) or data.get("slug") != slug:
+            continue
+        uid = data.get("uid")
+        if isinstance(uid, str) and uid and uid not in uids:
+            uids.append(uid)
+    shown = client.redact(slug)
+    if not uids:
+        msg = f"no project has the slug {shown!r}; {note}"
+        raise LfxNotFoundError(msg)
+    if len(uids) > 1:
+        msg = f"{len(uids)} projects have the slug {shown!r}: {client.redact(', '.join(uids))}"
+        raise LfxAmbiguityError(msg)
+    return uids[0]
+
+
+def _name_key(committee: dict[str, Any]) -> tuple[str, str, str]:
+    name = committee.get("name")
+    uid = committee.get("uid")
+    name = name if isinstance(name, str) else ""
+    return (name.casefold(), name, uid if isinstance(uid, str) else "")
+
+
+def list_project_committees(client: LfxClient, slug: str) -> list[dict[str, Any]]:
+    """Return the ``data`` of every committee of the project with ``slug``, sorted by name.
+
+    The project must exist and be visible; its committees are those the
+    token can see, so the list may be empty.
+
+    :raises LfxNotFoundError: As :func:`find_project_uid`.
+    :raises LfxAmbiguityError: As :func:`find_project_uid`.
+    :raises LfxAPIError: Any other failure.
+    """
+    find_project_uid(client, slug)
+    resources = _query_or_not_found(client, {"type": "committee", "tags": f"project_slug:{slug}"}, INVISIBLE_NOTE)
+    committees: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for resource in resources:
+        data = resource.get("data")
+        if not isinstance(data, dict):
+            continue
+        uid = data.get("uid")
+        if not isinstance(uid, str) or not uid or uid in seen:
+            continue
+        seen.add(uid)
+        committees.append(data)
+    return sorted(committees, key=_name_key)
+
+
 __all__ = [
     "INVISIBLE_NOTE",
     "find_committee_uids",
+    "find_project_uid",
     "get_committee",
     "is_uuid",
+    "list_project_committees",
     "query_resources",
     "resolve_committee_uid",
     "show_committee",

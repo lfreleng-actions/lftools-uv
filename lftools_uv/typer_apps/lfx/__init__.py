@@ -10,12 +10,19 @@ commands on them. The API layer lives in
 from __future__ import annotations
 
 from lftools_uv.typer_apps.lfx.apps import committee_app, lfx_app
-from lftools_uv.typer_apps.lfx.committee import EXIT_ERROR, EXIT_NOT_FOUND, committee_show, handle_lfx_error
+from lftools_uv.typer_apps.lfx.committee import (
+    EXIT_ERROR,
+    EXIT_NOT_FOUND,
+    committee_list,
+    committee_show,
+    handle_lfx_error,
+)
 
 __all__ = [
     "EXIT_ERROR",
     "EXIT_NOT_FOUND",
     "committee_app",
+    "committee_list",
     "committee_show",
     "handle_lfx_error",
     "lfx_app",

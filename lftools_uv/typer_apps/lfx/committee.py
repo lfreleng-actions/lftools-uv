@@ -2,14 +2,15 @@
 # SPDX-FileCopyrightText: 2026 The Linux Foundation
 """``lftools-uv lfx committee`` commands.
 
-Results go to stdout; errors go to stderr. A committee that cannot be
-found exits :data:`EXIT_NOT_FOUND`, matching the ``rtd`` read commands,
-and any other failure exits :data:`EXIT_ERROR`.
+Results go to stdout; errors and diagnostics go to stderr. A committee
+or project that cannot be found exits :data:`EXIT_NOT_FOUND`, matching
+the ``rtd`` read commands, and any other failure exits :data:`EXIT_ERROR`.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 import typer
@@ -19,15 +20,18 @@ from lftools_uv.api.endpoints.lfx import (
     LfxClient,
     LfxError,
     LfxNotFoundError,
+    list_project_committees,
     show_committee,
 )
 from lftools_uv.output import echo
 from lftools_uv.typer_apps.lfx.apps import committee_app
 
+log = logging.getLogger(__name__)
+
 #: Exit status for any failure other than a missing committee.
 EXIT_ERROR = 1
 
-#: Exit status when no committee matches, as the ``rtd`` read commands use.
+#: Exit status when no committee or project matches, as the ``rtd`` read commands use.
 EXIT_NOT_FOUND = 3
 
 #: The fields ``committee show`` prints, in order.
@@ -86,3 +90,33 @@ def committee_show(
     for field in SHOW_FIELDS:
         value = _format_value(client.redact_data(body.get(field)))
         echo(client.redact(f"{field}: {value}"))
+
+
+@committee_app.command("list")
+def committee_list(
+    project: str = typer.Option(..., "--project", help="Project slug."),
+    sso_only: bool = typer.Option(False, "--sso-only", help="Keep the committees with an SSO group enabled."),
+    json_output: bool = typer.Option(False, "--json", help="Print a JSON array of the committees."),
+) -> None:
+    """List a project's committees, sorted by name.
+
+    Prints one line per committee: the SSO group name (empty when it has
+    none), the UID and the name, separated by tabs.
+    """
+    try:
+        client = LfxClient()
+        committees = list_project_committees(client, project)
+    except LfxError as exc:
+        raise handle_lfx_error(exc) from None
+
+    if sso_only:
+        committees = [item for item in committees if item.get("sso_group_enabled") is True]
+    if json_output:
+        echo(json.dumps(client.redact_data(committees), indent=2))
+    else:
+        for item in committees:
+            fields = (item.get("sso_group_name") or "", item.get("uid") or "", item.get("name") or "")
+            echo(client.redact("\t".join(_format_value(field) for field in fields)))
+    if not committees:
+        kind = "committee with an SSO group enabled" if sso_only else "committee"
+        log.info("Project %s has no %s the token can see", client.redact(project), kind)
