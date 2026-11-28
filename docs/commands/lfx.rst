@@ -116,8 +116,8 @@ Exit status
        category or join mode the committee service does not accept.
    * - ``3``
      - No committee has that SSO group name, no project has that slug,
-       or a read answered 404. A committee or project the token cannot
-       see looks the same.
+       no member of the committee matches, or a read answered 404. A
+       committee or project the token cannot see looks the same.
 
 Results go to stdout and errors to stderr, so ``--json`` output pipes
 cleanly:
@@ -309,6 +309,101 @@ the project's slug and the rest:
    # After
    lftools-uv lfx committee create --project example --name gerrit-foo-committers
 
+Committee membership
+--------------------
+
+Membership is by email address. ``lfidapi user`` named an LFID alone;
+``add-member`` needs the person's email address, and the committee
+service finds the LF account that owns it. ``--username`` checks that
+the address belongs to the LFID you meant.
+
+The service emails a member it adds or removes. LDAP group changes sent
+no email, so these commands send ``X-Skip-Notification: true`` to stop
+it; ``--notify`` lets the email go.
+
+No diagnostic on stderr carries an email address, not even one quoted
+in the service's message or given as a username or as the committee's
+SSO group name, with an apostrophe in its local part such as
+``o'connor@example.org`` or ``'@example.org``, a quoted local part such
+as ``"j doe"@example.org`` or an address literal such as
+``jdoe@[192.0.2.1]``; results on stdout may carry the ones you supplied.
+
+committee add-member
+~~~~~~~~~~~~~~~~~~~~
+
+.. program-output:: lftools-uv lfx committee add-member --help
+
+Sends ``POST /committees/{uid}/members`` with ``email`` and any of
+``first_name``, ``last_name`` and ``organization.name`` given. The token
+must be a ``writer`` on the committee.
+
+- The service sets the member's username itself, from the LF account
+  that owns the address, and stores none when no account owns it. It
+  fills an empty first or last name from that account, then requires
+  both.
+- A committee with voting or business email enabled also requires an
+  organisation with an ID, or a name and a website, which this command
+  cannot send.
+
+On success it prints one line with three tab-separated fields:
+``added``, the username the service resolved, and the member UID. A
+member with no username prints ``(no username)``, and stderr warns that
+no LF account owns the address yet. ``--json`` prints the member object
+instead.
+
+With ``--username LFID`` the command compares, ignoring case, the
+username the service resolved with ``LFID``. When they differ, or the
+address resolved to no username, it removes the member it added a
+moment before and exits ``1``, saying which username the address
+resolved to. The command thus either makes that LFID a member or
+changes nothing. When the removal fails too, the error says so and
+gives the member UID, for you to remove by hand. An empty ``LFID`` is a
+usage error, exit ``2``, and sends nothing, since it would match a
+member with no username.
+
+When the address is already a member the service answers 409. The
+command then finds that member in the member list by its address,
+ignoring case and surrounding whitespace as the service does, and
+reports its username and member UID on stderr. It exits ``0``, or
+``1`` when ``--username`` names another account. It never removes a
+member that was there before it ran.
+
+Any other error, such as a 400 for a missing name, exits ``1`` with the
+service's message.
+
+committee remove-member
+~~~~~~~~~~~~~~~~~~~~~~~
+
+.. program-output:: lftools-uv lfx committee remove-member --help
+
+Name the member with one of ``--username``, ``--email`` and
+``--member-uid``; giving none, or more than one, is a usage error. The
+command matches a username or an email address, ignoring case, against
+the member list, which needs the ``auditor`` relation that a committee
+writer has. An email address also matches without surrounding
+whitespace. No match exits ``3``; more than one exits ``1`` and lists
+their member UIDs, so you can name one with ``--member-uid``.
+
+The command reads the member for its ``ETag`` and sends
+``DELETE /committees/{uid}/members/{member_uid}`` with that value in
+``If-Match``. When the member changed after that read, the service
+answers 409, and the command reads the member again and retries once.
+The token must be a ``writer`` on the committee. On success it prints
+``removed`` and the member UID, separated by a tab.
+
+committee invite
+~~~~~~~~~~~~~~~~
+
+.. program-output:: lftools-uv lfx committee invite --help
+
+Sends ``POST /committees/{uid}/invites`` for the email address. The
+token needs the ``inviter`` relation on the committee. On success it
+prints the invite UID and its status, ``pending``, separated by a tab;
+``--json`` prints the invite object instead. When a pending invite
+exists for the address, or its holder is a member already, the
+service answers 409 and the command exits ``1`` with the service's
+message.
+
 Replacing the LDAP and LFID API commands
 ----------------------------------------
 
@@ -323,11 +418,17 @@ Replacing the LDAP and LFID API commands
      - ``lfx committee members GROUP --format csv``
    * - ``ldap yaml4info GROUP``
      - ``lfx committee members GROUP --format info-yaml``
+   * - ``lfidapi user LFID GROUP``
+     - ``lfx committee add-member GROUP --email EMAIL --username LFID``
+   * - ``lfidapi user LFID GROUP --delete``
+     - ``lfx committee remove-member GROUP --username LFID``
+   * - ``lfidapi invite EMAIL GROUP``
+     - ``lfx committee invite GROUP EMAIL``
 
-The output matches the old commands for one group, with two fixes: CSV
-quotes a field holding a comma or a line break, and INFO.yaml doubles
-an apostrophe in a value and escapes a line break or other control
-character.
+The member listings match the old commands for one group, with two
+fixes: CSV quotes a field holding a comma or a line break, and
+INFO.yaml doubles an apostrophe in a value and escapes a line break
+or other control character.
 ``ldap csv`` took more than one group, and LDAP wildcards, in one call.
 ``lfx committee members`` takes one committee: run it once per
 committee.
