@@ -7,14 +7,16 @@
 ``license check-dir`` existed only in the legacy Click front-end, so on the
 default Typer front-end they failed as usage errors and global-jjb had to set
 ``LEGACY_CLI=1``. ``nexus create`` and ``nexus reorder-staged-repos``,
-which the INFO.yaml automation runs, had the same gap, and
-``infofile create-info-file`` was a placeholder that exited 1. Each test
-runs the same arguments through both front-ends and expects the same calls, output streams and exit codes.
+which the INFO.yaml automation runs, had the same gap, as did
+``nexus docker``, which the ONAP and OpenDaylight ``run_releasedockerhub.sh``
+scripts run, and ``infofile create-info-file`` was a placeholder that
+exited 1. Each test runs the same arguments through both front-ends and
+expects the same calls, output streams and exit codes.
 """
 
 import subprocess
-from collections.abc import Callable
 from pathlib import Path
+from typing import Protocol
 from unittest.mock import MagicMock
 
 import pytest
@@ -28,18 +30,29 @@ from typer.testing import Result as TyperResult
 from lftools_uv.cli import cli
 from lftools_uv.cli_app import app as typer_app
 
-Run = Callable[[list[str]], ClickResult | TyperResult]
+
+class Run(Protocol):
+    """Run a command line through one front-end, with optional stdin."""
+
+    def __call__(self, args: list[str], answer: str | None = None) -> ClickResult | TyperResult:
+        """Invoke *args*, feeding *answer* to any prompt."""
+        ...
 
 
-def _click(args: list[str]) -> ClickResult:
-    return ClickRunner().invoke(cli, args, obj={})
+def _click(args: list[str], answer: str | None = None) -> ClickResult:
+    return ClickRunner().invoke(cli, args, obj={}, input=answer)
 
 
-def _typer(args: list[str]) -> TyperResult:
-    return TyperRunner().invoke(typer_app, args)
+def _typer(args: list[str], answer: str | None = None) -> TyperResult:
+    return TyperRunner().invoke(typer_app, args, input=answer)
 
 
 FRONT_ENDS = pytest.mark.parametrize("run", [_click, _typer], ids=["click", "typer"])
+TYPER_PENDING = pytest.mark.parametrize(
+    "run",
+    [_click, pytest.param(_typer, marks=pytest.mark.xfail(strict=True, reason="Not yet ported to Typer"))],
+    ids=["click", "typer"],
+)
 
 
 # ---------------------------------------------------------------------------
@@ -153,6 +166,155 @@ def test_nexus_command_requires_options(run: Run, mocker: MockerFixture, args: l
 
     assert result.exit_code == 2
     call.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# nexus docker list, nexus docker delete, nexus docker releasedockerhub
+
+IMAGES = [{"name": "app", "version": "1.0"}, {"name": "app", "version": "1.1"}]
+
+
+@pytest.fixture
+def search(mocker: MockerFixture) -> MagicMock:
+    """Replace the image search so no test reaches a Nexus server."""
+    mock: MagicMock = mocker.patch("lftools_uv.nexus.cmd.search", return_value=IMAGES)
+    return mock
+
+
+@pytest.fixture
+def start_point(mocker: MockerFixture) -> MagicMock:
+    """Replace the Docker Hub release so no test reaches a registry."""
+    mock: MagicMock = mocker.patch("lftools_uv.nexus.release_docker_hub.start_point")
+    return mock
+
+
+@TYPER_PENDING
+def test_nexus_help_lists_commands(run: Run) -> None:
+    result = run(["nexus", "--help"])
+
+    assert result.exit_code == 0, result.output
+    for command in ("create", "docker", "release", "reorder-staged-repos"):
+        assert command in result.output
+
+
+@TYPER_PENDING
+def test_docker_list_passes_arguments(run: Run, mocker: MockerFixture, search: MagicMock, tmp_path: Path) -> None:
+    output = mocker.patch("lftools_uv.nexus.cmd.output_images")
+    csv = str(tmp_path / "images.csv")
+    result = run(["nexus", "docker", "list", "--settings", "s.yaml", "-s", NEXUS, "--csv", csv, "app*", "releases"])
+
+    assert result.exit_code == 0, result.output
+    search.assert_called_once_with("s.yaml", NEXUS, "releases", "app*")
+    output.assert_called_once_with(IMAGES, csv)
+
+
+@TYPER_PENDING
+@pytest.mark.parametrize(("server", "expected"), [([], NEXUS), (["--server", "https://other"], "https://other")])
+def test_docker_list_reads_server_from_environment(
+    run: Run,
+    mocker: MockerFixture,
+    search: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+    server: list[str],
+    expected: str,
+) -> None:
+    mocker.patch("lftools_uv.nexus.cmd.output_images")
+    monkeypatch.setenv("NEXUS_URL", NEXUS)
+    result = run(["nexus", "docker", "list", *server, "*", "releases"])
+
+    assert result.exit_code == 0, result.output
+    search.assert_called_once_with(None, expected, "releases", "*")
+
+
+@TYPER_PENDING
+def test_docker_list_outputs_nothing_without_images(run: Run, mocker: MockerFixture, search: MagicMock) -> None:
+    output = mocker.patch("lftools_uv.nexus.cmd.output_images")
+    search.return_value = []
+    result = run(["nexus", "docker", "list", "-s", NEXUS, "*", "releases"])
+
+    assert result.exit_code == 0, result.output
+    output.assert_not_called()
+
+
+@TYPER_PENDING
+@pytest.mark.parametrize(("answer", "deletes"), [("y\n", True), ("n\n", False)], ids=["confirmed", "declined"])
+def test_docker_delete_asks_before_deleting(
+    run: Run, mocker: MockerFixture, search: MagicMock, monkeypatch: pytest.MonkeyPatch, answer: str, deletes: bool
+) -> None:
+    delete = mocker.patch("lftools_uv.nexus.cmd.delete_images")
+    monkeypatch.setenv("NEXUS_URL", NEXUS)
+    result = run(["nexus", "docker", "delete", "--settings", "s.yaml", "app*", "releases"], answer)
+
+    assert result.exit_code == 0, result.output
+    assert "Would you like to delete all 2 images?" in result.output
+    search.assert_called_once_with("s.yaml", None, "releases", "app*")
+    if deletes:
+        delete.assert_called_once_with("s.yaml", None, IMAGES)
+    else:
+        delete.assert_not_called()
+
+
+@TYPER_PENDING
+def test_docker_delete_yes_skips_confirmation(run: Run, mocker: MockerFixture, search: MagicMock) -> None:
+    delete = mocker.patch("lftools_uv.nexus.cmd.delete_images")
+    result = run(["nexus", "docker", "delete", "-y", "-s", NEXUS, "*", "releases"])
+
+    assert result.exit_code == 0, result.output
+    assert "Would you like" not in result.output
+    delete.assert_called_once_with(None, NEXUS, IMAGES)
+
+
+@TYPER_PENDING
+@pytest.mark.parametrize(
+    ("args", "expected"),
+    [
+        (["-o", "onap", "--summary"], ("onap", "", False, True, False, False, False, False, "")),
+        (
+            ["-o", "onap", "-r", "msb", "-e", "-s", "-v", "-c", "-p", "-f", "-x", "regexp.txt"],
+            ("onap", "msb", True, True, True, True, True, True, "regexp.txt"),
+        ),
+        (
+            ["--org", "odl", "--repo", "netconf", "--exact", "--verbose", "--copy", "--progbar", "--repofile"],
+            ("odl", "netconf", True, False, True, True, True, True, ""),
+        ),
+    ],
+    ids=["summary", "short-options", "long-options"],
+)
+def test_releasedockerhub_passes_options(
+    run: Run, start_point: MagicMock, args: list[str], expected: tuple[str | bool, ...]
+) -> None:
+    result = run(["nexus", "docker", "releasedockerhub", *args])
+
+    assert result.exit_code == 0, result.output
+    start_point.assert_called_once_with(*expected)
+
+
+PENDING = pytest.mark.xfail(strict=True, reason="Not yet accepted")
+
+
+@pytest.mark.parametrize(
+    ("run", "option"),
+    [
+        (_click, "--version_regexp"),
+        pytest.param(_typer, "--version_regexp", marks=PENDING),
+        pytest.param(_click, "--version-regexp", marks=PENDING),
+        pytest.param(_typer, "--version-regexp", marks=PENDING),
+    ],
+    ids=["click-underscore", "typer-underscore", "click-hyphen", "typer-hyphen"],
+)
+def test_releasedockerhub_accepts_both_version_spellings(run: Run, start_point: MagicMock, option: str) -> None:
+    result = run(["nexus", "docker", "releasedockerhub", "-o", "onap", option, "regexp.txt"])
+
+    assert result.exit_code == 0, result.output
+    start_point.assert_called_once_with("onap", "", False, False, False, False, False, False, "regexp.txt")
+
+
+@FRONT_ENDS
+def test_releasedockerhub_requires_org(run: Run, start_point: MagicMock) -> None:
+    result = run(["nexus", "docker", "releasedockerhub", "--summary"])
+
+    assert result.exit_code == 2
+    start_point.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
