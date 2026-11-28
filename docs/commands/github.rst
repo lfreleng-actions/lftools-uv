@@ -53,9 +53,16 @@ votes
 
 
 
-API requires a [github] or [github.OrgName] section in :ref:`lftools.ini <lftools-ini>`:
+Every ``github`` command reads its API token from
+:ref:`lftools.ini <lftools-ini>`. It takes the ``token`` of the
+``[github.<org>]`` section for the organization the command names, and
+falls back to the ``token`` of ``[github]`` when that section has none.
+With neither, the command exits non-zero and names both sections.
 
-.. code-block:: bash
+.. code-block:: ini
 
-   [github] or [github.orgName]
+   [github]
+   token = REDACTED
+
+   [github.orgName]
    token = REDACTED

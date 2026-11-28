@@ -80,20 +80,14 @@ server's host name, without ``https://``, for example
    * - ``[github]``
      - ``token``
      - ``github`` commands, ``infofile check-votes``, and
-       ``lfidapi match-ldap-info`` given ``--githuborg``. ``github
-       submit-pr`` reads it when ``[github.<org>]`` sets an empty
-       ``token``, and not otherwise. ``lfidapi match-ldap-info``
-       always needs it to add or remove team members, which it does
-       unless given ``--noop``.
+       ``lfidapi match-ldap-to-info`` given ``--githuborg``, when
+       ``[github.<org>]`` has no ``token`` for the organization the
+       command names.
    * - ``[github.<org>]``
      - ``token``
-     - ``github submit-pr``, and in the legacy front end ``github
-       create-repo``, ``update-repo`` and ``create-team``. These fail when
-       the file lacks this section or its ``token``, even with a
-       ``[github]`` token. They use ``[github]`` when this ``token`` is
-       empty. ``github list``, and ``lfidapi match-ldap-info`` when
-       listing the team, read it when the file has no ``[github]``
-       section.
+     - The same commands, for the organization ``<org>``. Its ``token``
+       wins over that of ``[github]``. With neither, the command exits
+       non-zero and names both sections.
    * - ``[lfid]``
      - ``clientid``, ``client_secret``, ``refresh_token``, ``token_uri``,
        ``url``

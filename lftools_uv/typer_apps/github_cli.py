@@ -19,8 +19,17 @@ import typer
 from github import Github, GithubException
 from github.GithubObject import NotSet
 
-from lftools_uv import config
-from lftools_uv.github_helper import helper_list, helper_user_github, prvotes
+from lftools_uv.github_helper import (
+    apply_repo_teams,
+    connect,
+    helper_list,
+    helper_user_github,
+    prvotes,
+    resolve_repo_teams,
+)
+from lftools_uv.github_helper import create_repo as helper_create_repo
+from lftools_uv.github_helper import create_team as helper_create_team
+from lftools_uv.github_helper import submit_pr as helper_submit_pr
 from lftools_uv.output import echo
 
 _HELP_GITHUB_ORG = "GitHub organization name"
@@ -44,27 +53,7 @@ def submit_pr(
     pr: int = typer.Argument(..., help="Pull request number"),
 ) -> None:
     """Submit a pr if mergeable."""
-    if config.get_setting("github." + organization, "token"):
-        token = config.get_setting("github." + organization, "token")
-    else:
-        token = config.get_setting("github", "token")
-
-    g = Github(token)
-    try:
-        org = g.get_organization(organization)
-        repo_obj = org.get_repo(repo)
-        pr_mergeable = repo_obj.get_pull(pr).mergeable
-
-        if pr_mergeable:
-            echo(f"PR is mergeable: {pr_mergeable}")
-            repo_obj.get_pull(pr).merge(commit_message="Vote Completed, merging INFO file")
-            log.info("PR merged successfully")
-        else:
-            log.error("PR NOT MERGEABLE %s", pr_mergeable)
-            raise typer.Exit(1)
-    except GithubException:
-        log.exception("GitHub API error")
-        raise typer.Exit(1) from None
+    helper_submit_pr(connect(organization, Github), repo, pr)
 
 
 @github_app.command(name="votes")
@@ -105,22 +94,8 @@ def create_repo(
 
     Requires an admin token.
     """
-    token = config.get_setting("github", "token")
-    g = Github(token)
-
-    try:
-        org = g.get_organization(organization)
-        org.create_repo(
-            name=repository,
-            description=description,
-            has_issues=has_issues,
-            has_projects=has_projects,
-            has_wiki=has_wiki,
-        )
-        log.info("Repository '%s' created successfully in organization '%s'", repository, organization)
-    except GithubException:
-        log.exception("Failed to create repository")
-        raise typer.Exit(1) from None
+    org = connect(organization, Github)
+    helper_create_repo(org, repository, description, has_issues, has_projects, has_wiki)
 
 
 @github_app.command(name="update-repo")
@@ -151,11 +126,10 @@ def update_repo(
         log.warning("Nothing to update for repository '%s'", repository)
         return
 
-    token = config.get_setting("github", "token")
-    g = Github(token)
+    org = connect(organization, Github)
+    add, remove = resolve_repo_teams(org, add_team, remove_team)
 
     try:
-        org = g.get_organization(organization)
         repo_obj = org.get_repo(repository)
 
         if any(feature is not None for feature in features):
@@ -164,19 +138,13 @@ def update_repo(
                 has_projects=NotSet if has_projects is None else has_projects,
                 has_wiki=NotSet if has_wiki is None else has_wiki,
             )
-
-        if add_team:
-            team_obj = org.get_team_by_slug(add_team)
-            team_obj.add_to_repos(repo_obj)
-
-        if remove_team:
-            team_obj = org.get_team_by_slug(remove_team)
-            team_obj.remove_from_repos(repo_obj)
-
-        log.info("Repository '%s' updated successfully", repository)
     except GithubException:
         log.exception("Failed to update repository")
         raise typer.Exit(1) from None
+
+    apply_repo_teams(repo_obj, add, remove)
+
+    log.info("Repository '%s' updated successfully", repository)
 
 
 @github_app.command(name="create-team")
@@ -191,27 +159,9 @@ def create_team(
     Privacy should be set to closed
     This allows us to control group membership.
 
-    If you have two factor auth enabled and you get a 401
-    error, then you need to create a personal access token
-    and add it to your ~/.netrc file.
-
     Requires an admin token.
     """
-    token = config.get_setting("github", "token")
-    g = Github(token)
-
-    try:
-        org = g.get_organization(organization)
-        team_obj = org.create_team(name=name, privacy=privacy)
-
-        if repo:
-            repo_obj = org.get_repo(repo)
-            team_obj.add_to_repos(repo_obj)
-
-        log.info("Team '%s' created successfully in organization '%s'", name, organization)
-    except GithubException:
-        log.exception("Failed to create team")
-        raise typer.Exit(1) from None
+    helper_create_team(connect(organization, Github), name, privacy, repo)
 
 
 @github_app.command(name="user")

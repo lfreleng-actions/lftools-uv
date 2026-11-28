@@ -62,9 +62,11 @@ non-zero, so it leaves no partial INFO file behind. ``--tsc-approval`` and
 ``--tsc_approval`` are the same option.
 
 
-API for check votes requires a [github] section in :ref:`lftools.ini <lftools-ini>`:
+``check-votes --github_repo`` reads its GitHub token as the ``github``
+commands do: the ``token`` of ``[github.<org>]``, otherwise that of
+``[github]``, in :ref:`lftools.ini <lftools-ini>`.
 
-.. code-block:: bash
+.. code-block:: ini
 
    [github]
    token = REDACTED

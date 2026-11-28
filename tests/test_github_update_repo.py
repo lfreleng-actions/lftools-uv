@@ -11,6 +11,7 @@ repository or a team is missing.
 from unittest import mock
 
 import pytest
+from github import UnknownObjectException
 from github.GithubObject import NotSet
 from typer.testing import CliRunner
 
@@ -32,7 +33,7 @@ def _changes(repo):
 def typer_org():
     """Patch the default CLI's GitHub client and return the organization mock."""
     with (
-        mock.patch("lftools_uv.typer_apps.github_cli.config.get_setting", return_value="token"),
+        mock.patch("lftools_uv.config.get_setting", return_value="token"),
         mock.patch("lftools_uv.typer_apps.github_cli.Github") as github,
     ):
         yield github.return_value.get_organization.return_value
@@ -49,15 +50,17 @@ def _named(name):
 def legacy_org():
     """Patch the legacy CLI's GitHub client and return the organization mock.
 
-    The organization holds repository ``r`` and team ``devs``.
+    The organization holds repository ``r`` and team ``devs``; GitHub
+    answers 404 for any other team slug.
     """
     with (
-        mock.patch("lftools_uv.cli.github_cli.config.get_setting", return_value="token"),
+        mock.patch("lftools_uv.config.get_setting", return_value="token"),
         mock.patch("lftools_uv.cli.github_cli.Github") as github,
     ):
         org = github.return_value.get_organization.return_value
         org.get_repos.return_value = [_named("r")]
         org.get_teams.return_value = [_named("devs")]
+        org.get_team_by_slug.side_effect = UnknownObjectException(404, {"message": "Not Found"}, None)
         yield org
 
 
