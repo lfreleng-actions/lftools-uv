@@ -106,15 +106,17 @@ Exit status
      - Success.
    * - ``1``
      - Any other failure: no token, an expired or malformed token, a
-       non-HTTPS URL, a name that matches more than one committee, a
-       redirect, or an HTTP error. A 403 means the token may be missing,
-       expired or without access, or the committee may not exist: the API
-       answers 403 for a UID that does not exist.
+       non-HTTPS URL, a name that matches more than one committee or a
+       slug that matches more than one project, a redirect, or an HTTP
+       error. A 403 means the token may be missing, expired or without
+       access, or the committee may not exist: the API answers 403 for a
+       UID that does not exist.
    * - ``2``
-     - Usage error, such as a missing argument or an unknown option.
+     - Usage error, such as a missing argument, an unknown option, or a
+       category or join mode the committee service does not accept.
    * - ``3``
      - No committee has that SSO group name, no project has that slug,
-       or the API answered 404. A committee or project the token cannot
+       or a read answered 404. A committee or project the token cannot
        see looks the same.
 
 Results go to stdout and errors to stderr, so ``--json`` output pipes
@@ -207,6 +209,105 @@ answers 403 and the command exits ``1``.
 
 ``--json`` prints the API's member array as it came; the command
 refuses ``--json`` together with ``--format``.
+
+committee create
+----------------
+
+.. program-output:: lftools-uv lfx committee create --help
+
+Creates a committee under the project whose slug ``--project`` names,
+and replaces ``lfidapi create-group``. The token must be a writer on
+the project; a 403 says the token may be missing or expired, or may
+not be a writer there.
+
+lftools-uv finds the project's UID through the query service first. When
+no visible project has the slug it exits ``3`` and sends nothing else.
+It then sends ``POST /committees`` with the committee's ``name``,
+``category``, ``project_uid``, ``join_mode``, ``public`` and
+``sso_group_enabled``, and its ``description`` when given. The defaults
+are:
+
+- ``--category Committers``;
+- ``--join-mode closed``, so a committee writer adds every member, which
+  suits a group whose membership an INFO.yaml file decides;
+- ``--sso-group``, so the committee gets an SSO group;
+- ``--private``.
+
+``--category`` takes one of ``Ambassador``, ``Board``,
+``Code of Conduct``, ``Committers``, ``Expert Group``,
+``Finance Committee``, ``Government Advisory Council``,
+``Legal Committee``, ``Maintainers``,
+``Marketing Committee/Sub Committee``, ``Marketing Mailing List``,
+``Marketing Oversight Committee/Marketing Advisory Committee``,
+``Newsletter``, ``Other``, ``Product Security``,
+``Special Interest Group``, ``Technical Advisory Committee``,
+``Technical Mailing List``, ``Technical Oversight Committee``,
+``Technical Steering Committee`` and ``Working Group``. ``--join-mode``
+takes ``open``, ``invite_only``, ``application`` or ``closed``.
+lftools-uv refuses any other value as a usage error before it sends a
+request.
+
+On success it prints one line with two tab-separated fields: the SSO
+group name the service gave the committee, empty when it gave none, and
+the committee's UID. ``--json`` prints the response body instead. When
+the project already has a committee of that name the service answers
+409, and the command exits ``1`` with the service's message, as it does
+for any other error.
+
+The SSO group name
+~~~~~~~~~~~~~~~~~~
+
+The caller cannot choose the SSO group name. With an SSO group, or with
+``--public``, the service builds it from the project's slug, a hyphen
+and the committee's name: project ``example`` and name
+``gerrit-foo-committers`` give ``example-gerrit-foo-committers``. When
+another committee already holds that name it appends ``-2``, then ``-3``,
+and so on. So use the name this command prints, never one you worked
+out yourself: pass that name to ``gerrit create-saml-group`` and
+``gerrit createproject``.
+
+Keep the command's output and check its exit status before you take the
+first field. A pipeline such as ``create ... | cut -f1`` reports the
+status of ``cut``, so a failed create would leave an empty name and the
+script would go on:
+
+.. code-block:: bash
+
+   created="$(lftools-uv lfx committee create --project example \
+       --name gerrit-foo-committers)" || exit
+   group="$(printf '%s\n' "$created" | cut -f1)"
+   [ -n "$group" ] || { echo "no SSO group name" >&2; exit 1; }
+
+The query service trails the committee service by a moment, so
+``committee show`` may not find the new committee by its SSO group name
+straight away. Its UID skips the query service, but the service also
+grants access to a new committee asynchronously, so a read by UID
+straight after the create may still answer 403 and exit ``1``. A script
+that reads the new committee should use its UID and retry a bounded
+number of times before it gives up:
+
+.. code-block:: bash
+
+   uid="$(printf '%s\n' "$created" | cut -f2)"
+   for try in 1 2 3 4 5; do
+       lftools-uv lfx committee show "$uid" && break
+       [ "$try" -lt 5 ] || exit 1
+       sleep 2
+   done
+
+From lfidapi create-group
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``lfidapi create-group GROUP`` took the full group name. Split it into
+the project's slug and the rest:
+
+.. code-block:: bash
+
+   # Before
+   lftools-uv lfidapi create-group example-gerrit-foo-committers
+
+   # After
+   lftools-uv lfx committee create --project example --name gerrit-foo-committers
 
 Replacing the LDAP and LFID API commands
 ----------------------------------------
