@@ -38,7 +38,7 @@ match-ldap-to-info
 .. program-output:: lftools-uv lfidapi match-ldap-to-info --help
 
 
-API requires an [lfid] section in ~/.config/lftools/lftools.ini:
+API requires an [lfid] section in :ref:`lftools.ini <lftools-ini>`:
 
 .. code-block:: bash
 

@@ -46,7 +46,7 @@ create-info-file
 
 
 
-API for check votes requires a [github] section in ~/.config/lftools-uv/lftools-uv.ini:
+API for check votes requires a [github] section in :ref:`lftools.ini <lftools-ini>`:
 
 .. code-block:: bash
 

@@ -24,6 +24,7 @@ Contents:
     release-notes
     installation
     commands/index
+    lftools-ini
     jenkins/index
 
 Indices and tables

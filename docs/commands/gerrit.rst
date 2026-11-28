@@ -65,13 +65,14 @@ addinfojob
 
 .. note::
 
-        Gerrit API methods require configuration in lftools-uv.ini
-        in a global [gerrit] section.
-        support for [gerrit.umbrella.tld] exists as well
-        signed_off_by required to push changes.
-        Projects that do not allow self merge will require
-        as project.example.org.second section for submission
-        of their .gitreview on project creation.
+        Gerrit commands read their configuration from a section of
+        :ref:`lftools.ini <lftools-ini>` named after the Gerrit server,
+        such as [gerrit.example.org]. Commands that push a change need
+        sob, the Signed-off-by line, and commands that clone a
+        repository need email. For projects that forbid self-merge, the
+        Gerrit API can submit a change with a second account from a
+        [gerrit.example.org.second] section; no command uses this at
+        present.
 
 
 .. code-block:: none
@@ -79,19 +80,20 @@ addinfojob
      [gerrit.example.org]
      username = lfid
      password = password
-     signed_off_by = Your Name <your@email.org>
+     endpoint = https://gerrit.example.org/
+     email = your@email.org
+     sob = Your Name <your@email.org>
 
      [gerrit.example.org.second]
      username = lfid2
      password = password2
-     signed_off_by = Your Name <your@email.org>
 
 addmavenconfig
 --------------
 .. program-output:: lftools-uv gerrit addmavenconfig --help
 
 
-An example of the lftools-uv.ini entry for a Gerrit server making use of a full
+An example of the lftools.ini entry for a Gerrit server making use of a full
 configuration:
 
 .. code-block:: none
@@ -99,7 +101,8 @@ configuration:
      [gerrit.example.org]
      username = lfid
      password = password
-     signed_off_by = Your Name <your@email.org>
+     sob = Your Name <your@email.org>
+     email = your@email.org
      endpoint = https://gerrit.example.org/
      default_servers = releases,snapshots,staging,site
      nexus3 = nexus3.example.org

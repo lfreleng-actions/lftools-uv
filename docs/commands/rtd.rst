@@ -181,7 +181,7 @@ subproject-delete
 Configuration
 =============
 
-API requires a [rtd] section in ~/.config/lftools/lftools.ini:
+API requires a [rtd] section in :ref:`lftools.ini <lftools-ini>`:
 
 .. code-block:: bash
 
