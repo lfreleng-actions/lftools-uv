@@ -869,3 +869,522 @@ def test_create_redirect_refused_without_follow_up(create_rsps: responses.Reques
     assert "refusing to follow it" in result.stderr
     assert len(posts(create_rsps)) == 1
     assert len(create_rsps.calls) == 2
+
+
+# committee membership
+
+pending = pytest.mark.xfail(strict=True, reason="committee membership commands not implemented yet")
+
+EMAIL = "jdoe@example.org"
+JDOE_UID = str(MEMBERS[0]["uid"])
+INVITE_UID = "bbbbbbbb-2222-4333-8444-555555555555"
+MEMBERS_URL = f"{BASE}/committees/{UID}/members"
+ADDED = {**MEMBERS[0]}
+
+
+@pytest.fixture
+def write_rsps() -> Iterator[responses.RequestsMock]:
+    """Mock the API without failing teardown on a request the test expects not to send."""
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as mock:
+        yield mock
+
+
+def add_post_member(rsps: responses.RequestsMock, status: int = 201, body: object = ADDED) -> None:
+    rsps.post(MEMBERS_URL, status=status, json=body, match=[matchers.query_param_matcher({"v": "1"})])
+
+
+def add_get_member(rsps: responses.RequestsMock, member_uid: str = JDOE_UID, etag: str = "7") -> None:
+    rsps.get(
+        f"{MEMBERS_URL}/{member_uid}",
+        json={**MEMBERS[0], "uid": member_uid},
+        headers={"ETag": etag},
+        match=[matchers.query_param_matcher({"v": "1"})],
+    )
+
+
+def add_delete_member(
+    rsps: responses.RequestsMock, member_uid: str = JDOE_UID, status: int = 204, body: object = None
+) -> None:
+    rsps.delete(
+        f"{MEMBERS_URL}/{member_uid}", status=status, json=body, match=[matchers.query_param_matcher({"v": "1"})]
+    )
+
+
+def requests_by(rsps: responses.RequestsMock, method: str) -> list[responses.Call]:
+    return [call for call in rsps.calls if call.request.method == method]
+
+
+def json_body(call: responses.Call) -> object:
+    body = call.request.body
+    assert isinstance(body, bytes | str)
+    return json.loads(body)
+
+
+@pending
+def test_add_member_sends_body_and_skips_notification(write_rsps: responses.RequestsMock) -> None:
+    add_query(write_rsps, [UID])
+    add_post_member(write_rsps)
+
+    code, out, err = run(
+        "lfx",
+        "committee",
+        "add-member",
+        GROUP,
+        "--email",
+        EMAIL,
+        "--first-name",
+        "Jane",
+        "--last-name",
+        "Doe",
+        "--organization",
+        "Example Corp",
+    )
+
+    assert code == 0, err
+    assert out == f"added\tjdoe\t{JDOE_UID}\n"
+    (post,) = requests_by(write_rsps, "POST")
+    assert json_body(post) == {
+        "email": EMAIL,
+        "first_name": "Jane",
+        "last_name": "Doe",
+        "organization": {"name": "Example Corp"},
+    }
+    assert post.request.headers.get("X-Skip-Notification") == "true"
+
+
+@pending
+def test_add_member_notify_sends_notification(write_rsps: responses.RequestsMock) -> None:
+    add_post_member(write_rsps)
+
+    code, _, err = run("lfx", "committee", "add-member", UID, "--email", EMAIL, "--notify")
+
+    assert code == 0, err
+    (post,) = requests_by(write_rsps, "POST")
+    assert json_body(post) == {"email": EMAIL}
+    assert "X-Skip-Notification" not in post.request.headers
+
+
+@pending
+def test_add_member_json(write_rsps: responses.RequestsMock) -> None:
+    add_post_member(write_rsps)
+
+    code, out, err = run("lfx", "committee", "add-member", UID, "--email", EMAIL, "--json")
+
+    assert code == 0, err
+    assert json.loads(out) == ADDED
+
+
+@pending
+def test_add_member_without_username_warns(
+    write_rsps: responses.RequestsMock, caplog: pytest.LogCaptureFixture
+) -> None:
+    add_post_member(write_rsps, body={**ADDED, "username": ""})
+
+    code, out, err = run("lfx", "committee", "add-member", UID, "--email", EMAIL)
+
+    assert code == 0, err
+    assert out == f"added\t(no username)\t{JDOE_UID}\n"
+    assert "no LF account owns the address" in caplog.text
+    assert EMAIL not in caplog.text
+    assert EMAIL not in err
+
+
+@pending
+def test_add_member_username_matches(write_rsps: responses.RequestsMock) -> None:
+    add_post_member(write_rsps)
+
+    code, out, err = run("lfx", "committee", "add-member", UID, "--email", EMAIL, "--username", "JDoe")
+
+    assert code == 0, err
+    assert out == f"added\tjdoe\t{JDOE_UID}\n"
+    assert requests_by(write_rsps, "DELETE") == []
+
+
+@pending
+@pytest.mark.parametrize(
+    ("resolved", "expected"),
+    [("jsmith", "resolved to username 'jsmith'"), ("", "resolved to no username")],
+)
+def test_add_member_username_mismatch_removes_member(
+    write_rsps: responses.RequestsMock, resolved: str, expected: str
+) -> None:
+    add_post_member(write_rsps, body={**ADDED, "username": resolved})
+    add_get_member(write_rsps, etag="5")
+    add_delete_member(write_rsps)
+
+    code, out, err = run("lfx", "committee", "add-member", UID, "--email", EMAIL, "--username", "jdoe")
+
+    assert code == 1
+    assert out == ""
+    assert expected in err
+    assert "removed the member again" in err
+    assert EMAIL not in err
+    (delete,) = requests_by(write_rsps, "DELETE")
+    assert delete.request.headers.get("If-Match") == "5"
+    assert delete.request.headers.get("X-Skip-Notification") == "true"
+
+
+@pending
+def test_add_member_failed_removal_reported(write_rsps: responses.RequestsMock) -> None:
+    add_post_member(write_rsps, body={**ADDED, "username": "jsmith"})
+    add_get_member(write_rsps)
+    add_delete_member(write_rsps, status=403, body={"message": "access denied"})
+
+    code, out, err = run("lfx", "committee", "add-member", UID, "--email", EMAIL, "--username", "jdoe")
+
+    assert code == 1
+    assert out == ""
+    assert "resolved to username 'jsmith'" in err
+    assert "removing it failed too" in err
+    assert JDOE_UID in err
+    assert "access denied" in err
+
+
+@pending
+@pytest.mark.parametrize(
+    ("extra", "expected_code", "expected"),
+    [
+        ([], 0, "already a member, with username 'jdoe'"),
+        (["--username", "JDOE"], 0, "already a member, with username 'jdoe'"),
+        (["--username", "jsmith"], 1, "already a member, with username 'jdoe', not 'jsmith'"),
+    ],
+)
+def test_add_member_existing_member_never_removed(
+    write_rsps: responses.RequestsMock, extra: list[str], expected_code: int, expected: str
+) -> None:
+    add_post_member(write_rsps, status=409, body={"message": f"member with email {EMAIL} already exists"})
+    add_members(write_rsps)
+
+    code, out, err = run("lfx", "committee", "add-member", UID, "--email", "JDoe@Example.org", *extra)
+
+    assert code == expected_code
+    assert expected in err
+    assert JDOE_UID in err
+    assert EMAIL not in err.lower()
+    assert out == ""
+    assert requests_by(write_rsps, "DELETE") == []
+
+
+@pending
+@pytest.mark.parametrize(
+    ("given", "stored"),
+    [(" JDoe@Example.org ", "jdoe@example.org"), ("JDoe@Example.org", "\tjdoe@example.org ")],
+)
+def test_add_member_existing_member_ignores_surrounding_whitespace(
+    write_rsps: responses.RequestsMock, given: str, stored: str
+) -> None:
+    add_post_member(write_rsps, status=409, body={"message": "member already exists"})
+    add_members(write_rsps, body=[member("jdoe", stored, "Jane", "Doe")])
+
+    code, out, err = run("lfx", "committee", "add-member", UID, "--email", given, "--username", "JDOE")
+
+    assert code == 0, err
+    assert "already a member, with username 'jdoe'" in err
+    assert out == ""
+    assert requests_by(write_rsps, "DELETE") == []
+
+
+@pending
+@pytest.mark.parametrize(
+    ("status", "message", "expected"),
+    [
+        (400, "first_name is required", ["HTTP 400", "first_name is required"]),
+        (403, "access denied", ["HTTP 403", "access denied", "writer"]),
+    ],
+)
+def test_add_member_errors_exit_1(
+    write_rsps: responses.RequestsMock, status: int, message: str, expected: list[str]
+) -> None:
+    add_post_member(write_rsps, status=status, body={"message": message})
+
+    code, out, err = run("lfx", "committee", "add-member", UID, "--email", EMAIL)
+
+    assert code == 1
+    assert out == ""
+    for text in expected:
+        assert text in err
+    assert requests_by(write_rsps, "DELETE") == []
+
+
+@pending
+@pytest.mark.parametrize("username", ["", "  "])
+def test_add_member_refuses_empty_username(write_rsps: responses.RequestsMock, username: str) -> None:
+    code, out, err = run("lfx", "committee", "add-member", UID, "--email", EMAIL, "--username", username)
+
+    assert code == 2
+    assert out == ""
+    assert "not be empty" in err
+    assert len(write_rsps.calls) == 0
+
+
+@pending
+@pytest.mark.parametrize(
+    "address",
+    [
+        '"jdoe"@example.org',
+        '"j doe"@example.org',
+        '"j\\"doe"@example.org',
+        "jdoe@[192.0.2.1]",
+        "jdoe@[IPv6:2001:db8::1]",
+        "jdoe'@example.org",
+        "jdoe.o'connor@example.org",
+    ],
+)
+def test_add_member_error_hides_unusual_addresses(write_rsps: responses.RequestsMock, address: str) -> None:
+    add_post_member(write_rsps, status=400, body={"message": f"cannot add {address} to the committee"})
+
+    code, out, err = run("lfx", "committee", "add-member", UID, "--email", EMAIL)
+
+    assert code == 1
+    assert out == ""
+    assert "cannot add <email> to the committee" in err
+    assert "jdoe" not in err
+
+
+@pending
+@pytest.mark.parametrize("local", ["'", "''"])
+def test_add_member_error_hides_apostrophe_only_local_part(write_rsps: responses.RequestsMock, local: str) -> None:
+    add_post_member(write_rsps, status=400, body={"message": f"cannot add {local}@example.org to the committee"})
+
+    code, out, err = run("lfx", "committee", "add-member", UID, "--email", EMAIL)
+
+    assert code == 1
+    assert out == ""
+    assert "cannot add <email> to the committee" in err
+    assert "example.org" not in err
+
+
+@pending
+def test_add_member_error_keeps_quotes_around_address(write_rsps: responses.RequestsMock) -> None:
+    add_post_member(write_rsps, status=400, body={"message": "cannot add 'jdoe@example.org' to the committee"})
+
+    code, _, err = run("lfx", "committee", "add-member", UID, "--email", EMAIL)
+
+    assert code == 1
+    assert "cannot add '<email>' to the committee" in err
+
+
+@pending
+@pytest.mark.parametrize("scenario", ["mismatch", "existing", "remove"])
+def test_membership_diagnostics_redact_username_before_quoting(
+    monkeypatch: pytest.MonkeyPatch, write_rsps: responses.RequestsMock, scenario: str
+) -> None:
+    token = "tok\\en-secret"  # noqa: S105
+    monkeypatch.setenv("LFX_TOKEN", token)
+    held = f"y{token}"
+    if scenario == "mismatch":
+        add_post_member(write_rsps, body={**ADDED, "username": held})
+        add_get_member(write_rsps)
+        add_delete_member(write_rsps)
+        args = ["add-member", UID, "--email", EMAIL]
+    elif scenario == "existing":
+        add_post_member(write_rsps, status=409, body={"message": "member already exists"})
+        add_members(write_rsps, body=[{**MEMBERS[0], "username": held}])
+        args = ["add-member", UID, "--email", EMAIL]
+    else:
+        add_members(write_rsps)
+        args = ["remove-member", UID]
+
+    code, _, err = run("lfx", "committee", *args, "--username", f"x{token}")
+
+    assert code == (3 if scenario == "remove" else 1)
+    assert "'x<redacted>'" in err
+    if scenario != "remove":
+        assert "'y<redacted>'" in err
+    assert token not in err
+    assert repr(token)[1:-1] not in err
+
+
+@pending
+@pytest.mark.parametrize("scenario", ["mismatch", "existing", "remove"])
+def test_membership_diagnostics_hide_email_username_before_quoting(
+    write_rsps: responses.RequestsMock, scenario: str
+) -> None:
+    address = '"j\\"doe"@example.org'
+    held = '"k\\"roe"@example.org'
+    if scenario == "mismatch":
+        add_post_member(write_rsps, body={**ADDED, "username": held})
+        add_get_member(write_rsps)
+        add_delete_member(write_rsps)
+        args = ["add-member", UID, "--email", EMAIL]
+    elif scenario == "existing":
+        add_post_member(write_rsps, status=409, body={"message": "member already exists"})
+        add_members(write_rsps, body=[{**MEMBERS[0], "username": held}])
+        args = ["add-member", UID, "--email", EMAIL]
+    else:
+        add_members(write_rsps)
+        args = ["remove-member", UID]
+
+    code, _, err = run("lfx", "committee", *args, "--username", address)
+
+    assert code == (3 if scenario == "remove" else 1)
+    assert err.count("'<email>'") == (1 if scenario == "remove" else 2)
+    for fragment in ('"j', "doe", '"k', "roe"):
+        assert fragment not in err
+
+
+@pending
+@pytest.mark.parametrize("found", [0, 2])
+@pytest.mark.parametrize(
+    ("command", "args"),
+    [("add-member", ["--email", EMAIL]), ("remove-member", ["--member-uid", JDOE_UID]), ("invite", [EMAIL])],
+)
+def test_membership_committee_lookup_hides_email_before_quoting(
+    write_rsps: responses.RequestsMock, command: str, args: list[str], found: int
+) -> None:
+    name = '"j\\"doe"@example.org'
+    resources = [
+        {"type": "committee", "id": f"committee:{uid}", "data": {"uid": uid, "sso_group_name": name}}
+        for uid in (UID, OTHER_UID)[:found]
+    ]
+    write_rsps.get(f"{BASE}/query/resources", json={"resources": resources, "page_token": None})
+
+    code, _, err = run("lfx", "committee", command, name, *args)
+
+    assert code == (3 if found == 0 else 1)
+    assert "SSO group name '<email>'" in err
+    for fragment in ('"j', "j\\", '\\"'):
+        assert fragment not in err
+    assert not requests_by(write_rsps, "POST")
+    assert not requests_by(write_rsps, "DELETE")
+
+
+@pending
+@pytest.mark.parametrize(
+    "selector",
+    [["--username", "JDOE"], ["--email", "JDoe@Example.org"], ["--member-uid", JDOE_UID]],
+)
+def test_remove_member_by_each_selector(write_rsps: responses.RequestsMock, selector: list[str]) -> None:
+    add_members(write_rsps)
+    add_get_member(write_rsps, etag="42")
+    add_delete_member(write_rsps)
+
+    code, out, err = run("lfx", "committee", "remove-member", UID, *selector)
+
+    assert code == 0, err
+    assert out == f"removed\t{JDOE_UID}\n"
+    (delete,) = requests_by(write_rsps, "DELETE")
+    assert delete.request.headers.get("If-Match") == "42"
+    assert delete.request.headers.get("X-Skip-Notification") == "true"
+    listed = [call for call in write_rsps.calls if (call.request.url or "").startswith(f"{MEMBERS_URL}?")]
+    assert len(listed) == (0 if selector[0] == "--member-uid" else 1)
+
+
+@pending
+def test_remove_member_email_ignores_surrounding_whitespace(write_rsps: responses.RequestsMock) -> None:
+    add_members(write_rsps)
+    add_get_member(write_rsps, etag="42")
+    add_delete_member(write_rsps)
+
+    code, out, err = run("lfx", "committee", "remove-member", UID, "--email", " JDoe@Example.org ")
+
+    assert code == 0, err
+    assert out == f"removed\t{JDOE_UID}\n"
+
+
+@pending
+def test_remove_member_notify_sends_notification(write_rsps: responses.RequestsMock) -> None:
+    add_get_member(write_rsps)
+    add_delete_member(write_rsps)
+
+    code, _, err = run("lfx", "committee", "remove-member", UID, "--member-uid", JDOE_UID, "--notify")
+
+    assert code == 0, err
+    (delete,) = requests_by(write_rsps, "DELETE")
+    assert "X-Skip-Notification" not in delete.request.headers
+
+
+@pending
+@pytest.mark.parametrize("selector", [["--username", "nobody"], ["--email", "nobody@example.org"]])
+def test_remove_member_no_match_exits_3(write_rsps: responses.RequestsMock, selector: list[str]) -> None:
+    add_members(write_rsps)
+
+    code, out, err = run("lfx", "committee", "remove-member", UID, *selector)
+
+    assert code == 3
+    assert out == ""
+    assert "no member" in err
+    assert "nobody@example.org" not in err
+    assert requests_by(write_rsps, "DELETE") == []
+
+
+@pending
+def test_remove_member_two_matches_exits_1(write_rsps: responses.RequestsMock) -> None:
+    twins = [member("dup", "one@example.org", "One", "Dup"), member("DUP", "two@example.org", "Two", "Dup")]
+    add_members(write_rsps, body=twins)
+
+    code, out, err = run("lfx", "committee", "remove-member", UID, "--username", "dup")
+
+    assert code == 1
+    assert out == ""
+    for twin in twins:
+        assert str(twin["uid"]) in err
+    assert "@" not in err
+    assert requests_by(write_rsps, "DELETE") == []
+
+
+@pending
+@pytest.mark.parametrize(("second_status", "expected_code"), [(409, 1), (204, 0)])
+def test_remove_member_retries_409_once(
+    write_rsps: responses.RequestsMock, second_status: int, expected_code: int
+) -> None:
+    add_get_member(write_rsps, etag="1")
+    add_delete_member(write_rsps, status=409, body={"message": "member changed"})
+    add_get_member(write_rsps, etag="2")
+    add_delete_member(
+        write_rsps, status=second_status, body={"message": "member changed"} if second_status == 409 else None
+    )
+
+    code, _, err = run("lfx", "committee", "remove-member", UID, "--member-uid", JDOE_UID)
+
+    assert code == expected_code
+    deletes = requests_by(write_rsps, "DELETE")
+    assert [call.request.headers.get("If-Match") for call in deletes] == ["1", "2"]
+    if expected_code:
+        assert "HTTP 409" in err
+
+
+@pending
+@pytest.mark.parametrize("selectors", [[], ["--username", "jdoe", "--member-uid", JDOE_UID]])
+def test_remove_member_needs_exactly_one_selector(write_rsps: responses.RequestsMock, selectors: list[str]) -> None:
+    code, _, err = run("lfx", "committee", "remove-member", UID, *selectors)
+
+    assert code == 2
+    assert "exactly one of" in err
+    assert len(write_rsps.calls) == 0
+
+
+def add_invite(rsps: responses.RequestsMock, status: int = 201, body: object = None) -> None:
+    body = body if body is not None else {"uid": INVITE_UID, "invitee_email": EMAIL, "status": "pending"}
+    rsps.post(
+        f"{BASE}/committees/{UID}/invites", status=status, json=body, match=[matchers.query_param_matcher({"v": "1"})]
+    )
+
+
+@pending
+@pytest.mark.parametrize("extra", [[], ["--json"]])
+def test_invite_created(write_rsps: responses.RequestsMock, extra: list[str]) -> None:
+    add_invite(write_rsps)
+
+    code, out, err = run("lfx", "committee", "invite", UID, EMAIL, *extra)
+
+    assert code == 0, err
+    if extra:
+        assert json.loads(out) == {"uid": INVITE_UID, "invitee_email": EMAIL, "status": "pending"}
+    else:
+        assert out == f"{INVITE_UID}\tpending\n"
+    (post,) = requests_by(write_rsps, "POST")
+    assert json_body(post) == {"invitee_email": EMAIL}
+
+
+@pending
+def test_invite_conflict_exits_1(write_rsps: responses.RequestsMock) -> None:
+    add_invite(write_rsps, status=409, body={"message": f"a pending invite already exists for {EMAIL}"})
+
+    code, out, err = run("lfx", "committee", "invite", UID, EMAIL)
+
+    assert code == 1
+    assert out == ""
+    assert "HTTP 409" in err
+    assert "a pending invite already exists" in err
+    assert EMAIL not in err
