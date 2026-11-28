@@ -44,6 +44,22 @@ create-info-file
 
  .. program-output:: lftools-uv infofile create-info-file --help
 
+The committers listed in the new INFO file are the members of one LDAP
+group. By default the command derives its name as
+``<umbrella>-gerrit-<project>-committers``: ``<umbrella>`` is the second
+label of the Gerrit host, with ``o-ran-sc`` written as ``oran`` and
+``opendaylight`` as ``odl``, and ``<project>`` is the Gerrit project with
+each ``/`` and ``_`` written as ``-``. When a project's group does not
+follow that pattern, name it with ``--group``:
+
+.. code-block:: bash
+
+    lftools-uv infofile create-info-file gerrit.example.org foo/bar --group foo-maintainers
+
+With ``--empty`` the command contacts neither Gerrit nor LDAP and lists one
+empty committer. A failed member lookup prints nothing on stdout and exits
+non-zero, so it leaves no partial INFO file behind. ``--tsc-approval`` and
+``--tsc_approval`` are the same option.
 
 
 API for check votes requires a [github] section in :ref:`lftools.ini <lftools-ini>`:
