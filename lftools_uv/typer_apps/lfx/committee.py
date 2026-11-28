@@ -17,11 +17,15 @@ from typing import Any
 import typer
 
 from lftools_uv.api.endpoints.lfx import (
+    COMMITTEE_CATEGORIES,
+    JOIN_MODES,
     LfxAPIError,
     LfxClient,
     LfxError,
     LfxNotFoundError,
     count_without_username,
+    create_committee,
+    find_project_uid,
     format_csv,
     format_info_yaml,
     format_text,
@@ -63,6 +67,8 @@ MEMBERS_FORBIDDEN_HINT = (
     f"otherwise {FORBIDDEN_HINT}"
 )
 
+CREATE_FORBIDDEN_HINT = "the token may be missing or expired, or may not be a writer on the project"
+
 
 class MemberFormat(enum.StrEnum):
     """Output formats of ``committee members``."""
@@ -72,12 +78,21 @@ class MemberFormat(enum.StrEnum):
     INFO_YAML = "info-yaml"
 
 
-def handle_lfx_error(exc: LfxError, forbidden_hint: str = FORBIDDEN_HINT) -> typer.Exit:
-    """Report an LFX error on stderr and return the ``typer.Exit`` to raise."""
+def handle_lfx_error(
+    exc: LfxError, forbidden_hint: str = FORBIDDEN_HINT, http_404_exit: int = EXIT_NOT_FOUND
+) -> typer.Exit:
+    """Report an LFX error on stderr and return the ``typer.Exit`` to raise.
+
+    :arg forbidden_hint: What a 403 may mean, appended to its message.
+    :arg http_404_exit: Exit status for an API answer of 404; a lookup
+        that found nothing exits :data:`EXIT_NOT_FOUND` either way.
+    """
     message = str(exc)
     code = EXIT_ERROR
-    if isinstance(exc, LfxNotFoundError) or (isinstance(exc, LfxAPIError) and exc.status == 404):
+    if isinstance(exc, LfxNotFoundError):
         code = EXIT_NOT_FOUND
+    elif isinstance(exc, LfxAPIError) and exc.status == 404:
+        code = http_404_exit
     elif isinstance(exc, LfxAPIError) and exc.status == 403:
         message = f"{message}; {forbidden_hint}"
     typer.echo(f"Error: {message}", err=True)
@@ -186,3 +201,67 @@ def committee_members(
         text = format_text(members, client.redact)
     if text:
         typer.echo(text, nl=False)
+
+
+def _choice(allowed: tuple[str, ...]) -> Any:
+    """Return an option callback that refuses a value outside ``allowed``."""
+
+    def check(value: str) -> str:
+        if value not in allowed:
+            listed = ", ".join(repr(item) for item in allowed)
+            msg = f"{value!r} is not one of {listed}."
+            raise typer.BadParameter(msg)
+        return value
+
+    return check
+
+
+@committee_app.command("create")
+def committee_create(
+    project: str = typer.Option(..., "--project", help="Slug of the project the committee belongs to."),
+    name: str = typer.Option(..., "--name", help="Committee name; the SSO group name is built from it."),
+    category: str = typer.Option(
+        "Committers", "--category", callback=_choice(COMMITTEE_CATEGORIES), help="Committee category."
+    ),
+    description: str | None = typer.Option(None, "--description", help="Committee description."),
+    join_mode: str = typer.Option(
+        "closed",
+        "--join-mode",
+        callback=_choice(JOIN_MODES),
+        help=f"Who may join: {', '.join(JOIN_MODES)}. 'closed' lets only a committee writer add members.",
+    ),
+    sso_group: bool = typer.Option(True, "--sso-group/--no-sso-group", help="Give the committee an SSO group."),
+    public: bool = typer.Option(False, "--public/--private", help="Make the committee public."),
+    json_output: bool = typer.Option(False, "--json", help="Print the API response body as JSON."),
+) -> None:
+    """Create a committee under a project.
+
+    Prints the SSO group name the service gave the committee, empty when
+    it gave none, and the committee UID, separated by a tab.
+    """
+    try:
+        client = LfxClient()
+        project_uid = find_project_uid(client, project)
+    except LfxError as exc:
+        raise handle_lfx_error(exc) from None
+
+    request: dict[str, Any] = {
+        "name": name,
+        "category": category,
+        "project_uid": project_uid,
+        "join_mode": join_mode,
+        "public": public,
+        "sso_group_enabled": sso_group,
+    }
+    if description is not None:
+        request["description"] = description
+    try:
+        body = create_committee(client, request)
+    except LfxError as exc:
+        raise handle_lfx_error(exc, forbidden_hint=CREATE_FORBIDDEN_HINT, http_404_exit=EXIT_ERROR) from None
+
+    if json_output:
+        echo(json.dumps(client.redact_data(body), indent=2))
+        return
+    fields = [body.get("sso_group_name"), body.get("uid")]
+    echo(client.redact("\t".join(value if isinstance(value, str) else "" for value in fields)))

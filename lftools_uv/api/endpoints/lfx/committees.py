@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: EPL-1.0
 # SPDX-FileCopyrightText: 2026 The Linux Foundation
-"""Committee lookup and reads against the LFX v2 API.
+"""Committee lookup, reads and creation against the LFX v2 API.
 
 Every ``lfx`` command that takes a committee resolves it through
 :func:`resolve_committee_uid`, which accepts a UID or an SSO group name.
@@ -22,6 +22,35 @@ _UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 #: The note every "not found" carries: the API hides what the caller may
 #: not see, and serves a bad token as anonymous.
 INVISIBLE_NOTE = "a committee the token cannot see looks the same as one that does not exist"
+
+
+#: The values the committee service accepts for ``category``.
+COMMITTEE_CATEGORIES = (
+    "Ambassador",
+    "Board",
+    "Code of Conduct",
+    "Committers",
+    "Expert Group",
+    "Finance Committee",
+    "Government Advisory Council",
+    "Legal Committee",
+    "Maintainers",
+    "Marketing Committee/Sub Committee",
+    "Marketing Mailing List",
+    "Marketing Oversight Committee/Marketing Advisory Committee",
+    "Newsletter",
+    "Other",
+    "Product Security",
+    "Special Interest Group",
+    "Technical Advisory Committee",
+    "Technical Mailing List",
+    "Technical Oversight Committee",
+    "Technical Steering Committee",
+    "Working Group",
+)
+
+#: The values the committee service accepts for ``join_mode``.
+JOIN_MODES = ("open", "invite_only", "application", "closed")
 
 
 def is_uuid(value: str) -> bool:
@@ -199,8 +228,28 @@ def list_project_committees(client: LfxClient, slug: str) -> list[dict[str, Any]
     return sorted(committees, key=_name_key)
 
 
+def create_committee(client: LfxClient, body: dict[str, Any]) -> dict[str, Any]:
+    """Send ``POST /committees`` with ``body`` and return the created committee.
+
+    The caller checks ``category`` and ``join_mode`` against
+    :data:`COMMITTEE_CATEGORIES` and :data:`JOIN_MODES` first.
+
+    :raises LfxAPIError: The request failed or the API answered outside
+        2xx, 409 for a name the project already uses included, or the
+        answer is not a JSON object.
+    """
+    answer = client.post_json("/committees", body)
+    if not isinstance(answer, dict):
+        msg = "POST /committees answered a body that is not a JSON object"
+        raise LfxAPIError(msg)
+    return answer
+
+
 __all__ = [
+    "COMMITTEE_CATEGORIES",
     "INVISIBLE_NOTE",
+    "JOIN_MODES",
+    "create_committee",
     "find_committee_uids",
     "find_project_uid",
     "get_committee",

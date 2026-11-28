@@ -687,7 +687,6 @@ def posts(rsps: responses.RequestsMock) -> list[object]:
     return bodies
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee create is not implemented yet")
 def test_create_defaults(create_rsps: responses.RequestsMock) -> None:
     add_projects(create_rsps, [(SLUG, PROJECT_UID)])
     add_create(create_rsps)
@@ -699,7 +698,6 @@ def test_create_defaults(create_rsps: responses.RequestsMock) -> None:
     assert posts(create_rsps) == [DEFAULT_CREATE_BODY]
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee create is not implemented yet")
 @pytest.mark.parametrize(
     ("extra", "changed"),
     [
@@ -723,7 +721,6 @@ def test_create_options_in_body(
     assert posts(create_rsps) == [{**DEFAULT_CREATE_BODY, **changed}]
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee create is not implemented yet")
 def test_create_prints_returned_sso_group_name(create_rsps: responses.RequestsMock) -> None:
     add_projects(create_rsps, [(SLUG, PROJECT_UID)])
     add_create(create_rsps, body={**CREATED, "sso_group_name": f"{GROUP}-2"})
@@ -734,7 +731,6 @@ def test_create_prints_returned_sso_group_name(create_rsps: responses.RequestsMo
     assert out == f"{GROUP}-2\t{UID}\n"
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee create is not implemented yet")
 def test_create_without_sso_group_name_prints_empty_field(create_rsps: responses.RequestsMock) -> None:
     add_projects(create_rsps, [(SLUG, PROJECT_UID)])
     add_create(create_rsps, body={**CREATED, "sso_group_enabled": False, "sso_group_name": None})
@@ -745,7 +741,6 @@ def test_create_without_sso_group_name_prints_empty_field(create_rsps: responses
     assert out == f"\t{UID}\n"
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee create is not implemented yet")
 def test_create_json(create_rsps: responses.RequestsMock) -> None:
     add_projects(create_rsps, [(SLUG, PROJECT_UID)])
     add_create(create_rsps)
@@ -756,7 +751,6 @@ def test_create_json(create_rsps: responses.RequestsMock) -> None:
     assert json.loads(out) == CREATED
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee create is not implemented yet")
 def test_create_unknown_project_exits_3_without_post(create_rsps: responses.RequestsMock) -> None:
     add_projects(create_rsps, [("example-other", OTHER_UID)])
     add_create(create_rsps)
@@ -770,7 +764,6 @@ def test_create_unknown_project_exits_3_without_post(create_rsps: responses.Requ
     assert len(create_rsps.calls) == 1
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee create is not implemented yet")
 def test_create_ambiguous_project_exits_1_without_post(create_rsps: responses.RequestsMock) -> None:
     add_projects(create_rsps, [(SLUG, PROJECT_UID), (SLUG, OTHER_UID)])
     add_create(create_rsps)
@@ -783,7 +776,6 @@ def test_create_ambiguous_project_exits_1_without_post(create_rsps: responses.Re
     assert posts(create_rsps) == []
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee create is not implemented yet")
 @pytest.mark.parametrize("extra", [["--category", "Committer"], ["--join-mode", "closed-ish"]])
 def test_create_refuses_unknown_choice_before_any_request(
     create_rsps: responses.RequestsMock, extra: list[str]
@@ -799,7 +791,6 @@ def test_create_refuses_unknown_choice_before_any_request(
     assert len(create_rsps.calls) == 0
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee create is not implemented yet")
 @pytest.mark.parametrize(
     ("status", "message", "expected"),
     [
@@ -824,7 +815,6 @@ def test_create_errors_exit_1(
     assert len(posts(create_rsps)) == 1
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee create is not implemented yet")
 @pytest.mark.parametrize("extra", [[], ["--json"]])
 def test_create_redacts_token_in_response(create_rsps: responses.RequestsMock, extra: list[str]) -> None:
     add_projects(create_rsps, [(SLUG, PROJECT_UID)])
@@ -837,7 +827,6 @@ def test_create_redacts_token_in_response(create_rsps: responses.RequestsMock, e
     assert "leak-<redacted>" in out
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee create is not implemented yet")
 def test_create_token_expiring_after_lookup_sends_no_post(
     monkeypatch: pytest.MonkeyPatch, create_rsps: responses.RequestsMock
 ) -> None:
@@ -866,7 +855,6 @@ def test_create_token_expiring_after_lookup_sends_no_post(
     assert len(create_rsps.calls) == 1
 
 
-@pytest.mark.xfail(strict=True, reason="lfx committee create is not implemented yet")
 @pytest.mark.parametrize("location", ["https://elsewhere.example.org/committees", "https://[broken"])
 def test_create_redirect_refused_without_follow_up(create_rsps: responses.RequestsMock, location: str) -> None:
     add_projects(create_rsps, [(SLUG, PROJECT_UID)])

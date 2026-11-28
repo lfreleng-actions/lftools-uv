@@ -246,7 +246,9 @@ class LfxClient:
             return [self.redact_data(item) for item in value]
         return value
 
-    def _refuse_redirect(self, path: str, response: requests.Response, *_args: Any, **_kwargs: Any) -> None:
+    def _refuse_redirect(
+        self, method: str, path: str, response: requests.Response, *_args: Any, **_kwargs: Any
+    ) -> None:
         """Raise on a redirect, as a response hook.
 
         requests runs response hooks before it parses a redirect's
@@ -264,7 +266,7 @@ class LfxClient:
             _ = response.content
         response.close()
         msg = self.redact(
-            f"GET {path} answered HTTP {response.status_code}, a redirect to {location}; refusing to follow it"
+            f"{method} {path} answered HTTP {response.status_code}, a redirect to {location}; refusing to follow it"
         )
         raise LfxAPIError(msg, status=response.status_code)
 
@@ -276,30 +278,42 @@ class LfxClient:
         :raises LfxAPIError: The request failed, was redirected, or
             answered outside 2xx.
         """
+        return self._send("GET", path, params)
+
+    def _send(
+        self,
+        method: str,
+        path: str,
+        params: Mapping[str, str] | None = None,
+        json_body: Any = None,
+    ) -> requests.Response:
+        """Send ``method`` to ``path``, with ``json_body`` when given, and return the 2xx response."""
         # The API serves an expired token as anonymous, so a token that
         # expires mid-lookup would silently hide what it could see.
         check_token_expiry(self._token)
         query = {**(params or {}), "v": API_VERSION}
         url = f"{self.base_url}/{path.lstrip('/')}"
         log_path = self.redact(_hide_query_values(path))
-        log.debug("LFX GET %s with parameters %s", log_path, sorted(query))
+        log.debug("LFX %s %s with parameters %s", method, log_path, sorted(query))
         try:
-            response = self._session.get(
+            response = self._session.request(
+                method,
                 url,
                 params=query,
+                json=json_body,
                 timeout=self.timeout,
                 allow_redirects=False,
-                hooks={"response": functools.partial(self._refuse_redirect, path)},
+                hooks={"response": functools.partial(self._refuse_redirect, method, path)},
             )
         except requests.RequestException as exc:
-            msg = self.redact(_hide_query_values(f"GET {path} failed: {type(exc).__name__}: {exc}"))
+            msg = self.redact(_hide_query_values(f"{method} {path} failed: {type(exc).__name__}: {exc}"))
             raise LfxAPIError(msg) from None
-        log.debug("LFX GET %s answered %s", log_path, response.status_code)
+        log.debug("LFX %s %s answered %s", method, log_path, response.status_code)
 
         if not 200 <= response.status_code < 300:
             message = _error_message(response)
             detail = f": {message}" if message else ""
-            msg = self.redact(f"GET {path} answered HTTP {response.status_code}{detail}")
+            msg = self.redact(f"{method} {path} answered HTTP {response.status_code}{detail}")
             raise LfxAPIError(msg, status=response.status_code)
         return response
 
@@ -309,9 +323,22 @@ class LfxClient:
         :raises LfxAPIError: As :meth:`get_response`, or the body is not
             JSON.
         """
-        response = self.get_response(path, params)
+        return self._decode("GET", path, self.get_response(path, params))
+
+    def post_json(self, path: str, body: Any) -> Any:
+        """Send ``POST`` to ``path`` with ``body`` as JSON and return the decoded JSON answer.
+
+        :raises LfxConfigError: The token expired since the client was
+            built; nothing was sent.
+        :raises LfxAPIError: The request failed, was redirected, answered
+            outside 2xx, or answered a body that is not JSON.
+        """
+        return self._decode("POST", path, self._send("POST", path, json_body=body))
+
+    def _decode(self, method: str, path: str, response: requests.Response) -> Any:
+        """Return the decoded JSON body of ``response``, or raise :class:`LfxAPIError`."""
         try:
             return response.json()
         except ValueError:
-            msg = self.redact(f"GET {path} answered HTTP {response.status_code} with a body that is not JSON")
+            msg = self.redact(f"{method} {path} answered HTTP {response.status_code} with a body that is not JSON")
             raise LfxAPIError(msg, status=response.status_code) from None
