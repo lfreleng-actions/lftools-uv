@@ -48,11 +48,6 @@ def _typer(args: list[str], answer: str | None = None) -> TyperResult:
 
 
 FRONT_ENDS = pytest.mark.parametrize("run", [_click, _typer], ids=["click", "typer"])
-TYPER_PENDING = pytest.mark.parametrize(
-    "run",
-    [_click, pytest.param(_typer, marks=pytest.mark.xfail(strict=True, reason="Not yet ported to Typer"))],
-    ids=["click", "typer"],
-)
 
 
 # ---------------------------------------------------------------------------
@@ -188,7 +183,7 @@ def start_point(mocker: MockerFixture) -> MagicMock:
     return mock
 
 
-@TYPER_PENDING
+@FRONT_ENDS
 def test_nexus_help_lists_commands(run: Run) -> None:
     result = run(["nexus", "--help"])
 
@@ -197,7 +192,7 @@ def test_nexus_help_lists_commands(run: Run) -> None:
         assert command in result.output
 
 
-@TYPER_PENDING
+@FRONT_ENDS
 def test_docker_list_passes_arguments(run: Run, mocker: MockerFixture, search: MagicMock, tmp_path: Path) -> None:
     output = mocker.patch("lftools_uv.nexus.cmd.output_images")
     csv = str(tmp_path / "images.csv")
@@ -208,7 +203,7 @@ def test_docker_list_passes_arguments(run: Run, mocker: MockerFixture, search: M
     output.assert_called_once_with(IMAGES, csv)
 
 
-@TYPER_PENDING
+@FRONT_ENDS
 @pytest.mark.parametrize(("server", "expected"), [([], NEXUS), (["--server", "https://other"], "https://other")])
 def test_docker_list_reads_server_from_environment(
     run: Run,
@@ -226,7 +221,7 @@ def test_docker_list_reads_server_from_environment(
     search.assert_called_once_with(None, expected, "releases", "*")
 
 
-@TYPER_PENDING
+@FRONT_ENDS
 def test_docker_list_outputs_nothing_without_images(run: Run, mocker: MockerFixture, search: MagicMock) -> None:
     output = mocker.patch("lftools_uv.nexus.cmd.output_images")
     search.return_value = []
@@ -236,7 +231,7 @@ def test_docker_list_outputs_nothing_without_images(run: Run, mocker: MockerFixt
     output.assert_not_called()
 
 
-@TYPER_PENDING
+@FRONT_ENDS
 @pytest.mark.parametrize(("answer", "deletes"), [("y\n", True), ("n\n", False)], ids=["confirmed", "declined"])
 def test_docker_delete_asks_before_deleting(
     run: Run, mocker: MockerFixture, search: MagicMock, monkeypatch: pytest.MonkeyPatch, answer: str, deletes: bool
@@ -254,7 +249,7 @@ def test_docker_delete_asks_before_deleting(
         delete.assert_not_called()
 
 
-@TYPER_PENDING
+@FRONT_ENDS
 def test_docker_delete_yes_skips_confirmation(run: Run, mocker: MockerFixture, search: MagicMock) -> None:
     delete = mocker.patch("lftools_uv.nexus.cmd.delete_images")
     result = run(["nexus", "docker", "delete", "-y", "-s", NEXUS, "*", "releases"])
@@ -264,7 +259,7 @@ def test_docker_delete_yes_skips_confirmation(run: Run, mocker: MockerFixture, s
     delete.assert_called_once_with(None, NEXUS, IMAGES)
 
 
-@TYPER_PENDING
+@FRONT_ENDS
 @pytest.mark.parametrize(
     ("args", "expected"),
     [
@@ -289,19 +284,8 @@ def test_releasedockerhub_passes_options(
     start_point.assert_called_once_with(*expected)
 
 
-PENDING = pytest.mark.xfail(strict=True, reason="Not yet accepted")
-
-
-@pytest.mark.parametrize(
-    ("run", "option"),
-    [
-        (_click, "--version_regexp"),
-        pytest.param(_typer, "--version_regexp", marks=PENDING),
-        pytest.param(_click, "--version-regexp", marks=PENDING),
-        pytest.param(_typer, "--version-regexp", marks=PENDING),
-    ],
-    ids=["click-underscore", "typer-underscore", "click-hyphen", "typer-hyphen"],
-)
+@FRONT_ENDS
+@pytest.mark.parametrize("option", ["--version_regexp", "--version-regexp"])
 def test_releasedockerhub_accepts_both_version_spellings(run: Run, start_point: MagicMock, option: str) -> None:
     result = run(["nexus", "docker", "releasedockerhub", "-o", "onap", option, "regexp.txt"])
 
