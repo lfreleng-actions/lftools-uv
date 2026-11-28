@@ -99,14 +99,6 @@ def _calls(env: dict[str, str]) -> list[str]:
     return Path(env["CALL_LOG"]).read_text().splitlines()
 
 
-def test_yaml4info_reads_ldap_through_legacy_cli(sandbox):
-    """``ldap csv`` exists only in the Click front-end."""
-    result = _run("yaml4info", ["grp"], sandbox)
-
-    assert _calls(sandbox) == ["1|ldap csv grp"]
-    assert "- name: 'Alice Example'" in result.stdout
-
-
 def test_inactivecommitters_reads_ldap_through_legacy_cli(sandbox):
     """``ldap csv`` exists only in the Click front-end."""
     _run("inactivecommitters", ["gerrit.example.org/gerrit", "grp"], sandbox)
@@ -148,14 +140,13 @@ def test_gerrit_create_checks_ldap_group_with_lftools_uv(sandbox, tmp_path):
     assert "|lfidapi search-members grp" in _calls(sandbox)
 
 
-@pytest.mark.parametrize("script", ["yaml4info", "autocorrectinfofile"])
-def test_usage_names_lftools_uv(sandbox, script):
+def test_usage_names_lftools_uv(sandbox):
     """Usage text points at the command that is installed.
 
     Usage echoes ``$0``, so the script's own path is removed first; the
     checkout directory name must not decide the result.
     """
-    result = _run(script, [], sandbox)
+    result = _run("autocorrectinfofile", [], sandbox)
     text = (result.stdout + result.stderr).replace(str(SHELL_DIR), "")
 
     assert re.search(r"\blftools(?!-uv)\b", text) is None

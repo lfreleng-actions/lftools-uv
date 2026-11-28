@@ -47,15 +47,18 @@ def create_info_file(
     group: str | None = typer.Option(
         None,
         "--group",
-        help="LDAP group whose members become the committers, in place of UMBRELLA-gerrit-PROJECT-committers",
+        help="SSO group name of the LFX committee whose members become the committers, in place of "
+        "UMBRELLA-gerrit-PROJECT-committers",
     ),
 ) -> None:
     """Create an initial INFO file.
 
     The INFO.yaml template goes to stdout. Unless --empty is given, the
     project's access is read from Gerrit and the committers are the
-    members of the LDAP group UMBRELLA-gerrit-PROJECT-committers, or
-    of --group. A failed member lookup prints nothing and exits non-zero.
+    members of the LFX committee whose SSO group name is
+    UMBRELLA-gerrit-PROJECT-committers, or --group. Reading them needs an
+    LFX token with the auditor relation on the committee. A failed member
+    lookup prints nothing and exits non-zero.
 
     Examples:
         lftools-uv infofile create-info-file gerrit.example.com project/name

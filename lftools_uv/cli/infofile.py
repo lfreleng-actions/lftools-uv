@@ -187,7 +187,8 @@ tsc:
     type=str,
     required=False,
     default=None,
-    help="LDAP group whose members become the committers, in place of UMBRELLA-gerrit-PROJECT-committers",
+    help="SSO group name of the LFX committee whose members become the committers, in place of "
+    "UMBRELLA-gerrit-PROJECT-committers",
 )
 @error_handler
 def create_info_file(gerrit_url, gerrit_project, directory, empty, tsc_approval, group):

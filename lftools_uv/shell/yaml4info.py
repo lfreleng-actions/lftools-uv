@@ -7,51 +7,55 @@
 # which accompanies this distribution, and is available at
 # http://www.eclipse.org/legal/epl-v10.html
 ##############################################################################
-"""Python wrapper for yaml4info shell script."""
+"""Print INFO.yaml committer entries for the members of an LFX committee."""
 
-import subprocess
+import logging
 import sys
-from pathlib import Path
+
+from lftools_uv.api.endpoints.lfx import LfxError
+from lftools_uv.ldap_cli import helper_yaml4info
+from lftools_uv.typer_apps.lfx.committee import MEMBERS_FORBIDDEN_HINT, handle_lfx_error
+
+USAGE = """\
+Usage:
+
+yaml4info sso-group-name
+
+prints INFO.yaml committer entries for the members of the LFX committee
+whose SSO group name is sso-group-name, one committee per call. It needs
+an LFX token with the auditor relation on the committee, taken as
+'lftools-uv lfx' takes it.
+Example: yaml4info 'opnfv-gerrit-releng-committers'
+"""
 
 
-def main():
-    """Execute the yaml4info shell script with all arguments passed through."""
-    # Try multiple locations for the shell script
-    script_name = "yaml4info"
+def main() -> int:
+    """Print the committers of the committee named on the command line, and return the exit status."""
+    args = sys.argv[1:]
+    if not args:
+        sys.stdout.write(USAGE)
+        return 1
+    if args[0] in ("-h", "--help"):
+        sys.stdout.write(USAGE)
+        return 0
+    if args[0].startswith("-"):
+        print(f"Unknown option: {args[0]}", file=sys.stderr)
+        return 1
+    if len(args) > 1:
+        print("Error: yaml4info takes one SSO group name", file=sys.stderr)
+        return 1
 
-    # Location 1: Development - relative to this module (source tree)
-    dev_location = Path(__file__).parent.parent.parent / "shell" / script_name
-
-    # Location 2: Installed - in sys.prefix/share/lftools-uv/shell/
-    installed_location = Path(sys.prefix) / "share" / "lftools-uv" / "shell" / script_name
-
-    # Location 3: Virtual environment or user install - check both prefix and base_prefix
-    venv_location = Path(sys.base_prefix) / "share" / "lftools-uv" / "shell" / script_name
-
-    # Try locations in order
-    shell_script = None
-    for location in [dev_location, installed_location, venv_location]:
-        if location.exists():
-            shell_script = location
-            break
-
-    if shell_script is None:
-        print("Error: Shell script not found at any of the following locations:", file=sys.stderr)
-        print(f"  - {dev_location}", file=sys.stderr)
-        print(f"  - {installed_location}", file=sys.stderr)
-        print(f"  - {venv_location}", file=sys.stderr)
-        sys.exit(1)
-
-    cmd = [str(shell_script)] + sys.argv[1:]
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
     try:
-        result = subprocess.run(cmd, check=False)
-        sys.exit(result.returncode)
-    except FileNotFoundError as exc:
-        print(f"Error: Could not execute shell script at {shell_script}: {exc}", file=sys.stderr)
-        sys.exit(1)
+        committers = helper_yaml4info(args[0])
+    except LfxError as exc:
+        status: int = handle_lfx_error(exc, MEMBERS_FORBIDDEN_HINT).exit_code
+        return status
     except KeyboardInterrupt:
-        sys.exit(130)
+        return 130
+    sys.stdout.write(committers)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
