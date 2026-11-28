@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: EPL-1.0
 # SPDX-FileCopyrightText: 2026 The Linux Foundation
-"""Tests for ``lftools-uv lfx committee show``.
+"""Tests for the ``lftools-uv lfx committee`` commands.
 
 The commands run through the root Typer app, so ``--debug`` takes the
 path a user's does. ``responses`` answers every request, so no test
@@ -297,3 +297,122 @@ def test_token_never_printed_or_logged(
     assert token not in result.stderr
     assert token not in caplog.text
     assert "LFX GET" in caplog.text or scenario in ("expired", "bad-url")
+
+
+# committee list
+
+SLUG = "example"
+PROJECT_UID = "66666666-7777-4888-8999-000000000000"
+
+
+def committee_data(uid: str, name: str, sso_group_name: str = "", *, sso: bool = True) -> dict[str, object]:
+    return {"uid": uid, "name": name, "sso_group_name": sso_group_name, "sso_group_enabled": sso}
+
+
+def add_project(rsps: responses.RequestsMock, slugs: list[str]) -> None:
+    rsps.get(
+        f"{BASE}/query/resources",
+        json={
+            "resources": [
+                {"type": "project", "id": f"project:{uid}", "data": {"uid": uid, "slug": slug, "name": slug}}
+                for slug, uid in ((slug, PROJECT_UID if slug == SLUG else OTHER_UID) for slug in slugs)
+            ],
+            "page_token": None,
+        },
+        match=[matchers.query_param_matcher({"v": "1", "type": "project", "filters": f"slug:{SLUG}"})],
+    )
+
+
+def add_committees(rsps: responses.RequestsMock, pages: list[list[dict[str, object]]]) -> None:
+    base_params = {"v": "1", "type": "committee", "tags": f"project_slug:{SLUG}"}
+    for index, page in enumerate(pages):
+        params = dict(base_params)
+        if index:
+            params["page_token"] = f"page-{index}"
+        rsps.get(
+            f"{BASE}/query/resources",
+            json={
+                "resources": [{"type": "committee", "id": f"committee:{data['uid']}", "data": data} for data in page],
+                "page_token": f"page-{index + 1}" if index + 1 < len(pages) else None,
+            },
+            match=[matchers.query_param_matcher(params)],
+        )
+
+
+LIST_COMMITTEES = [
+    committee_data(OTHER_UID, "TSC", "example-tsc"),
+    committee_data(UID, "Example Committers", GROUP),
+    committee_data("22222222-2222-4333-8444-555555555555", "Marketing", sso=False),
+]
+
+
+@pytest.mark.xfail(strict=True, reason="lfx committee list is not implemented yet")
+def test_list_sorted_by_name(rsps: responses.RequestsMock) -> None:
+    add_project(rsps, [SLUG])
+    add_committees(rsps, [LIST_COMMITTEES])
+
+    code, out, err = run("lfx", "committee", "list", "--project", SLUG)
+
+    assert code == 0, err
+    assert out.splitlines() == [
+        f"{GROUP}\t{UID}\tExample Committers",
+        "\t22222222-2222-4333-8444-555555555555\tMarketing",
+        f"example-tsc\t{OTHER_UID}\tTSC",
+    ]
+
+
+@pytest.mark.xfail(strict=True, reason="lfx committee list is not implemented yet")
+def test_list_sso_only(rsps: responses.RequestsMock) -> None:
+    add_project(rsps, [SLUG])
+    add_committees(rsps, [LIST_COMMITTEES])
+
+    code, out, _ = run("lfx", "committee", "list", "--project", SLUG, "--sso-only")
+
+    assert code == 0
+    assert out.splitlines() == [f"{GROUP}\t{UID}\tExample Committers", f"example-tsc\t{OTHER_UID}\tTSC"]
+
+
+@pytest.mark.xfail(strict=True, reason="lfx committee list is not implemented yet")
+def test_list_json(rsps: responses.RequestsMock) -> None:
+    add_project(rsps, [SLUG])
+    add_committees(rsps, [LIST_COMMITTEES])
+
+    code, out, _ = run("lfx", "committee", "list", "--project", SLUG, "--json")
+
+    assert code == 0
+    assert json.loads(out) == [LIST_COMMITTEES[1], LIST_COMMITTEES[2], LIST_COMMITTEES[0]]
+
+
+@pytest.mark.xfail(strict=True, reason="lfx committee list is not implemented yet")
+def test_list_spans_two_pages(rsps: responses.RequestsMock) -> None:
+    add_project(rsps, [SLUG])
+    add_committees(rsps, [LIST_COMMITTEES[:1], LIST_COMMITTEES[1:]])
+
+    code, out, _ = run("lfx", "committee", "list", "--project", SLUG)
+
+    assert code == 0
+    assert len(out.splitlines()) == 3
+
+
+@pytest.mark.xfail(strict=True, reason="lfx committee list is not implemented yet")
+def test_list_unknown_slug_exits_3(rsps: responses.RequestsMock) -> None:
+    add_project(rsps, [f"{SLUG}-other"])
+
+    code, out, err = run("lfx", "committee", "list", "--project", SLUG)
+
+    assert code == 3
+    assert out == ""
+    assert SLUG in err
+
+
+@pytest.mark.xfail(strict=True, reason="lfx committee list is not implemented yet")
+def test_list_no_committees_exits_0(rsps: responses.RequestsMock, caplog: pytest.LogCaptureFixture) -> None:
+    add_project(rsps, [SLUG])
+    add_committees(rsps, [[]])
+    caplog.set_level(logging.INFO)
+
+    code, out, _ = run("lfx", "committee", "list", "--project", SLUG)
+
+    assert code == 0
+    assert out == ""
+    assert "no committee" in caplog.text
