@@ -111,6 +111,15 @@ list
 
 .. program-output:: lftools-uv nexus docker list --help
 
+.. _nexus-docker-releasedockerhub:
+
+releasedockerhub
+^^^^^^^^^^^^^^^^
+
+.. program-output:: lftools-uv nexus docker releasedockerhub --help
+
+The command also takes ``--version-regexp`` in place of ``--version_regexp``.
+
 .. _nexus-release:
 
 release

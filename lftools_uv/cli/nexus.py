@@ -227,6 +227,8 @@ def release(ctx, repos, verify, server, max_wait):
 @click.option(
     "-x",
     "--version_regexp",
+    "--version-regexp",
+    "version_regexp",
     type=str,
     default="",
     required=False,
