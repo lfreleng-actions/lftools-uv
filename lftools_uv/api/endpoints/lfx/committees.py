@@ -15,6 +15,8 @@ from urllib.parse import quote
 from .errors import LfxAmbiguityError, LfxAPIError, LfxNotFoundError
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from .client import LfxClient
 
 _UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
@@ -107,12 +109,14 @@ def find_committee_uids(client: LfxClient, sso_group_name: str) -> list[str]:
     return uids
 
 
-def resolve_committee_uid(client: LfxClient, committee: str) -> str:
+def resolve_committee_uid(client: LfxClient, committee: str, *, scrub: Callable[[str], str] | None = None) -> str:
     """Return the UID of a committee named by UID or SSO group name.
 
     A UUID is taken as the UID without a request. Anything else is an
     SSO group name, which must match exactly one committee.
 
+    :arg scrub: Applied to the name before an error quotes it; the
+        lookup itself uses the name as given.
     :raises LfxNotFoundError: No visible committee has the name, or the
         query service answered 404.
     :raises LfxAmbiguityError: More than one committee has the name.
@@ -120,9 +124,11 @@ def resolve_committee_uid(client: LfxClient, committee: str) -> str:
     if is_uuid(committee):
         return committee.lower()
     uids = find_committee_uids(client, committee)
-    # Redact before quoting: repr() would escape a backslash in the token,
-    # and the escaped form would no longer match it.
+    # Redact and scrub before quoting: repr() would escape a backslash in
+    # the token or in an address, and the escaped form would no longer match.
     shown = client.redact(committee)
+    if scrub is not None:
+        shown = scrub(shown)
     if not uids:
         msg = f"no committee has the SSO group name {shown!r}; {INVISIBLE_NOTE}"
         raise LfxNotFoundError(msg)
